@@ -33,3 +33,4 @@ out/
 
 ### Kotlin ###
 .kotlin
+.env
