@@ -3,11 +3,20 @@ plugins {
     kotlin("plugin.spring") version "2.2.21"
     id("org.springframework.boot") version "4.0.3"
     id("io.spring.dependency-management") version "1.1.7"
+    id("org.sonarqube") version "6.0.1.5171"
 }
 
 group = "org.machikoro"
 version = "0.0.1-SNAPSHOT"
 description = "server"
+
+sonar {
+    properties {
+        property("sonar.projectKey", "SE2-Machi-Koro_Server")
+        property("sonar.organization", "se2-machi-koro")
+        property("sonar.host.url", "https://sonarcloud.io")
+    }
+}
 
 java {
     toolchain {
