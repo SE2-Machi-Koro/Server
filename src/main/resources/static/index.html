@@ -74,15 +74,6 @@
             font-style: italic;
             color: #666;
         }
-        .error-message {
-            padding: 10px 15px;
-            background-color: #fff3f3;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-            border-radius: 4px;
-            margin-bottom: 10px;
-            border-left: 4px solid #d32f2f;
-            color: #d32f2f;
-        }
         .chat-message i {
             display: inline-block;
             width: 30px;
@@ -217,9 +208,6 @@
         // Subscribe to the Public Topic
         stompClient.subscribe('/topic/public', onMessageReceived);
 
-        // Subscribe to Error Messages
-        stompClient.subscribe('/topic/errors', onErrorMessage);
-
         // Tell your username to the server
         stompClient.send("/app/chat.addUser",
             {},
@@ -234,42 +222,16 @@
         connectingElement.style.color = 'red';
     }
 
-    function onErrorMessage(payload) {
-        var errorResponse = JSON.parse(payload.body);
-        var errorElement = document.createElement('li');
-        errorElement.classList.add('error-message');
-
-        var errorCodeSpan = document.createElement('span');
-        errorCodeSpan.textContent = '[ERROR - ' + errorResponse.code + ']';
-        errorCodeSpan.style.color = '#d32f2f';
-        errorElement.appendChild(errorCodeSpan);
-
-        var errorTextP = document.createElement('p');
-        errorTextP.textContent = errorResponse.message;
-        errorElement.appendChild(errorTextP);
-
-        messageArea.appendChild(errorElement);
-        messageArea.scrollTop = messageArea.scrollHeight;
-    }
-
     function sendMessage(event) {
         var messageContent = messageInput.value.trim();
         if(messageContent && stompClient) {
-            try {
-                var chatMessage = {
-                    sender: username,
-                    content: messageInput.value,
-                    type: 'CHAT'
-                };
-                stompClient.send("/app/chat.send", {}, JSON.stringify(chatMessage));
-                messageInput.value = '';
-            } catch (err) {
-                console.error('Error sending message:', err);
-                var errorElement = document.createElement('li');
-                errorElement.classList.add('error-message');
-                errorElement.textContent = 'Failed to send message. Please try again.';
-                messageArea.appendChild(errorElement);
-            }
+            var chatMessage = {
+                sender: username,
+                content: messageInput.value,
+                type: 'CHAT'
+            };
+            stompClient.send("/app/chat.send", {}, JSON.stringify(chatMessage));
+            messageInput.value = '';
         }
         event.preventDefault();
     }
@@ -285,9 +247,6 @@
         } else if (message.type === 'LEAVE') {
             messageElement.classList.add('event-message');
             message.content = message.sender + ' left!';
-        } else if (message.type === 'ERROR') {
-            messageElement.classList.add('error-message');
-            messageElement.textContent = '[ERROR] ' + message.content;
         } else {
             messageElement.classList.add('chat-message');
 
@@ -302,12 +261,13 @@
             var usernameText = document.createTextNode(message.sender);
             usernameElement.appendChild(usernameText);
             messageElement.appendChild(usernameElement);
-
-            var textElement = document.createElement('p');
-            var messageText = document.createTextNode(message.content);
-            textElement.appendChild(messageText);
-            messageElement.appendChild(textElement);
         }
+
+        var textElement = document.createElement('p');
+        var messageText = document.createTextNode(message.content);
+        textElement.appendChild(messageText);
+
+        messageElement.appendChild(textElement);
 
         messageArea.appendChild(messageElement);
         messageArea.scrollTop = messageArea.scrollHeight;
