@@ -15,9 +15,19 @@ internal fun applyDotenvToSystemProperties(dotenv: Dotenv) {
     }
 }
 
-fun main(args: Array<String>) {
-    val dotenv = loadDotenv()
-    applyDotenvToSystemProperties(dotenv)
+internal var dotenvLoaderForMain: () -> Dotenv = ::loadDotenv
+internal var appRunnerForMain: (Array<String>) -> Unit = { runApplication<ServerApplication>(*it) }
 
-    runApplication<ServerApplication>(*args)
+internal fun bootstrapAndRun(
+    args: Array<String>,
+    dotenvLoader: () -> Dotenv,
+    runner: (Array<String>) -> Unit
+) {
+    val dotenv = dotenvLoader()
+    applyDotenvToSystemProperties(dotenv)
+    runner(args)
+}
+
+fun main(args: Array<String>) {
+    bootstrapAndRun(args, dotenvLoaderForMain, appRunnerForMain)
 }
