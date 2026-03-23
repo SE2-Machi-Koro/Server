@@ -18,22 +18,33 @@ class WebSocketEventListener(
     /**
      * Listen for WebSocket disconnect events.
      * Broadcasts a LEAVE message to all subscribers when a user disconnects.
+     * Handles errors gracefully to prevent listener failures from affecting other sessions.
      */
     @EventListener
     fun handleWebSocketDisconnectListener(event: SessionDisconnectEvent) {
-        val headerAccessor = StompHeaderAccessor.wrap(event.message)
-        val username = headerAccessor.sessionAttributes?.get("username") as? String
+        try {
+            val headerAccessor = StompHeaderAccessor.wrap(event.message)
+            val username = headerAccessor.sessionAttributes?.get("username") as? String
 
-        if (username != null) {
-            logger.info("User Disconnected: $username")
+            if (username != null) {
+                logger.info("User Disconnected: $username")
 
-            val chatMessage = WebSocketMessage(
-                type = MessageType.LEAVE,
-                sender = username,
-                content = null
-            )
-            template.convertAndSend("/topic/public", chatMessage)
+                val chatMessage = WebSocketMessage(
+                    type = MessageType.LEAVE,
+                    sender = username,
+                    content = "$username has left the chat"
+                )
+
+                try {
+                    template.convertAndSend("/topic/public", chatMessage)
+                } catch (ex: Exception) {
+                    logger.error("Failed to broadcast leave message for user $username", ex)
+                }
+            } else {
+                logger.debug("Session disconnected without username: ${event.sessionId}")
+            }
+        } catch (ex: Exception) {
+            logger.error("Error processing disconnect event: ${ex.message}", ex)
         }
     }
 }
-
