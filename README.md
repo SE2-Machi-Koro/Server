@@ -307,6 +307,30 @@ function joinChat(username) {
 
 ## Testing
 
+### Quality Gate
+
+![Coverage Gate](https://img.shields.io/badge/coverage%20gate-%E2%89%A580%25%20per%20class-brightgreen)
+
+- Unit and integration tests enforce a **minimum 80% line coverage per class** via JaCoCo.
+- The build fails automatically if any production class drops below the threshold.
+
+Run verification locally:
+
+```bash
+./gradlew check
+```
+
+Generate an HTML/XML coverage report:
+
+```bash
+./gradlew jacocoTestReport
+```
+
+Coverage report paths:
+
+- HTML: `build/reports/jacoco/test/html/index.html`
+- XML: `build/reports/jacoco/test/jacocoTestReport.xml`
+
 ### Built-In Test Client
 
 Access the web-based test client:
