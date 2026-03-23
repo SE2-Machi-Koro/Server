@@ -1,54 +1,108 @@
 # Server
 
-## Get Docker up and running
-- Rename the .env.example file into .env
-- Fill out the .env file
-- Execute the compose.yaml file
-- Connect to pgAdmin: http://localhost:5050/
-- Username for pgAdmin: admin@admin.com
-- Password for pgAdmin: admin 
-- Register Database:
-  - General Tab:
-    - Give it a name: e.g. Machi Koro DB 
-  - Connection Tab:
-    - Host name: postgres
-    - Port: 5432
-    - Maintenance Database: DB_NAME from .env file
-    - Username: DB_USERNAME from .env file
-    - PASSWORD: DB_PASSWORD from .env file
+## Getting Started
+
+### Setup Environment Variables
+
+1. Rename `.env.example` to `.env`
+2. Configure database credentials:
+   ```env
+   DB_HOST=localhost
+   DB_PORT=5432
+   DB_NAME=machi_koro
+   DB_USERNAME=your_username
+   DB_PASSWORD=your_password
+   SERVER_PORT=8080
+   ```
+
+### Start Docker Services
+
+Execute the Docker Compose configuration:
+```bash
+docker compose up -d
+```
+
+### Configure PostgreSQL Database
+
+1. Access pgAdmin: `http://localhost:5050/`
+   - **Email**: admin@admin.com
+   - **Password**: admin
+
+2. Register a new server:
+   - **General Tab**
+     - Name: Machi Koro DB
+   - **Connection Tab**
+     - Host: postgres
+     - Port: 5432
+     - Database: `${DB_NAME}`
+     - Username: `${DB_USERNAME}`
+     - Password: `${DB_PASSWORD}`
+
+### Build and Run
+
+```bash
+# Build the project
+./gradlew build
+
+# Run the server
+./gradlew bootRun
+```
+
+The server will be available at: `http://localhost:8080`
+
+---
 
 ## WebSocket Configuration
 
 ### Overview
-The server implements **real-time bidirectional communication** between frontend and backend using the **STOMP over WebSocket** protocol. This enables instant message delivery and game state synchronization across all connected clients.
 
-### Architecture
+The server implements **real-time bidirectional communication** between frontend and backend using the **STOMP over WebSocket** protocol. This architecture enables:
 
-#### Endpoint
-- **URL**: `ws://localhost:8080/ws`
-- **Protocol**: STOMP with SockJS fallback
-- **Port**: 8080 (default)
+- Instant message delivery across all connected clients
+- Automatic game state synchronization
+- Real-time notifications and events
+- SockJS fallback for browser compatibility
 
-#### Message Broker
-- **Type**: Simple in-memory broker
-- **Topic Destinations**: `/topic/public`, `/topic/*`, `/topic/errors`
-- **Queue Destinations**: `/queue/*`, `/queue/errors`
-- **Application Prefix**: `/app`
+### Endpoint Details
 
-### Client-Server Communication
+| Parameter | Value |
+|-----------|-------|
+| **URL** | `ws://localhost:8080/ws` |
+| **Protocol** | STOMP with SockJS |
+| **Port** | 8080 |
 
-#### Available Message Mappings
+### Message Broker Configuration
 
-| Endpoint | Direction | Purpose | Response Topic |
-|----------|-----------|---------|-----------------|
-| `/app/chat.send` | Client → Server | Send chat message | `/topic/public` |
-| `/app/chat.addUser` | Client → Server | Register user join event | `/topic/public` |
+| Setting | Configuration |
+|---------|---------------|
+| **Broker Type** | Simple in-memory broker |
+| **Topic Destinations** | `/topic/public`, `/topic/*`, `/topic/errors` |
+| **Queue Destinations** | `/queue/*`, `/queue/errors` |
+| **App Prefix** | `/app` |
 
-#### Message Format
+---
+
+## API Reference
+
+### Available Endpoints
+
+#### Send Chat Message
+- **Endpoint**: `/app/chat.send`
+- **Direction**: Client → Server
+- **Response**: Broadcast to `/topic/public`
+- **Description**: Send a message to all connected users
+
+#### Add User (Join)
+- **Endpoint**: `/app/chat.addUser`
+- **Direction**: Client → Server
+- **Response**: Broadcast to `/topic/public`
+- **Description**: Register user connection and announce to chat
+
+### Message Format
 
 ```json
 {
-  "type": "CHAT|JOIN|LEAVE|GAME_START|GAME_ACTION|GAME_END|ERROR",
+  "type": "CHAT|JOIN|LEAVE|GAME_START|GAME_ACTION|GAME_END",
   "sender": "username",
   "content": "message content",
   "payload": null,
@@ -56,21 +110,31 @@ The server implements **real-time bidirectional communication** between frontend
 }
 ```
 
-### Message Types
+### Message Type Reference
 
-| Type | Description | Usage |
-|------|-------------|-------|
-| `CHAT` | Standard chat message | User-to-user communication |
-| `JOIN` | User connection event | Broadcast when user joins |
-| `LEAVE` | User disconnection event | Broadcast when user leaves |
-| `GAME_START` | Game initialization | Start new game session |
-| `GAME_ACTION` | Game-specific action | Players' game moves |
-| `GAME_END` | Game conclusion | End game session |
-| `ERROR` | Error notification | Communication of application errors |
+| Type | Purpose | Trigger |
+|------|---------|---------|
+| `CHAT` | Standard chat message | User message in chat |
+| `JOIN` | User connection event | User enters chat |
+| `LEAVE` | User disconnection event | User closes connection |
+| `GAME_START` | Game initialization | Game session starts |
+| `GAME_ACTION` | Game-specific action | Player makes game move |
+| `GAME_END` | Game conclusion | Game session ends |
 
-### Error Handling
+Currently emitted by the server: `CHAT`, `JOIN`, `LEAVE`.
 
-#### Error Message Format
+---
+
+## Error Handling
+
+### Current Behavior
+
+- There is no dedicated backend error topic publisher (for example, `/topic/errors`) in the current implementation.
+- Input validation and structured WebSocket error payloads are not implemented yet in message handlers.
+- Connection failures are handled on the client via the STOMP `onError` callback.
+- Server-side events are logged, and disconnect events publish a `LEAVE` message on `/topic/public`.
+
+### Planned Error Response Format (Not Yet Implemented)
 
 ```json
 {
@@ -80,108 +144,221 @@ The server implements **real-time bidirectional communication** between frontend
 }
 ```
 
-#### Error Codes
+### Planned Error Code Reference (Not Yet Implemented)
 
-| Code | Description | Cause |
-|------|-------------|-------|
-| `INVALID_SENDER` | Sender name is empty | User tried to send message with empty sender |
-| `INVALID_MESSAGE` | Message content is empty | User tried to send empty message |
-| `INVALID_USERNAME` | Username is empty | User tried to join without username |
-| `SEND_MESSAGE_ERROR` | Failed to process message | Unexpected error during message processing |
-| `ADD_USER_ERROR` | Failed to add user | Unexpected error during user registration |
-| `VALIDATION_ERROR` | Invalid message format | Message payload validation failed |
-| `INTERNAL_ERROR` | Internal server error | Unexpected server-side error |
+| Code | HTTP Status | Description | Resolution |
+|------|-------------|-------------|-----------|
+| `INVALID_SENDER` | 400 | Sender name is empty | Provide a non-empty sender name |
+| `INVALID_MESSAGE` | 400 | Message content is empty | Provide message content |
+| `INVALID_USERNAME` | 400 | Username is empty | Provide a username to join |
+| `SEND_MESSAGE_ERROR` | 500 | Message processing failed | Retry the operation |
+| `ADD_USER_ERROR` | 500 | User registration failed | Retry joining the chat |
+| `VALIDATION_ERROR` | 400 | Invalid message format | Check message structure |
+| `INTERNAL_ERROR` | 500 | Unexpected server error | Contact support |
 
-#### Client-Side Error Handling
+### Client-Side Error Handling
 
 The frontend automatically:
-- Subscribes to `/topic/errors` for server-side error messages
-- Displays errors in the message area with red styling
-- Catches client-side errors in message sending
-- Logs all errors to browser console
+- Handles connection failures in the STOMP `onError` callback
+- Displays a red connection error message in the UI when connection fails
+- Logs runtime errors in the browser console
 
-#### Server-Side Error Handling
+### Server-Side Error Handling
 
-- **GlobalWebSocketExceptionHandler**: Centralized exception handling
-- **Input Validation**: All message inputs are validated before processing
-- **Try-Catch Blocks**: Comprehensive error handling in all message handlers
-- **Graceful Degradation**: Errors in disconnect handlers don't affect other sessions
+- **Controller Logging**: Incoming chat and join events are logged in `WebSocketController`
+- **Disconnect Handling**: `WebSocketEventListener` publishes `LEAVE` events and logs disconnects
+- **Exception Classes**: `CustomWebSocketException` and `GlobalWebSocketExceptionHandler` are present as placeholders
 
-### Client Implementation
+### Example Error Response
 
-#### JavaScript/SockJS Example
+```json
+{
+  "code": "INVALID_MESSAGE",
+  "message": "Message content cannot be empty",
+  "timestamp": 1711270800000
+}
+```
+
+---
+
+## Architecture
+
+### Project Structure
+
+```
+src/main/kotlin/org/machikoro/server/
+├── config/
+│   ├── WebSocketConfig.kt          # STOMP broker configuration
+│   └── SecurityConfig.kt            # Spring Security setup
+├── controller/
+│   └── WebSocketController.kt       # Message handler endpoints
+├── dto/
+│   └── ChatMessage.kt               # Message types and WebSocket message model
+├── exception/
+│   └── CustomWebSocketException.kt  # Placeholder for custom WebSocket exceptions
+├── handler/
+│   └── GlobalWebSocketExceptionHandler.kt  # Placeholder for centralized exception handling
+├── listener/
+│   └── WebSocketEventListener.kt    # Connection lifecycle events
+└── ServerApplication.kt             # Application entry point
+```
+
+### Component Description
+
+#### Configuration Layer
+- **WebSocketConfig**: Configures STOMP message broker and registers `/ws` endpoint
+- **SecurityConfig**: Sets up Spring Security for WebSocket access
+
+#### Controller Layer
+- **WebSocketController**: Handles message routing and validation
+
+#### Exception Handling
+- **CustomWebSocketException**: Placeholder for application-level WebSocket exceptions
+- **GlobalWebSocketExceptionHandler**: Placeholder for centralized error management
+
+#### Event Management
+- **WebSocketEventListener**: Handles user connect/disconnect events
+
+#### Data Models
+- **WebSocketMessage**: Message structure for all communications (defined in `dto/ChatMessage.kt`)
+
+---
+
+## Security
+
+### Current Implementation (Development)
+
+⚠️ **Development Mode Configuration:**
+- ✅ Unauthenticated WebSocket connections allowed
+- ✅ CORS configured for all origins (`*`)
+- ✅ CSRF protection disabled
+- ✅ All endpoints publicly accessible
+
+### Production Recommendations
+
+**Before deploying to production, implement:**
+
+1. **Authentication**
+   - JWT-based authentication
+   - Session token validation
+   - User identity verification
+
+2. **CORS Restrictions**
+   - Whitelist specific frontend origins
+   - Restrict allowed methods and headers
+
+3. **CSRF Protection**
+   - Enable CSRF tokens
+   - Validate token on each request
+
+4. **Rate Limiting**
+   - Implement per-user message limits
+   - Add connection throttling
+
+5. **Input Sanitization**
+   - Escape user input
+   - Validate payload sizes
+   - Prevent injection attacks
+
+6. **SSL/TLS**
+   - Use `wss://` protocol
+   - Enable certificate validation
+
+---
+
+## Client Implementation
+
+### JavaScript/SockJS Example
 
 ```javascript
-// Connect to WebSocket
+// Initialize WebSocket connection
 const socket = new SockJS('/ws');
 const stompClient = Stomp.over(socket);
 
 // Connect and subscribe
 stompClient.connect({}, function() {
-    // Subscribe to public messages
-    stompClient.subscribe('/topic/public', function(message) {
-        console.log('Received:', JSON.parse(message.body));
-    });
-    
-    // Subscribe to error messages
-    stompClient.subscribe('/topic/errors', function(errorMsg) {
-        var error = JSON.parse(errorMsg.body);
-        console.error('Error [' + error.code + ']:', error.message);
-    });
+  // Subscribe to chat messages
+  stompClient.subscribe('/topic/public', function(message) {
+    console.log('Received:', JSON.parse(message.body));
+  });
 });
 
-// Send message with validation
-const chatMessage = {
-    sender: 'username',
+// Send chat message
+function sendMessage(username, content) {
+  const chatMessage = {
+    sender: username,
     type: 'CHAT',
-    content: 'Hello!'
-};
-stompClient.send('/app/chat.send', {}, JSON.stringify(chatMessage));
+    content: content
+  };
+  stompClient.send('/app/chat.send', {}, JSON.stringify(chatMessage));
+}
+
+// Join chat
+function joinChat(username) {
+  const joinMessage = {
+    sender: username,
+    type: 'JOIN'
+  };
+  stompClient.send('/app/chat.addUser', {}, JSON.stringify(joinMessage));
+}
 ```
 
-### Testing
+---
 
-Access the built-in test client:
-- **URL**: `http://localhost:8080`
-- Enter username and start chatting
-- Messages are broadcasted to all connected clients in real-time
-- Errors are displayed in the chat area with red styling
+## Testing
 
-### Security
+### Built-In Test Client
 
-- **Authentication**: Currently allows unauthenticated WebSocket connections (development mode)
-- **CORS**: Configured to accept connections from any origin (`*`)
-- **CSRF**: Disabled for WebSocket endpoints
-- **Input Validation**: All inputs validated server-side
+Access the web-based test client:
 
-⚠️ **Note**: For production deployment, implement proper authentication, CORS restrictions, and CSRF protection.
+1. Start the server: `./gradlew bootRun`
+2. Open browser: `http://localhost:8080`
+3. Enter username and start chatting
+4. Messages are broadcasted in real-time to all connected clients
 
-### Components
+### Testing Features
 
-#### Configuration
-- `config/WebSocketConfig.kt` - STOMP broker and endpoint configuration
-- `config/SecurityConfig.kt` - Spring Security filters for WebSocket access
+- ✅ Real-time message delivery
+- ✅ User join/leave notifications
+- ✅ Connection error indicator on failed WebSocket connect
+- ✅ Connection status indicator
 
-#### Controllers
-- `controller/WebSocketController.kt` - Message mapping handlers with validation
+---
 
-#### Event Listeners
-- `listener/WebSocketEventListener.kt` - Connection/disconnection event handling
+## Troubleshooting
 
-#### Exception Handling
-- `exception/CustomWebSocketException.kt` - Custom exception class
-- `handler/GlobalWebSocketExceptionHandler.kt` - Centralized exception handler
+### Common Issues and Solutions
 
-#### Data Transfer Objects
-- `dto/WebSocketMessage.kt` - Message serialization model
-- `dto/ErrorMessage.kt` - Error response model
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| WebSocket connection refused | Server not running | Verify server is running on port 8080 |
+| Messages not received | Incorrect subscription | Check browser console for subscription errors |
+| Connection drops frequently | Network issues | Verify network stability and firewall rules |
+| Error messages appearing | Invalid input | Ensure sender and content are non-empty |
+| Validation errors | Malformed message | Check message JSON structure |
+| Database connection fails | Invalid credentials | Verify `.env` file configuration |
+| Port 8080 already in use | Port conflict | Change `SERVER_PORT` in `.env` |
 
-### Troubleshooting
+### Debug Mode
 
-| Issue | Solution |
-|-------|----------|
-| WebSocket connection refused | Ensure server is running on port 8080 |
-| Messages not received | Check browser console for errors, verify subscription topics |
-| Connection drops | Verify network connectivity and firewall settings |
-| Error messages appearing | Check error code in message and verify input format |
-| Validation errors | Ensure sender and message content are non-empty strings |
+Enable detailed logging:
+
+```bash
+./gradlew bootRun --args='--logging.level.root=DEBUG'
+```
+
+Check logs for WebSocket connection details and error traces.
+
+---
+
+## Additional Resources
+
+- [Spring Boot WebSocket Documentation](https://spring.io/guides/gs/messaging-stomp-websocket/)
+- [STOMP Protocol Specification](https://stomp.github.io/)
+- [SockJS Documentation](https://sockjs.org/)
+- [PostgreSQL Documentation](https://www.postgresql.org/docs/)
+
+---
+
+**Last Updated**: March 2026
+**Version**: 1.0.0
