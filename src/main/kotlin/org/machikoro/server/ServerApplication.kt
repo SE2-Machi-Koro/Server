@@ -7,11 +7,17 @@ import org.springframework.boot.runApplication
 @SpringBootApplication
 class ServerApplication
 
-fun main(args: Array<String>) {
-    val dotenv = Dotenv.configure().ignoreIfMissing().load()
+internal fun loadDotenv(): Dotenv = Dotenv.configure().ignoreIfMissing().load()
+
+internal fun applyDotenvToSystemProperties(dotenv: Dotenv) {
     dotenv.entries().forEach { entry ->
         System.setProperty(entry.key, entry.value)
     }
+}
+
+fun main(args: Array<String>) {
+    val dotenv = loadDotenv()
+    applyDotenvToSystemProperties(dotenv)
 
     runApplication<ServerApplication>(*args)
 }
