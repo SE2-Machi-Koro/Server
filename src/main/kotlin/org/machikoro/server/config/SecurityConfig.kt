@@ -12,20 +12,18 @@ class SecurityConfig {
 
     /**
      * Configure security filter chain.
-     * Permits unauthenticated access to WebSocket endpoints and disables CSRF for testing.
-     * Note: For production, implement proper CSRF protection and authentication.
+     * Permits unauthenticated access to WebSocket endpoints and requires authentication for API endpoints.
+     * Note: CSRF protection is enabled by default.
      */
     @Bean
     fun securityFilterChain(http: HttpSecurity): SecurityFilterChain {
         http
-            .csrf { it.disable() }
             .authorizeHttpRequests { auth ->
                 auth.requestMatchers("/ws/**").permitAll()
-                auth.requestMatchers("/api/**").permitAll()
-                auth.anyRequest().permitAll()
+                auth.requestMatchers("/api/**").authenticated()
+                auth.anyRequest().authenticated()
             }
 
         return http.build()
     }
 }
-
