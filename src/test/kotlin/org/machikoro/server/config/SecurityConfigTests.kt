@@ -28,15 +28,15 @@ class SecurityConfigTests {
     }
 
     @Test
-    fun getRequestsShouldNotRequireAuthentication() {
+    fun apiGetRequestsShouldRequireAuthentication() {
         mockMvc.perform(get("/api/non-existing"))
-            .andExpect(status().isNotFound)
+            .andExpect(status().isForbidden)
     }
 
     @Test
-    fun postRequestsShouldNotBeBlockedByCsrf() {
+    fun apiPostRequestsWithoutCsrfShouldBeForbidden() {
         mockMvc.perform(post("/api/non-existing"))
-            .andExpect(status().isNotFound)
+            .andExpect(status().isForbidden)
     }
 
     @Test
@@ -45,5 +45,3 @@ class SecurityConfigTests {
             .andExpect(status().isNotFound)
     }
 }
-
-
