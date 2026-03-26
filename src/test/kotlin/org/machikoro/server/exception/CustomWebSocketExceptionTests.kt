@@ -1,6 +1,7 @@
 package org.machikoro.server.exception
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Test
 
@@ -15,6 +16,7 @@ class CustomWebSocketExceptionTests {
 
         assertEquals("INVALID_MESSAGE", ex.errorCode)
         assertEquals("Message content cannot be empty", ex.message)
+        assertNull(ex.cause)
     }
 
     @Test
@@ -30,4 +32,3 @@ class CustomWebSocketExceptionTests {
         assertSame(cause, ex.cause)
     }
 }
-

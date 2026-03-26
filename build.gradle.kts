@@ -11,6 +11,10 @@ group = "org.machikoro"
 version = "0.0.1-SNAPSHOT"
 description = "server"
 
+val springdocVersion = "3.0.2"
+val dotenvVersion = "5.2.2"
+val mockitoKotlinVersion = "5.2.1"
+
 sonar {
     properties {
         property("sonar.projectKey", "SE2-Machi-Koro_Server")
@@ -35,9 +39,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-websocket")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
-    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.2")
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:$springdocVersion")
     implementation("tools.jackson.module:jackson-module-kotlin")
-    implementation("io.github.cdimascio:java-dotenv:5.2.2")
+    implementation("io.github.cdimascio:java-dotenv:$dotenvVersion")
     developmentOnly("org.springframework.boot:spring-boot-devtools")
     developmentOnly("org.springframework.boot:spring-boot-docker-compose")
     runtimeOnly("org.postgresql:postgresql")
@@ -45,6 +49,7 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-security-test")
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.springframework.boot:spring-boot-starter-websocket-test")
+    testImplementation("org.mockito.kotlin:mockito-kotlin:$mockitoKotlinVersion")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }

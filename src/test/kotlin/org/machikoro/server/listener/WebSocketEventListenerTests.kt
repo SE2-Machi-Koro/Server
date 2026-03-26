@@ -3,11 +3,12 @@ package org.machikoro.server.listener
 import org.junit.jupiter.api.Test
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.WebSocketMessage
-import org.mockito.ArgumentCaptor
-import org.mockito.Mockito.eq
-import org.mockito.Mockito.mock
-import org.mockito.Mockito.never
-import org.mockito.Mockito.verify
+import org.mockito.kotlin.any
+import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.eq
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
+import org.mockito.kotlin.verify
 import org.springframework.messaging.Message
 import org.springframework.messaging.simp.SimpMessageSendingOperations
 import org.springframework.messaging.simp.SimpMessageType
@@ -19,20 +20,20 @@ import kotlin.test.assertEquals
 
 class WebSocketEventListenerTests {
 
-    private val template = mock(SimpMessageSendingOperations::class.java)
+    private val template = mock<SimpMessageSendingOperations>()
     private val listener = WebSocketEventListener(template)
 
     @Test
     fun handleWebSocketDisconnectListenerShouldPublishLeaveMessageWhenUsernameExists() {
         val event = disconnectEventWithSessionAttributes(mapOf("username" to "alice"))
-        val payloadCaptor = ArgumentCaptor.forClass(WebSocketMessage::class.java)
+        val payloadCaptor = argumentCaptor<WebSocketMessage>()
 
         listener.handleWebSocketDisconnectListener(event)
 
         verify(template).convertAndSend(eq("/topic/public"), payloadCaptor.capture())
-        assertEquals(MessageType.LEAVE, payloadCaptor.value.type)
-        assertEquals("alice", payloadCaptor.value.sender)
-        assertEquals(null, payloadCaptor.value.content)
+        assertEquals(MessageType.LEAVE, payloadCaptor.firstValue.type)
+        assertEquals("alice", payloadCaptor.firstValue.sender)
+        assertEquals(null, payloadCaptor.firstValue.content)
     }
 
     @Test
@@ -41,7 +42,7 @@ class WebSocketEventListenerTests {
 
         listener.handleWebSocketDisconnectListener(event)
 
-        verify(template, never()).convertAndSend(eq("/topic/public"), org.mockito.Mockito.any(WebSocketMessage::class.java))
+        verify(template, never()).convertAndSend(eq("/topic/public"), any<WebSocketMessage>())
     }
 
     private fun disconnectEventWithSessionAttributes(attributes: Map<String, Any>): SessionDisconnectEvent {
@@ -52,5 +53,3 @@ class WebSocketEventListenerTests {
         return SessionDisconnectEvent(this, message, "session-1", CloseStatus.NORMAL)
     }
 }
-
-

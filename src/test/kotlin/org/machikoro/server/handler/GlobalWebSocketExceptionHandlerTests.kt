@@ -11,12 +11,12 @@ class GlobalWebSocketExceptionHandlerTests {
 
     @Test
     fun handleCustomExceptionShouldReturnDomainErrorPayload() {
-        val start = System.currentTimeMillis()
         val exception = CustomWebSocketException(
             errorCode = "INVALID_MESSAGE",
             message = "Message content cannot be empty"
         )
 
+        val start = System.currentTimeMillis()
         val response = handler.handleCustomException(exception)
         val end = System.currentTimeMillis()
 
@@ -27,9 +27,10 @@ class GlobalWebSocketExceptionHandlerTests {
 
     @Test
     fun handleGenericExceptionShouldReturnInternalErrorPayload() {
-        val start = System.currentTimeMillis()
+        val exception = IllegalStateException("boom")
 
-        val response = handler.handleGenericException(IllegalStateException("boom"))
+        val start = System.currentTimeMillis()
+        val response = handler.handleGenericException(exception)
         val end = System.currentTimeMillis()
 
         assertEquals("INTERNAL_ERROR", response.code)
@@ -37,4 +38,3 @@ class GlobalWebSocketExceptionHandlerTests {
         assertTrue(response.timestamp in start..end)
     }
 }
-
