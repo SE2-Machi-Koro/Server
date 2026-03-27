@@ -19,7 +19,7 @@ class SecurityConfig {
     fun securityFilterChain(http: HttpSecurity): SecurityFilterChain {
         http
             .authorizeHttpRequests { auth ->
-                auth.requestMatchers("/ws/**").permitAll()
+                auth.requestMatchers("/ws", "/ws/**").permitAll()
                 auth.requestMatchers("/api/**").authenticated()
                 auth.anyRequest().authenticated()
             }
