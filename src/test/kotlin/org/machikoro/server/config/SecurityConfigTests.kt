@@ -44,4 +44,28 @@ class SecurityConfigTests {
         mockMvc.perform(get("/ws/non-existing"))
             .andExpect(status().isNotFound)
     }
+
+    @Test
+    fun rootPathShouldBeAccessibleWithoutAuthentication() {
+        mockMvc.perform(get("/"))
+            .andExpect(status().isOk)
+    }
+
+    @Test
+    fun indexHtmlShouldBeAccessibleWithoutAuthentication() {
+        mockMvc.perform(get("/index.html"))
+            .andExpect(status().isOk)
+    }
+
+    @Test
+    fun staticResourcePathsShouldBePermittedWithoutAuthentication() {
+        // These paths are permitted; Spring returns 404 (not 403) when the resource doesn't exist,
+        // which confirms Spring Security allowed the request through.
+        mockMvc.perform(get("/css/nonexistent.css"))
+            .andExpect(status().isNotFound)
+        mockMvc.perform(get("/js/nonexistent.js"))
+            .andExpect(status().isNotFound)
+        mockMvc.perform(get("/webjars/nonexistent"))
+            .andExpect(status().isNotFound)
+    }
 }

@@ -12,13 +12,15 @@ class SecurityConfig {
 
     /**
      * Configure security filter chain.
-     * Permits unauthenticated access to WebSocket endpoints and requires authentication for API endpoints.
+     * Permits unauthenticated access to WebSocket endpoints, static resources, and the root/index page.
+     * Requires authentication for API endpoints.
      * Note: CSRF protection is enabled by default.
      */
     @Bean
     fun securityFilterChain(http: HttpSecurity): SecurityFilterChain {
         http
             .authorizeHttpRequests { auth ->
+                auth.requestMatchers("/", "/index.html", "/css/**", "/js/**", "/webjars/**").permitAll()
                 auth.requestMatchers("/ws", "/ws/**").permitAll()
                 auth.requestMatchers("/api/**").authenticated()
                 auth.anyRequest().authenticated()
