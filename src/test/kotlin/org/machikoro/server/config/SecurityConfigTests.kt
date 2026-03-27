@@ -10,7 +10,6 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
-
 @SpringBootTest
 @AutoConfigureMockMvc
 class SecurityConfigTests {
@@ -42,6 +41,13 @@ class SecurityConfigTests {
     @Test
     fun websocketEndpointShouldNotRequireAuthentication() {
         mockMvc.perform(get("/ws/non-existing"))
+            .andExpect(status().isNotFound)
+    }
+
+    @Test
+    fun websocketPostWithoutCsrfShouldBePermitted() {
+        // SockJS uses POST for xhr_send; CSRF is disabled for /ws/** to allow this
+        mockMvc.perform(post("/ws/non-existing"))
             .andExpect(status().isNotFound)
     }
 

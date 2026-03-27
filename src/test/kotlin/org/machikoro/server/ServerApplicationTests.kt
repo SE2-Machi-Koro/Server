@@ -93,13 +93,17 @@ class ServerApplicationTests {
 
     private fun createDotenvFromContent(content: String): Dotenv {
         val tempDir = Files.createTempDirectory("dotenv-test")
-        Files.writeString(tempDir.resolve(".env"), content)
-
-        return Dotenv.configure()
-            .directory(tempDir.toString())
-            .filename(".env")
-            .ignoreIfMalformed()
-            .load()
+        val envFile = tempDir.resolve(".env")
+        Files.writeString(envFile, content)
+        return try {
+            Dotenv.configure()
+                .directory(tempDir.toString())
+                .filename(".env")
+                .ignoreIfMalformed()
+                .load()
+        } finally {
+            tempDir.toFile().deleteRecursively()
+        }
     }
 
 }

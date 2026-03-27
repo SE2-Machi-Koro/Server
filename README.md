@@ -67,8 +67,8 @@ The server implements **real-time bidirectional communication** between frontend
 
 | Parameter | Value |
 |-----------|-------|
-| **URL** | `ws://localhost:8080/ws` |
-| **Protocol** | STOMP with SockJS |
+| **URL** | `http://localhost:8080/ws` (SockJS), `ws://localhost:8080/ws` (native WebSocket) |
+| **Protocol** | STOMP over WebSocket with SockJS fallback |
 | **Port** | 8080 |
 
 ### Message Broker Configuration

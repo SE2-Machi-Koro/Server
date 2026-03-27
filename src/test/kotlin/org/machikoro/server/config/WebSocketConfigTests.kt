@@ -11,7 +11,9 @@ import org.springframework.web.socket.config.annotation.StompWebSocketEndpointRe
 
 class WebSocketConfigTests {
 
-    private val config = WebSocketConfig()
+    private val config = WebSocketConfig().apply {
+        allowedOrigins = "http://localhost:8080,http://localhost:3000"
+    }
 
     @Test
     fun configureMessageBrokerShouldEnableExpectedDestinations() {
@@ -30,13 +32,13 @@ class WebSocketConfigTests {
         val sockJsRegistration = mock(SockJsServiceRegistration::class.java)
 
         `when`(registry.addEndpoint("/ws")).thenReturn(endpointRegistration)
-        `when`(endpointRegistration.setAllowedOriginPatterns("*")).thenReturn(endpointRegistration)
+        `when`(endpointRegistration.setAllowedOrigins("http://localhost:8080", "http://localhost:3000")).thenReturn(endpointRegistration)
         `when`(endpointRegistration.withSockJS()).thenReturn(sockJsRegistration)
 
         config.registerStompEndpoints(registry)
 
         verify(registry).addEndpoint("/ws")
-        verify(endpointRegistration).setAllowedOriginPatterns("*")
+        verify(endpointRegistration).setAllowedOrigins("http://localhost:8080", "http://localhost:3000")
         verify(endpointRegistration).withSockJS()
     }
 }
