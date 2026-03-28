@@ -2,16 +2,25 @@ services:
   postgres:
     container_name: 'machikoro-db'
     image: 'postgres:latest'
+    restart: unless-stopped
     environment:
       - 'POSTGRES_DB=${DB_NAME}'
       - 'POSTGRES_PASSWORD=${DB_PASSWORD}'
       - 'POSTGRES_USER=${DB_USERNAME}'
     ports:
       - '${DB_PORT}:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   pgAdmin:
     container_name: 'machikoro-pgadmin'
     image: 'dpage/pgadmin4:latest'
+    restart: unless-stopped
     environment:
       - 'PGADMIN_DEFAULT_EMAIL=admin@admin.com'
       - 'PGADMIN_DEFAULT_PASSWORD=admin'
@@ -23,6 +32,7 @@ services:
   backend:
     container_name: 'machikoro-server'
     build: .
+    restart: unless-stopped
     ports:
       - '${SERVER_PORT:-8080}:8080'
     environment:
@@ -33,4 +43,8 @@ services:
       - 'DB_PASSWORD=${DB_PASSWORD}'
       - 'SERVER_PORT=${SERVER_PORT:-8080}'
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
