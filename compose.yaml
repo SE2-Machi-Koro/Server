@@ -10,12 +10,13 @@ services:
     ports:
       - '${DB_PORT:-5432}:5432'
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres} -d ${DB_NAME:-machikoro}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres} -d ${DB_NAME:-machikoro}" ]
       interval: 5s
       timeout: 5s
       retries: 5
+      start_period: 30s
 
   pgAdmin:
     container_name: 'machikoro-pgadmin'
