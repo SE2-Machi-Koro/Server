@@ -74,6 +74,10 @@ tasks.jacocoTestReport {
     }
 }
 
+tasks.sonar {
+    dependsOn(tasks.jacocoTestReport)
+}
+
 tasks.jacocoTestCoverageVerification {
     dependsOn(tasks.test)
     violationRules {
