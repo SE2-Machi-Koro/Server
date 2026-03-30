@@ -6,3 +6,5 @@ build/
 out/
 bin/
 *.log
+.gradle/
+**/.gradle/
