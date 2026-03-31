@@ -20,6 +20,7 @@ sonar {
         property("sonar.projectKey", "SE2-Machi-Koro_Server")
         property("sonar.organization", "se2-machi-koro")
         property("sonar.host.url", "https://sonarcloud.io")
+        property("sonar.coverage.jacoco.xmlReportPaths", "build/reports/jacoco/test/jacocoTestReport.xml")
     }
 }
 
@@ -71,6 +72,10 @@ tasks.jacocoTestReport {
         xml.required.set(true)
         html.required.set(true)
     }
+}
+
+tasks.sonar {
+    dependsOn(tasks.jacocoTestReport)
 }
 
 tasks.jacocoTestCoverageVerification {
