@@ -14,6 +14,7 @@ description = "server"
 val springdocVersion = "3.0.2"
 val dotenvVersion = "5.2.2"
 val mockitoKotlinVersion = "5.2.1"
+val exposedVersion = "1.0.0"
 
 sonar {
     properties {
@@ -43,6 +44,9 @@ dependencies {
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:$springdocVersion")
     implementation("tools.jackson.module:jackson-module-kotlin")
     implementation("io.github.cdimascio:java-dotenv:$dotenvVersion")
+    implementation("org.jetbrains.exposed:exposed-core:$exposedVersion")
+    implementation("org.jetbrains.exposed:exposed-jdbc:$exposedVersion")
+    implementation("org.jetbrains.exposed:exposed-dao:$exposedVersion")
     developmentOnly("org.springframework.boot:spring-boot-devtools")
     developmentOnly("org.springframework.boot:spring-boot-docker-compose")
     runtimeOnly("org.postgresql:postgresql")
