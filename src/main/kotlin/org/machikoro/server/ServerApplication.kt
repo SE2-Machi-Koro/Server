@@ -6,8 +6,14 @@ import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.select
+import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.machikoro.server.database.GameMarketplace
+import org.machikoro.server.database.GameStatus
 import org.machikoro.server.database.Games
+import org.machikoro.server.database.PlayerCards
+import org.machikoro.server.database.PlayerLandmarks
+import org.machikoro.server.database.Players
 import org.machikoro.server.database.Users
 import org.springframework.boot.CommandLineRunner
 import org.springframework.boot.autoconfigure.SpringBootApplication
@@ -62,9 +68,12 @@ fun connectToDatabase() {
         user = user,
         password = password
     )
+
+    transaction {
+        SchemaUtils.create(Users, Games, Players, PlayerCards, PlayerLandmarks, GameMarketplace)
+    }
 }
 
 fun main(args: Array<String>) {
-    bootstrapAndRun(args, dotenvLoaderForMain, appRunnerForMain)
     runApplication<ServerApplication>(*args)
 }
