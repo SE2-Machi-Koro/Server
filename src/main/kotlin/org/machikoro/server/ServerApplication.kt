@@ -31,27 +31,6 @@ class ServerApplication {
     }
 }
 
-internal fun loadDotenv(): Dotenv = Dotenv.configure().ignoreIfMissing().load()
-
-internal fun applyDotenvToSystemProperties(dotenv: Dotenv) {
-    dotenv.entries().forEach { entry ->
-        System.setProperty(entry.key, entry.value)
-    }
-}
-
-internal var dotenvLoaderForMain: () -> Dotenv = ::loadDotenv
-internal var appRunnerForMain: (Array<String>) -> Unit = { runApplication<ServerApplication>(*it) }
-
-internal fun bootstrapAndRun(
-    args: Array<String>,
-    dotenvLoader: () -> Dotenv,
-    runner: (Array<String>) -> Unit
-) {
-    val dotenv = dotenvLoader()
-    applyDotenvToSystemProperties(dotenv)
-    runner(args)
-}
-
 fun connectToDatabase() {
 
     val host = System.getenv("DB_HOST") ?: "localhost"
