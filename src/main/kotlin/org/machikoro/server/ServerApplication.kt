@@ -1,12 +1,29 @@
 package org.machikoro.server
 
 import io.github.cdimascio.dotenv.Dotenv
+import org.jetbrains.exposed.v1.core.count
 import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.SchemaUtils
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.select
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.machikoro.server.database.Games
+import org.machikoro.server.database.Users
+import org.springframework.boot.CommandLineRunner
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.runApplication
+import org.springframework.context.annotation.Bean
 
 @SpringBootApplication
-class ServerApplication
+class ServerApplication {
+
+    @Bean
+    fun init() = CommandLineRunner {
+        println("Connecting to DB...")
+        connectToDatabase()
+        println("Connected!")
+    }
+}
 
 internal fun loadDotenv(): Dotenv = Dotenv.configure().ignoreIfMissing().load()
 
@@ -30,13 +47,12 @@ internal fun bootstrapAndRun(
 }
 
 fun connectToDatabase() {
-    val dotenv = dotenvLoaderForMain()
 
-    val host = dotenv["DB_HOST"] ?: System.getenv("DB_HOST") ?: "localhost"
-    val port = dotenv["DB_PORT"] ?: System.getenv("DB_PORT") ?: "5432"
-    val dbName = dotenv["DB_NAME"] ?: System.getenv("DB_NAME") ?: "machikoro"
-    val user = dotenv["DB_USERNAME"] ?: System.getenv("DB_USERNAME") ?: throw IllegalArgumentException("Missing DB_USERNAME")
-    val password = dotenv["DB_PASSWORD"] ?: System.getenv("DB_PASSWORD") ?: throw IllegalArgumentException("Missing DB_Password")
+    val host = System.getenv("DB_HOST") ?: "localhost"
+    val port = System.getenv("DB_PORT") ?: "5432"
+    val dbName = System.getenv("DB_NAME") ?: "machikoro"
+    val user = System.getenv("DB_USERNAME") ?: throw IllegalArgumentException("Missing DB_USERNAME")
+    val password = System.getenv("DB_PASSWORD") ?: throw IllegalArgumentException("Missing DB_PASSWORD")
 
     val jdbcUrl = "jdbc:postgresql://$host:$port/$dbName"
 
@@ -50,5 +66,5 @@ fun connectToDatabase() {
 
 fun main(args: Array<String>) {
     bootstrapAndRun(args, dotenvLoaderForMain, appRunnerForMain)
-    connectToDatabase()
+    runApplication<ServerApplication>(*args)
 }
