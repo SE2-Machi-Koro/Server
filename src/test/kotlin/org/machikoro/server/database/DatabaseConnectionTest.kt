@@ -12,11 +12,11 @@ import org.testcontainers.junit.jupiter.Testcontainers
 
 @Testcontainers
 @SpringBootTest
-class DatabaseConnectionTest {
+abstract class AbstractDBSetup {
 
     companion object {
         @Container
-        val postgres = PostgreSQLContainer<Nothing>("postgres:18.0")
+        val postgres = PostgreSQLContainer<Nothing>("postgres:18.0-alpine")
 
         @BeforeAll
         @JvmStatic
@@ -28,6 +28,9 @@ class DatabaseConnectionTest {
             System.setProperty("DB_PASSWORD", postgres.password)
         }
     }
+}
+
+class DatabaseConnectionTest : AbstractDBSetup() {
 
     @Test
     fun databaseConnectionAndSchemaCreationSucceeds() {

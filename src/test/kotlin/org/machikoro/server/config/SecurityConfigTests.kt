@@ -2,24 +2,25 @@ package org.machikoro.server.config
 
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+import org.machikoro.server.database.AbstractDBSetup
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+
 @SpringBootTest
 @AutoConfigureMockMvc
-class SecurityConfigTests {
+class SecurityConfigTests : AbstractDBSetup() {
 
     @Autowired
     private lateinit var mockMvc: MockMvc
 
     @Autowired
     private lateinit var securityFilterChain: SecurityFilterChain
-
 
     @Test
     fun securityFilterChainBeanShouldBeCreated() {
@@ -46,7 +47,6 @@ class SecurityConfigTests {
 
     @Test
     fun websocketPostWithoutCsrfShouldBePermitted() {
-        // SockJS uses POST for xhr_send; CSRF is disabled for /ws/** to allow this
         mockMvc.perform(post("/ws/non-existing"))
             .andExpect(status().isNotFound)
     }
@@ -65,8 +65,6 @@ class SecurityConfigTests {
 
     @Test
     fun staticResourcePathsShouldBePermittedWithoutAuthentication() {
-        // These paths are permitted; Spring returns 404 (not 403) when the resource doesn't exist,
-        // which confirms Spring Security allowed the request through.
         mockMvc.perform(get("/css/nonexistent.css"))
             .andExpect(status().isNotFound)
         mockMvc.perform(get("/js/nonexistent.js"))
