@@ -33,11 +33,11 @@ class ServerApplication {
 
 fun connectToDatabase() {
 
-    val host = System.getenv("DB_HOST") ?: "localhost"
-    val port = System.getenv("DB_PORT") ?: "5432"
-    val dbName = System.getenv("DB_NAME") ?: "machikoro"
-    val user = System.getenv("DB_USERNAME") ?: throw IllegalArgumentException("Missing DB_USERNAME")
-    val password = System.getenv("DB_PASSWORD") ?: throw IllegalArgumentException("Missing DB_PASSWORD")
+    val host = System.getProperty("DB_HOST") ?: System.getenv("DB_HOST") ?: "localhost"
+    val port = System.getProperty("DB_PORT") ?: System.getenv("DB_PORT") ?: "5432"
+    val dbName = System.getProperty("DB_NAME") ?: System.getenv("DB_NAME") ?: "machikoro"
+    val user = System.getProperty("DB_USERNAME") ?: System.getenv("DB_USERNAME") ?: throw IllegalArgumentException("Missing DB_USERNAME")
+    val password = System.getProperty("DB_PASSWORD") ?: System.getenv("DB_PASSWORD") ?: throw IllegalArgumentException("Missing DB_PASSWORD")
 
     val jdbcUrl = "jdbc:postgresql://$host:$port/$dbName"
 
