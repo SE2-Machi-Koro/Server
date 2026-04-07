@@ -11,8 +11,17 @@ class ServerApplicationTests {
 
     @AfterEach
     fun restoreProperties() {
-        if (originalUsername != null) System.setProperty("DB_USERNAME", originalUsername)
-        if (originalPassword != null) System.setProperty("DB_PASSWORD", originalPassword)
+        if (originalUsername != null) {
+            System.setProperty("DB_USERNAME", originalUsername)
+        } else {
+            System.clearProperty("DB_USERNAME")
+        }
+
+        if (originalPassword != null) {
+            System.setProperty("DB_PASSWORD", originalPassword)
+        } else {
+            System.clearProperty("DB_PASSWORD")
+        }
     }
 
     @Test
