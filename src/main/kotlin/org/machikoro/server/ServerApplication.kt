@@ -1,5 +1,7 @@
 package org.machikoro.server
 
+import com.zaxxer.hikari.HikariConfig
+import com.zaxxer.hikari.HikariDataSource
 import io.github.cdimascio.dotenv.Dotenv
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
@@ -60,12 +62,16 @@ fun connectToDatabase() {
 
     val jdbcUrl = "jdbc:postgresql://$host:$port/$dbName"
 
-    Database.connect(
-        url = jdbcUrl,
-        driver = "org.postgresql.Driver",
-        user = user,
-        password = password
-    )
+    val hikariConfig = HikariConfig()
+    hikariConfig.jdbcUrl = jdbcUrl
+    hikariConfig.driverClassName = "org.postgresql.Driver"
+    hikariConfig.username = user
+    hikariConfig.password = password
+    hikariConfig.maximumPoolSize = 10
+
+    val dataSource = HikariDataSource(hikariConfig)
+
+    Database.connect(dataSource)
 
     transaction {
         SchemaUtils.create(Users, Games, Players, PlayerCards, PlayerLandmarks, GameMarketplace)
