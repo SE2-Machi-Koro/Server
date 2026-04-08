@@ -12,8 +12,8 @@ enum class GameStatus {
 // Used for leaderboard
 object Users : IntIdTable("users") {
     val userName = varchar("username", 50).uniqueIndex()
-    val totalWins = integer("totalwins").default(0)
-    val totalGamesPlayed = integer("totalgamesplayed").default(0)
+    val totalWins = integer("total_wins").default(0)
+    val totalGamesPlayed = integer("total_games_played").default(0)
 }
 
 // Games
