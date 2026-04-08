@@ -74,7 +74,14 @@ fun connectToDatabase() {
     Database.connect(dataSource)
 
     transaction {
-        SchemaUtils.create(Users, Games, Players, PlayerCards, PlayerLandmarks, GameMarketplace)
+        SchemaUtils.createMissingTablesAndColumns(
+            Users,
+            Games,
+            Players,
+            PlayerCards,
+            PlayerLandmarks,
+            GameMarketplace
+        )
     }
 }
 

@@ -22,11 +22,11 @@ abstract class AbstractDBSetup {
         @DynamicPropertySource
         @JvmStatic
         fun registerProperties(registry: DynamicPropertyRegistry) {
-            System.setProperty("DB_HOST", postgres.host)
-            System.setProperty("DB_PORT", postgres.firstMappedPort.toString())
-            System.setProperty("DB_NAME", postgres.databaseName)
-            System.setProperty("DB_USERNAME", postgres.username)
-            System.setProperty("DB_PASSWORD", postgres.password)
+            registry.add("DB_HOST") { postgres.host }
+            registry.add("DB_PORT") { postgres.firstMappedPort.toString() }
+            registry.add("DB_NAME") { postgres.databaseName }
+            registry.add("DB_USERNAME") { postgres.username }
+            registry.add("DB_PASSWORD") { postgres.password }
         }
     }
 }
