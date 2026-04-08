@@ -71,7 +71,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build JAR
-        run: ./gradlew shadowJar
+        run: ./gradlew bootJar
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
