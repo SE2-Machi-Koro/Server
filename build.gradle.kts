@@ -21,6 +21,7 @@ sonar {
         property("sonar.organization", "se2-machi-koro")
         property("sonar.host.url", "https://sonarcloud.io")
         property("sonar.coverage.jacoco.xmlReportPaths", "build/reports/jacoco/test/jacocoTestReport.xml")
+        property("sonar.qualitygate.wait", "true")
     }
 }
 
