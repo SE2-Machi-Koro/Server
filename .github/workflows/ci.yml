@@ -70,7 +70,7 @@ jobs:
         run: ./gradlew shadowJar
 
       - name: Deploy via SSH
-        uses: appleboy/ssh-action@036598dec4f7b97be1f6e1e2de87082d8fc01cc3
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
