@@ -12,6 +12,7 @@ import org.machikoro.server.database.Players
 import org.machikoro.server.database.Users
 import org.springframework.boot.CommandLineRunner
 import org.springframework.boot.autoconfigure.SpringBootApplication
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.boot.runApplication
 import org.springframework.context.annotation.Bean
 
@@ -19,6 +20,7 @@ import org.springframework.context.annotation.Bean
 class ServerApplication {
 
     @Bean
+    @ConditionalOnProperty(name = ["machikoro.db.init.enabled"], havingValue = "true", matchIfMissing = true)
     fun init() = CommandLineRunner {
         connectToDatabase()
     }

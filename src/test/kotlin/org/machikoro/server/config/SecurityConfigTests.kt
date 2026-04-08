@@ -3,7 +3,6 @@ package org.machikoro.server.config
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
-import org.machikoro.server.database.AbstractDBSetup
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.security.web.SecurityFilterChain
@@ -12,9 +11,9 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 
-@SpringBootTest
+@SpringBootTest(properties = ["machikoro.db.init.enabled=false"])
 @AutoConfigureMockMvc
-class SecurityConfigTests : AbstractDBSetup() {
+class SecurityConfigTests {
 
     @Autowired
     private lateinit var mockMvc: MockMvc
