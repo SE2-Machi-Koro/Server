@@ -1,53 +1,14 @@
 package org.machikoro.server
 
 import io.github.cdimascio.dotenv.Dotenv
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.nio.file.Files
 
 class ServerApplicationTests {
-
-    private val originalUsername = System.getProperty("DB_USERNAME")
-    private val originalPassword = System.getProperty("DB_PASSWORD")
-
-    @AfterEach
-    fun restoreProperties() {
-        if (originalUsername != null) {
-            System.setProperty("DB_USERNAME", originalUsername)
-        } else {
-            System.clearProperty("DB_USERNAME")
-        }
-
-        if (originalPassword != null) {
-            System.setProperty("DB_PASSWORD", originalPassword)
-        } else {
-            System.clearProperty("DB_PASSWORD")
-        }
-    }
-
-    @Test
-    fun connectToDatabaseThrowsWhenUsernameIsMissing() {
-        System.clearProperty("DB_USERNAME")
-
-        assertThrows(IllegalArgumentException::class.java) {
-            connectToDatabase()
-        }
-    }
-
-    @Test
-    fun connectToDatabaseThrowsWhenPasswordIsMissing() {
-        System.setProperty("DB_USERNAME", "test")
-        System.clearProperty("DB_PASSWORD")
-
-        assertThrows(IllegalArgumentException::class.java) {
-            connectToDatabase()
-        }
-    }
 
     @Test
     fun loadDotenvShouldNotThrowWhenEnvFileIsMissing() {
@@ -63,6 +24,23 @@ class ServerApplicationTests {
         try {
             applyDotenvToSystemProperties(dotenv)
             assertEquals(value, System.getProperty(key))
+        } finally {
+            System.clearProperty(key)
+        }
+    }
+
+    @Test
+    fun applyDotenvToSystemPropertiesShouldNotOverwriteExistingEnvVars() {
+        val key = "TEST_EXISTING_KEY"
+        val existingValue = "existing-value"
+        val dotenvValue = "dotenv-value"
+
+        System.setProperty(key, existingValue)
+        val dotenv = createDotenvFromContent("$key=$dotenvValue\n")
+
+        try {
+            applyDotenvToSystemProperties(dotenv)
+            assertEquals(existingValue, System.getProperty(key))
         } finally {
             System.clearProperty(key)
         }
