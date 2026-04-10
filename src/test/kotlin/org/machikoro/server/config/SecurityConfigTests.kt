@@ -45,9 +45,15 @@ class SecurityConfigTests {
     }
 
     @Test
+    fun nativeWebsocketEndpointShouldNotRequireAuthentication() {
+        mockMvc.perform(get("/ws-sockjs/non-existing"))
+            .andExpect(status().isNotFound)
+    }
+
+    @Test
     fun websocketPostWithoutCsrfShouldBePermitted() {
         // SockJS uses POST for xhr_send; CSRF is disabled for /ws/** to allow this
-        mockMvc.perform(post("/ws/non-existing"))
+        mockMvc.perform(post("/ws-sockjs/non-existing"))
             .andExpect(status().isNotFound)
     }
 

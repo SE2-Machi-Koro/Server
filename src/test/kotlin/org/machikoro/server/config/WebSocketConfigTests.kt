@@ -26,20 +26,24 @@ class WebSocketConfigTests {
     }
 
     @Test
-    fun registerStompEndpointsShouldConfigureWsEndpointWithSockJs() {
+    fun registerStompEndpointsShouldConfigureNativeAndSockJsEndpoints() {
         val registry = mock(StompEndpointRegistry::class.java)
-        val endpointRegistration = mock(StompWebSocketEndpointRegistration::class.java)
+        val nativeEndpointRegistration = mock(StompWebSocketEndpointRegistration::class.java)
+        val sockJsEndpointRegistration = mock(StompWebSocketEndpointRegistration::class.java)
         val sockJsRegistration = mock(SockJsServiceRegistration::class.java)
 
-        `when`(registry.addEndpoint("/ws")).thenReturn(endpointRegistration)
-        `when`(endpointRegistration.setAllowedOrigins("http://localhost:8080", "http://localhost:3000")).thenReturn(endpointRegistration)
-        `when`(endpointRegistration.withSockJS()).thenReturn(sockJsRegistration)
+        `when`(registry.addEndpoint(WebSocketConfig.NATIVE_WS_ENDPOINT)).thenReturn(nativeEndpointRegistration)
+        `when`(registry.addEndpoint(WebSocketConfig.SOCKJS_WS_ENDPOINT)).thenReturn(sockJsEndpointRegistration)
+        `when`(nativeEndpointRegistration.setAllowedOrigins("http://localhost:8080", "http://localhost:3000")).thenReturn(nativeEndpointRegistration)
+        `when`(sockJsEndpointRegistration.setAllowedOrigins("http://localhost:8080", "http://localhost:3000")).thenReturn(sockJsEndpointRegistration)
+        `when`(sockJsEndpointRegistration.withSockJS()).thenReturn(sockJsRegistration)
 
         config.registerStompEndpoints(registry)
 
-        verify(registry).addEndpoint("/ws")
-        verify(endpointRegistration).setAllowedOrigins("http://localhost:8080", "http://localhost:3000")
-        verify(endpointRegistration).withSockJS()
+        verify(registry).addEndpoint(WebSocketConfig.NATIVE_WS_ENDPOINT)
+        verify(registry).addEndpoint(WebSocketConfig.SOCKJS_WS_ENDPOINT)
+        verify(nativeEndpointRegistration).setAllowedOrigins("http://localhost:8080", "http://localhost:3000")
+        verify(sockJsEndpointRegistration).setAllowedOrigins("http://localhost:8080", "http://localhost:3000")
+        verify(sockJsEndpointRegistration).withSockJS()
     }
 }
-
