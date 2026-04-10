@@ -27,9 +27,9 @@ sonar {
         property(
             "sonar.coverage.exclusions",
             listOf(
-                "org/machikoro/server/domain/**",
-                "org/machikoro/server/dto/**",
-                "org/machikoro/server/dao/**"
+                "**/org/machikoro/server/domain/**",
+                "**/org/machikoro/server/dto/**",
+                "**/org/machikoro/server/dao/**"
             ).joinToString(",")
         )
     }
@@ -87,6 +87,19 @@ tasks.withType<Test> {
 
 tasks.jacocoTestReport {
     dependsOn(tasks.test)
+
+    classDirectories.setFrom(
+        files(classDirectories.files.flatMap {
+            fileTree(it) {
+                exclude(
+                    "org/machikoro/server/domain/**",
+                    "org/machikoro/server/dto/**",
+                    "org/machikoro/server/dao/**"
+                )
+            }
+        })
+    )
+
     reports {
         xml.required.set(true)
         html.required.set(true)
