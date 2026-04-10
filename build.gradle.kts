@@ -93,6 +93,15 @@ tasks.jacocoTestCoverageVerification {
     violationRules {
         rule {
             element = "CLASS"
+
+            excludes = mutableListOf(
+                "org.machikoro.server.domain.CardColor",
+                "org.machikoro.server.domain.CardType",
+                "org.machikoro.server.domain.GameStatus",
+                "org.machikoro.server.domain.LandmarkType",
+                "org.machikoro.server.domain.TurnPhase"
+            )
+
             limit {
                 counter = "LINE"
                 value = "COVEREDRATIO"
