@@ -22,8 +22,14 @@ fun initDatabase(dataSource: DataSource) {
 
     transaction {
         SchemaUtils.create(
-            Users, Games, Players,
-            PlayerCards, PlayerLandmarks, GameMarketplace
+            Cards,
+            Landmarks,
+            Users,
+            Games,
+            Players,
+            PlayerCards,
+            PlayerLandmarks,
+            GameMarketplace
         )
     }
 }
