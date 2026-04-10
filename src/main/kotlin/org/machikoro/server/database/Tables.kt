@@ -2,12 +2,7 @@ package org.machikoro.server.database
 
 import org.jetbrains.exposed.v1.core.ReferenceOption
 import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
-
-enum class GameStatus {
-    WAITING,
-    IN_PROGRESS,
-    FINISHED
-}
+import org.machikoro.server.domain.GameStatus
 
 // Used for leaderboard
 object Users : IntIdTable("users") {

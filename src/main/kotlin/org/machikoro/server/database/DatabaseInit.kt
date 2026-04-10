@@ -1,14 +1,8 @@
-package org.machikoro.server
+package org.machikoro.server.database
 
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
-import org.machikoro.server.database.GameMarketplace
-import org.machikoro.server.database.Games
-import org.machikoro.server.database.PlayerCards
-import org.machikoro.server.database.PlayerLandmarks
-import org.machikoro.server.database.Players
-import org.machikoro.server.database.Users
 import org.springframework.boot.CommandLineRunner
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.stereotype.Component
@@ -19,11 +13,11 @@ import javax.sql.DataSource
 class DatabaseInitializer(private val dataSource: DataSource) : CommandLineRunner {
 
     override fun run(vararg args: String) {
-        connectToDatabase(dataSource)
+        initDatabase(dataSource)
     }
 }
 
-fun connectToDatabase(dataSource: DataSource) {
+fun initDatabase(dataSource: DataSource) {
     Database.connect(dataSource)
 
     transaction {
