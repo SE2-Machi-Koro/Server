@@ -23,15 +23,6 @@ sonar {
         property("sonar.organization", "se2-machi-koro")
         property("sonar.host.url", "https://sonarcloud.io")
         property("sonar.coverage.jacoco.xmlReportPaths", "build/reports/jacoco/test/jacocoTestReport.xml")
-
-        property(
-            "sonar.coverage.exclusions",
-            listOf(
-                "**/org/machikoro/server/domain/**",
-                "**/org/machikoro/server/dto/**",
-                "**/org/machikoro/server/dao/**"
-            ).joinToString(",")
-        )
     }
 }
 
@@ -87,19 +78,6 @@ tasks.withType<Test> {
 
 tasks.jacocoTestReport {
     dependsOn(tasks.test)
-
-    classDirectories.setFrom(
-        files(classDirectories.files.flatMap {
-            fileTree(it) {
-                exclude(
-                    "org/machikoro/server/domain/**",
-                    "org/machikoro/server/dto/**",
-                    "org/machikoro/server/dao/**"
-                )
-            }
-        })
-    )
-
     reports {
         xml.required.set(true)
         html.required.set(true)
@@ -115,16 +93,6 @@ tasks.jacocoTestCoverageVerification {
     violationRules {
         rule {
             element = "CLASS"
-
-            excludes = mutableListOf(
-                "org.machikoro.server.domain.CardColor",
-                "org.machikoro.server.domain.CardType",
-                "org.machikoro.server.domain.GameStatus",
-                "org.machikoro.server.domain.LandmarkType",
-                "org.machikoro.server.domain.TurnPhase",
-                "org.machikoro.server.dto.ChatMessage"
-            )
-
             limit {
                 counter = "LINE"
                 value = "COVEREDRATIO"
