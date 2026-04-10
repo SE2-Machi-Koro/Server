@@ -3,7 +3,6 @@ package org.machikoro.server.database
 import org.jetbrains.exposed.v1.core.ReferenceOption
 import org.jetbrains.exposed.v1.core.Table
 import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
-import org.machikoro.server.domain.CardColor
 import org.machikoro.server.domain.GameStatus
 import org.machikoro.server.domain.TurnPhase
 import org.machikoro.server.domain.CardType
