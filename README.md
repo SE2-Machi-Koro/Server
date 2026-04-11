@@ -61,14 +61,14 @@ The server implements **real-time bidirectional communication** between frontend
 - Instant message delivery across all connected clients
 - Automatic game state synchronization
 - Real-time notifications and events
-- SockJS fallback for browser compatibility
+- SockJS fallback for browser compatibility and testing
 
 ### Endpoint Details
 
 | Parameter | Value |
 |-----------|-------|
-| **URL** | `http://localhost:8080/ws` (SockJS), `ws://localhost:8080/ws` (native WebSocket) |
-| **Protocol** | STOMP over WebSocket with SockJS fallback |
+| **URL** | `ws://localhost:8080/ws` (native WebSocket), `http://localhost:8080/ws-sockjs` (SockJS) |
+| **Protocol** | STOMP over native WebSocket, with a separate SockJS fallback endpoint |
 | **Port** | 8080 |
 
 ### Message Broker Configuration
@@ -271,8 +271,8 @@ src/main/kotlin/org/machikoro/server/
 ### JavaScript/SockJS Example
 
 ```javascript
-// Initialize WebSocket connection
-const socket = new SockJS('/ws');
+// Initialize SockJS connection for browser fallback/testing
+const socket = new SockJS('/ws-sockjs');
 const stompClient = Stomp.over(socket);
 
 // Connect and subscribe

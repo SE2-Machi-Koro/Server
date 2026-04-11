@@ -21,11 +21,11 @@ class SecurityConfig {
     fun securityFilterChain(http: HttpSecurity): SecurityFilterChain {
         http
             .csrf { csrf ->
-                csrf.ignoringRequestMatchers("/ws", "/ws/**")
+                csrf.ignoringRequestMatchers("/ws", "/ws/**", "/ws-sockjs", "/ws-sockjs/**")
             }
             .authorizeHttpRequests { auth ->
                 auth.requestMatchers("/", "/index.html", "/css/**", "/js/**", "/webjars/**").permitAll()
-                auth.requestMatchers("/ws", "/ws/**").permitAll()
+                auth.requestMatchers("/ws", "/ws/**", "/ws-sockjs", "/ws-sockjs/**").permitAll()
                 auth.requestMatchers("/api/**").authenticated()
                 auth.anyRequest().authenticated()
             }
