@@ -11,8 +11,6 @@ import org.springframework.context.ApplicationContext
 import org.testcontainers.junit.jupiter.Testcontainers
 import javax.sql.DataSource
 
-@Testcontainers
-@SpringBootTest
 class DatabaseInitTest : AbstractDBSetup() {
 
     @Autowired
