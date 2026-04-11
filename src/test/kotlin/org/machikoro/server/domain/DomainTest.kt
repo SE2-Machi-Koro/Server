@@ -2,6 +2,11 @@ package org.machikoro.server.domain
 
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
+import org.machikoro.server.domain.enums.CardColor
+import org.machikoro.server.domain.enums.CardType
+import org.machikoro.server.domain.enums.GameStatus
+import org.machikoro.server.domain.enums.LandmarkType
+import org.machikoro.server.domain.enums.TurnPhase
 
 class DomainTest {
 
