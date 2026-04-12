@@ -4,6 +4,7 @@ import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.minus
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -66,5 +67,37 @@ class GameMarketplaceDao {
             .singleOrNull()
             ?.let { it[GameMarketplace.quantityAvailable] > 0 }
             ?: false
+    }
+
+    fun findAll(): List<GameMarketplaceModel> = transaction {
+        GameMarketplace.selectAll().map {
+            GameMarketplaceModel(
+                gameId = it[GameMarketplace.gameId].value,
+                cardType = it[GameMarketplace.cardType],
+                quantityAvailable = it[GameMarketplace.quantityAvailable]
+            )
+        }
+    }
+
+    fun updateQuantity(gameId: Int, cardType: CardType, quantity: Int): Unit = transaction {
+        GameMarketplace.update({
+            (GameMarketplace.gameId eq gameId) and
+                    (GameMarketplace.cardType eq cardType)
+        }) {
+            it[GameMarketplace.quantityAvailable] = quantity
+        }
+    }
+
+    fun delete(gameId: Int, cardType: CardType): Unit = transaction {
+        GameMarketplace.deleteWhere {
+            (GameMarketplace.gameId eq gameId) and
+                    (GameMarketplace.cardType eq cardType)
+        }
+    }
+
+    fun deleteAllForGame(gameId: Int): Unit = transaction {
+        GameMarketplace.deleteWhere {
+            GameMarketplace.gameId eq gameId
+        }
     }
 }

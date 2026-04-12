@@ -44,4 +44,18 @@ class PlayerDao {
             this.coins = coins
         }
     }
+
+    fun findAll(): List<PlayerModel> = transaction {
+        PlayerEntity.all().map { it.toModel() }
+    }
+
+    fun updateTurnOrder(id: Int, turnOrder: Int): Unit = transaction {
+        PlayerEntity.findById(id)?.apply {
+            this.turnOrder = turnOrder
+        }
+    }
+
+    fun delete(id: Int): Unit = transaction {
+        PlayerEntity.findById(id)?.delete()
+    }
 }

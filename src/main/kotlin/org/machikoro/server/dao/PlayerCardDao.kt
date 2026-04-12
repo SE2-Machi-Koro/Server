@@ -56,4 +56,21 @@ class PlayerCardDao {
             }
         }
     }
+
+    fun findAll(): List<PlayerCardModel> = transaction {
+        PlayerCards.selectAll().map {
+            PlayerCardModel(
+                playerId = it[PlayerCards.playerId].value,
+                cardType = it[PlayerCards.cardType],
+                quantity = it[PlayerCards.quantity]
+            )
+        }
+    }
+
+    fun delete(playerId: Int, cardType: CardType): Unit = transaction {
+        PlayerCards.deleteWhere {
+            (PlayerCards.playerId eq playerId) and
+                    (PlayerCards.cardType eq cardType)
+        }
+    }
 }

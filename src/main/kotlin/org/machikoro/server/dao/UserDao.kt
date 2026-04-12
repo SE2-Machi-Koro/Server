@@ -50,4 +50,12 @@ class UserDao {
             totalGamesPlayed += 1
         }
     }
+
+    fun findAll(): List<UserModel> = transaction {
+        UserEntity.all().map { it.toModel() }
+    }
+
+    fun delete(id: Int): Unit = transaction {
+        UserEntity.findById(id)?.delete()
+    }
 }

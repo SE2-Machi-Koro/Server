@@ -61,4 +61,12 @@ class GameDao {
             lastDiceRoll = null
         }
     }
+
+    fun findAll(): List<GameModel> = transaction {
+        GameEntity.all().map { it.toModel() }
+    }
+
+    fun delete(id: Int): Unit = transaction {
+        GameEntity.findById(id)?.delete()
+    }
 }

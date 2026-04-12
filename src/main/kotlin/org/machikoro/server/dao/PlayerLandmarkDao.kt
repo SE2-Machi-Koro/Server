@@ -3,6 +3,7 @@ package org.machikoro.server.dao
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -60,5 +61,22 @@ class PlayerLandmarkDao {
         PlayerLandmarks.selectAll()
             .where { PlayerLandmarks.playerId eq playerId }
             .all { it[PlayerLandmarks.isBuilt] }
+    }
+
+    fun findAll(): List<PlayerLandmarkModel> = transaction {
+        PlayerLandmarks.selectAll().map {
+            PlayerLandmarkModel(
+                playerId = it[PlayerLandmarks.playerId].value,
+                landmarkType = it[PlayerLandmarks.landmarkType],
+                isBuilt = it[PlayerLandmarks.isBuilt]
+            )
+        }
+    }
+
+    fun delete(playerId: Int, landmarkType: LandmarkType): Unit = transaction {
+        PlayerLandmarks.deleteWhere {
+            (PlayerLandmarks.playerId eq playerId) and
+                    (PlayerLandmarks.landmarkType eq landmarkType)
+        }
     }
 }
