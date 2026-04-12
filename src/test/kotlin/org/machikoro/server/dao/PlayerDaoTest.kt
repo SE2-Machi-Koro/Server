@@ -52,6 +52,14 @@ class PlayerDaoTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `findAll returns all players`() {
+        val userId2 = userDao.create("player_user_2")
+        playerDao.create(gameId, userId, turnOrder = 0)
+        playerDao.create(gameId, userId2, turnOrder = 1)
+        assertEquals(2, playerDao.findAll().size)
+    }
+
+    @Test
     fun `findByGameId returns all players in game`() {
         val userId2 = userDao.create("player_user_2")
         playerDao.create(gameId, userId, turnOrder = 0)
@@ -83,5 +91,24 @@ class PlayerDaoTest : AbstractDBSetup() {
         val id = playerDao.create(gameId, userId, turnOrder = 0)
         playerDao.updateCoins(id, 10)
         assertEquals(10, playerDao.findById(id)!!.coins)
+    }
+
+    @Test
+    fun `updateTurnOrder sets new turn order`() {
+        val id = playerDao.create(gameId, userId, turnOrder = 0)
+        playerDao.updateTurnOrder(id, 2)
+        assertEquals(2, playerDao.findById(id)!!.turnOrder)
+    }
+
+    @Test
+    fun `delete removes player`() {
+        val id = playerDao.create(gameId, userId, turnOrder = 0)
+        playerDao.delete(id)
+        assertNull(playerDao.findById(id))
+    }
+
+    @Test
+    fun `delete on unknown id does not throw`() {
+        assertDoesNotThrow { playerDao.delete(999) }
     }
 }

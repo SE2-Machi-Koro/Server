@@ -41,6 +41,17 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `findAll returns empty list before init`() {
+        assertTrue(marketplaceDao.findAll().isEmpty())
+    }
+
+    @Test
+    fun `findAll returns all entries after init`() {
+        marketplaceDao.initForGame(gameId)
+        assertEquals(CardType.entries.size, marketplaceDao.findAll().size)
+    }
+
+    @Test
     fun `initForGame creates one entry per card type with default supply`() {
         marketplaceDao.initForGame(gameId)
         val entries = marketplaceDao.findByGameId(gameId)
@@ -91,5 +102,43 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
         marketplaceDao.initForGame(gameId, supplyPerCard = 1)
         marketplaceDao.decrementQuantity(gameId, CardType.CAFE)
         assertFalse(marketplaceDao.isAvailable(gameId, CardType.CAFE))
+    }
+
+    @Test
+    fun `updateQuantity sets quantity to specified value`() {
+        marketplaceDao.initForGame(gameId)
+        marketplaceDao.updateQuantity(gameId, CardType.WHEAT_FIELD, 10)
+        assertEquals(10, marketplaceDao.findByGameIdAndType(gameId, CardType.WHEAT_FIELD)!!.quantityAvailable)
+    }
+
+    @Test
+    fun `delete removes specific card entry from marketplace`() {
+        marketplaceDao.initForGame(gameId)
+        marketplaceDao.delete(gameId, CardType.WHEAT_FIELD)
+        assertNull(marketplaceDao.findByGameIdAndType(gameId, CardType.WHEAT_FIELD))
+    }
+
+    @Test
+    fun `delete on non-existent entry does not throw`() {
+        assertDoesNotThrow {
+            marketplaceDao.delete(gameId, CardType.WHEAT_FIELD)
+        }
+    }
+
+    @Test
+    fun `deleteAllForGame removes all entries for that game`() {
+        marketplaceDao.initForGame(gameId)
+        marketplaceDao.deleteAllForGame(gameId)
+        assertTrue(marketplaceDao.findByGameId(gameId).isEmpty())
+    }
+
+    @Test
+    fun `deleteAllForGame does not affect other games`() {
+        val hostId2 = userDao.create("host_2")
+        val gameId2 = gameDao.create(hostId2)
+        marketplaceDao.initForGame(gameId)
+        marketplaceDao.initForGame(gameId2)
+        marketplaceDao.deleteAllForGame(gameId)
+        assertEquals(CardType.entries.size, marketplaceDao.findByGameId(gameId2).size)
     }
 }

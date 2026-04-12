@@ -45,6 +45,18 @@ class PlayerCardDaoTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `findAll returns all player cards`() {
+        playerCardDao.upsert(playerId, CardType.WHEAT_FIELD, 1)
+        playerCardDao.upsert(playerId, CardType.BAKERY, 2)
+        assertEquals(2, playerCardDao.findAll().size)
+    }
+
+    @Test
+    fun `findAll returns empty list when no cards exist`() {
+        assertTrue(playerCardDao.findAll().isEmpty())
+    }
+
+    @Test
     fun `upsert inserts new card entry`() {
         playerCardDao.upsert(playerId, CardType.WHEAT_FIELD, 1)
         val cards = playerCardDao.findByPlayerId(playerId)
@@ -74,5 +86,22 @@ class PlayerCardDaoTest : AbstractDBSetup() {
         playerCardDao.upsert(playerId, CardType.WHEAT_FIELD, 1)
         playerCardDao.upsert(playerId, CardType.BAKERY, 2)
         assertEquals(2, playerCardDao.findByPlayerId(playerId).size)
+    }
+
+    @Test
+    fun `delete removes specific card from player`() {
+        playerCardDao.upsert(playerId, CardType.WHEAT_FIELD, 1)
+        playerCardDao.upsert(playerId, CardType.BAKERY, 1)
+        playerCardDao.delete(playerId, CardType.WHEAT_FIELD)
+        val remaining = playerCardDao.findByPlayerId(playerId)
+        assertEquals(1, remaining.size)
+        assertEquals(CardType.BAKERY, remaining[0].cardType)
+    }
+
+    @Test
+    fun `delete on non-existent entry does not throw`() {
+        assertDoesNotThrow {
+            playerCardDao.delete(playerId, CardType.CAFE)
+        }
     }
 }

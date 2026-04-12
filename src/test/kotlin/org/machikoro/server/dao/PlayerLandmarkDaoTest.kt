@@ -45,6 +45,17 @@ class PlayerLandmarkDaoTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `findAll returns all landmark entries`() {
+        playerLandmarkDao.initForPlayer(playerId)
+        assertEquals(LandmarkType.entries.size, playerLandmarkDao.findAll().size)
+    }
+
+    @Test
+    fun `findAll returns empty list before any init`() {
+        assertTrue(playerLandmarkDao.findAll().isEmpty())
+    }
+
+    @Test
     fun `initForPlayer creates one unbuilt entry per landmark type`() {
         playerLandmarkDao.initForPlayer(playerId)
         val landmarks = playerLandmarkDao.findByPlayerId(playerId)
@@ -92,5 +103,19 @@ class PlayerLandmarkDaoTest : AbstractDBSetup() {
         playerLandmarkDao.initForPlayer(playerId)
         LandmarkType.entries.forEach { playerLandmarkDao.markBuilt(playerId, it) }
         assertTrue(playerLandmarkDao.allBuilt(playerId))
+    }
+
+    @Test
+    fun `delete removes specific landmark from player`() {
+        playerLandmarkDao.initForPlayer(playerId)
+        playerLandmarkDao.delete(playerId, LandmarkType.TRAIN_STATION)
+        assertNull(playerLandmarkDao.findByPlayerIdAndType(playerId, LandmarkType.TRAIN_STATION))
+    }
+
+    @Test
+    fun `delete on non-existent entry does not throw`() {
+        assertDoesNotThrow {
+            playerLandmarkDao.delete(playerId, LandmarkType.RADIO_TOWER)
+        }
     }
 }
