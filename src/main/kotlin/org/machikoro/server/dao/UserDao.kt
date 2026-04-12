@@ -1,12 +1,8 @@
 package org.machikoro.server.dao
 
-import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.core.plus
-import org.jetbrains.exposed.v1.jdbc.insert
-import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
-import org.jetbrains.exposed.v1.jdbc.update
+import org.machikoro.server.database.entities.UserEntity
 import org.machikoro.server.database.Users
 import org.machikoro.server.domain.models.UserModel
 import org.springframework.stereotype.Repository
@@ -14,56 +10,44 @@ import org.springframework.stereotype.Repository
 @Repository
 class UserDao {
 
-    private fun ResultRow.toUserModel() = UserModel(
-        id = this[Users.id].value,
-        username = this[Users.username],
-        totalWins = this[Users.totalWins],
-        totalGamesPlayed = this[Users.totalGamesPlayed],
-        sessionToken = this[Users.sessionToken],
-    )
-
     fun findById(id: Int): UserModel? = transaction {
-        Users.selectAll()
-            .where { Users.id eq id }
-            .singleOrNull()
-            ?.toUserModel()
+        UserEntity.findById(id)?.toModel()
     }
 
     fun findByUsername(username: String): UserModel? = transaction {
-        Users.selectAll()
-            .where { Users.username eq username }
+        UserEntity.find { Users.username eq username }
             .singleOrNull()
-            ?.toUserModel()
+            ?.toModel()
     }
 
     fun findBySessionToken(token: String): UserModel? = transaction {
-        Users.selectAll()
-            .where { Users.sessionToken eq token }
+        UserEntity.find { Users.sessionToken eq token }
             .singleOrNull()
-            ?.toUserModel()
+            ?.toModel()
     }
 
     fun create(username: String): Int = transaction {
-        Users.insert {
-            it[Users.username] = username
-        }[Users.id].value
+        UserEntity.new {
+            this.username = username
+            this.sessionToken = null
+            this.totalWins = 0
+            this.totalGamesPlayed = 0
+        }.id.value
     }
 
     fun updateSessionToken(id: Int, token: String?): Unit = transaction {
-        Users.update({ Users.id eq id }) {
-            it[Users.sessionToken] = token
-        }
+        UserEntity.findById(id)?.sessionToken = token
     }
 
     fun incrementWins(id: Int): Unit = transaction {
-        Users.update({ Users.id eq id }) {
-            it[Users.totalWins] = Users.totalWins + 1
+        UserEntity.findById(id)?.apply {
+            totalWins += 1
         }
     }
 
     fun incrementGamesPlayed(id: Int): Unit = transaction {
-        Users.update({ Users.id eq id }) {
-            it[Users.totalGamesPlayed] = Users.totalGamesPlayed + 1
+        UserEntity.findById(id)?.apply {
+            totalGamesPlayed += 1
         }
     }
 }
