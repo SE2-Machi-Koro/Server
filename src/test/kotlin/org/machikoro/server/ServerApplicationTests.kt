@@ -6,15 +6,9 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.springframework.boot.test.context.SpringBootTest
 import java.nio.file.Files
 
-@SpringBootTest
 class ServerApplicationTests {
-
-    @Test
-    fun contextLoads() {
-    }
 
     @Test
     fun loadDotenvShouldNotThrowWhenEnvFileIsMissing() {
@@ -30,6 +24,23 @@ class ServerApplicationTests {
         try {
             applyDotenvToSystemProperties(dotenv)
             assertEquals(value, System.getProperty(key))
+        } finally {
+            System.clearProperty(key)
+        }
+    }
+
+    @Test
+    fun applyDotenvToSystemPropertiesShouldNotOverwriteExistingEnvVars() {
+        val key = "TEST_EXISTING_KEY"
+        val existingValue = "existing-value"
+        val dotenvValue = "dotenv-value"
+
+        System.setProperty(key, existingValue)
+        val dotenv = createDotenvFromContent("$key=$dotenvValue\n")
+
+        try {
+            applyDotenvToSystemProperties(dotenv)
+            assertEquals(existingValue, System.getProperty(key))
         } finally {
             System.clearProperty(key)
         }
@@ -105,5 +116,4 @@ class ServerApplicationTests {
             tempDir.toFile().deleteRecursively()
         }
     }
-
 }

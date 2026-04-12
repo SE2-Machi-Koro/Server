@@ -14,6 +14,8 @@ description = "server"
 val springdocVersion = "3.0.2"
 val dotenvVersion = "5.2.2"
 val mockitoKotlinVersion = "5.2.1"
+val exposedVersion = "1.0.0"
+val testcontainersVersion = "1.20.4"
 
 sonar {
     properties {
@@ -44,6 +46,10 @@ dependencies {
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:$springdocVersion")
     implementation("tools.jackson.module:jackson-module-kotlin")
     implementation("io.github.cdimascio:java-dotenv:$dotenvVersion")
+    implementation("org.jetbrains.exposed:exposed-core:$exposedVersion")
+    implementation("org.jetbrains.exposed:exposed-jdbc:$exposedVersion")
+    implementation("org.jetbrains.exposed:exposed-dao:$exposedVersion")
+    implementation("org.springframework.boot:spring-boot-starter-jdbc")
     developmentOnly("org.springframework.boot:spring-boot-devtools")
     developmentOnly("org.springframework.boot:spring-boot-docker-compose")
     runtimeOnly("org.postgresql:postgresql")
@@ -53,6 +59,9 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-websocket-test")
     testImplementation("org.mockito.kotlin:mockito-kotlin:$mockitoKotlinVersion")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
+    testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("org.testcontainers:junit-jupiter:$testcontainersVersion")
+    testImplementation("org.testcontainers:postgresql:$testcontainersVersion")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
@@ -64,6 +73,7 @@ kotlin {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    jvmArgs("-XX:+EnableDynamicAgentLoading")
     finalizedBy(tasks.jacocoTestReport)
 }
 

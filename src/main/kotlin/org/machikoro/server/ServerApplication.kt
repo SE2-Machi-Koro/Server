@@ -11,7 +11,9 @@ internal fun loadDotenv(): Dotenv = Dotenv.configure().ignoreIfMissing().load()
 
 internal fun applyDotenvToSystemProperties(dotenv: Dotenv) {
     dotenv.entries().forEach { entry ->
-        System.setProperty(entry.key, entry.value)
+        if (System.getProperty(entry.key) == null && System.getenv(entry.key) == null) {
+            System.setProperty(entry.key, entry.value)
+        }
     }
 }
 

@@ -11,6 +11,11 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 @EnableWebSocketMessageBroker
 class WebSocketConfig : WebSocketMessageBrokerConfigurer {
 
+    companion object {
+        const val NATIVE_WS_ENDPOINT = "/ws"
+        const val SOCKJS_WS_ENDPOINT = "/ws-sockjs"
+    }
+
     @Value("\${websocket.allowed-origins:http://localhost:8080,http://localhost:3000}")
     internal lateinit var allowedOrigins: String
 
@@ -25,14 +30,17 @@ class WebSocketConfig : WebSocketMessageBrokerConfigurer {
 
     /**
      * Register STOMP endpoints for WebSocket connections.
-     * Registers the /ws endpoint with CORS configured via property and SockJS fallback support.
+     * Registers a native WebSocket endpoint for Android clients and a separate SockJS endpoint
+     * for browser/testing flows that still rely on fallback transports.
      * Allowed origins are configured via the 'websocket.allowed-origins' property.
      */
     override fun registerStompEndpoints(registry: StompEndpointRegistry) {
         val origins = allowedOrigins.split(",").map { it.trim() }.toTypedArray()
-        registry.addEndpoint("/ws")
+        registry.addEndpoint(NATIVE_WS_ENDPOINT)
+            .setAllowedOrigins(*origins)
+
+        registry.addEndpoint(SOCKJS_WS_ENDPOINT)
             .setAllowedOrigins(*origins)
             .withSockJS()
     }
 }
-
