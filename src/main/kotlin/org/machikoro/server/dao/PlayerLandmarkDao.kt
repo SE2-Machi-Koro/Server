@@ -58,9 +58,11 @@ class PlayerLandmarkDao {
     }
 
     fun allBuilt(playerId: Int): Boolean = transaction {
-        PlayerLandmarks.selectAll()
+        val landmarks = PlayerLandmarks.selectAll()
             .where { PlayerLandmarks.playerId eq playerId }
-            .all { it[PlayerLandmarks.isBuilt] }
+            .toList()
+
+        landmarks.isNotEmpty() && landmarks.all { it[PlayerLandmarks.isBuilt] }
     }
 
     fun findAll(): List<PlayerLandmarkModel> = transaction {
