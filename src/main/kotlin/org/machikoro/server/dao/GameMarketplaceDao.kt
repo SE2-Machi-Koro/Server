@@ -3,6 +3,7 @@ package org.machikoro.server.dao
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.greater
 import org.jetbrains.exposed.v1.core.minus
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
@@ -49,13 +50,15 @@ class GameMarketplaceDao {
         }
     }
 
-    fun decrementQuantity(gameId: Int, cardType: CardType): Unit = transaction {
-        GameMarketplace.update({
+    fun decrementQuantity(gameId: Int, cardType: CardType): Boolean = transaction {
+        val updatedRows = GameMarketplace.update({
             (GameMarketplace.gameId eq gameId) and
-                    (GameMarketplace.cardType eq cardType)
+                    (GameMarketplace.cardType eq cardType) and
+                    (GameMarketplace.quantityAvailable greater 0)
         }) {
             it[GameMarketplace.quantityAvailable] = GameMarketplace.quantityAvailable - 1
         }
+        updatedRows > 0
     }
 
     fun isAvailable(gameId: Int, cardType: CardType): Boolean = transaction {
