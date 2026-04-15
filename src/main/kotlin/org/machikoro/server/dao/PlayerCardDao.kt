@@ -37,17 +37,16 @@ class PlayerCardDao {
             .singleOrNull() != null
 
         when {
-            !exists -> PlayerCards.insert {
-                it[PlayerCards.playerId] = playerId
-                it[PlayerCards.cardType] = cardType
-                it[PlayerCards.quantity] = quantity
-            }
-
             quantity <= 0 -> PlayerCards.deleteWhere {
                 (PlayerCards.playerId eq playerId) and
                         (PlayerCards.cardType eq cardType)
             }
 
+            !exists -> PlayerCards.insert {
+                it[PlayerCards.playerId] = playerId
+                it[PlayerCards.cardType] = cardType
+                it[PlayerCards.quantity] = quantity
+            }
             else -> PlayerCards.update({
                 (PlayerCards.playerId eq playerId) and
                         (PlayerCards.cardType eq cardType)
