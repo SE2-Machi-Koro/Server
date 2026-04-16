@@ -1,7 +1,9 @@
 package org.machikoro.server.dao
 
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.plus
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.update
 import org.machikoro.server.database.entities.UserEntity
 import org.machikoro.server.database.Users
 import org.machikoro.server.domain.models.UserModel
@@ -40,14 +42,14 @@ class UserDao {
     }
 
     fun incrementWins(id: Int): Unit = transaction {
-        UserEntity.findById(id)?.apply {
-            totalWins += 1
+        Users.update({ Users.id eq id }) {
+            it[totalWins] = totalWins + 1
         }
     }
 
     fun incrementGamesPlayed(id: Int): Unit = transaction {
-        UserEntity.findById(id)?.apply {
-            totalGamesPlayed += 1
+        Users.update({ Users.id eq id }) {
+            it[totalGamesPlayed] = totalGamesPlayed + 1
         }
     }
 

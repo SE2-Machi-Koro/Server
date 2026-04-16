@@ -3,11 +3,10 @@ package org.machikoro.server.dao
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
-import org.jetbrains.exposed.v1.jdbc.update
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import org.jetbrains.exposed.v1.jdbc.upsert
 import org.machikoro.server.database.PlayerCards
 import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.models.PlayerCardModel
@@ -29,28 +28,18 @@ class PlayerCardDao {
     }
 
     fun upsert(playerId: Int, cardType: CardType, quantity: Int): Unit = transaction {
-        val exists = PlayerCards.selectAll()
-            .where {
+        if (quantity <= 0) {
+            PlayerCards.deleteWhere {
                 (PlayerCards.playerId eq playerId) and
                         (PlayerCards.cardType eq cardType)
             }
-            .singleOrNull() != null
-
-        when {
-            quantity <= 0 -> PlayerCards.deleteWhere {
-                (PlayerCards.playerId eq playerId) and
-                        (PlayerCards.cardType eq cardType)
-            }
-
-            !exists -> PlayerCards.insert {
+        } else {
+            PlayerCards.upsert(
+                keys = arrayOf(PlayerCards.playerId, PlayerCards.cardType),
+                onUpdate = { it[PlayerCards.quantity] = quantity }
+            ) {
                 it[PlayerCards.playerId] = playerId
                 it[PlayerCards.cardType] = cardType
-                it[PlayerCards.quantity] = quantity
-            }
-            else -> PlayerCards.update({
-                (PlayerCards.playerId eq playerId) and
-                        (PlayerCards.cardType eq cardType)
-            }) {
                 it[PlayerCards.quantity] = quantity
             }
         }

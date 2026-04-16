@@ -6,9 +6,7 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.getBean
-import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.ApplicationContext
-import org.testcontainers.junit.jupiter.Testcontainers
 import javax.sql.DataSource
 
 class DatabaseInitTest : AbstractDBSetup() {

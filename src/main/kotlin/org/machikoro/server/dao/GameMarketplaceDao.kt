@@ -7,6 +7,7 @@ import org.jetbrains.exposed.v1.core.greater
 import org.jetbrains.exposed.v1.core.minus
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
@@ -42,7 +43,7 @@ class GameMarketplaceDao {
 
     fun initForGame(gameId: Int, supplyPerCard: Int = 6): Unit = transaction {
         CardType.entries.forEach { type ->
-            GameMarketplace.insert {
+            GameMarketplace.insertIgnore {
                 it[GameMarketplace.gameId] = gameId
                 it[GameMarketplace.cardType] = type
                 it[GameMarketplace.quantityAvailable] = supplyPerCard

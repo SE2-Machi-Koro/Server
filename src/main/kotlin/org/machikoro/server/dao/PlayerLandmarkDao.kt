@@ -4,7 +4,7 @@ import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
-import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
@@ -40,7 +40,7 @@ class PlayerLandmarkDao {
 
     fun initForPlayer(playerId: Int): Unit = transaction {
         LandmarkType.entries.forEach { type ->
-            PlayerLandmarks.insert {
+            PlayerLandmarks.insertIgnore {
                 it[PlayerLandmarks.playerId] = playerId
                 it[PlayerLandmarks.landmarkType] = type
                 it[PlayerLandmarks.isBuilt] = false

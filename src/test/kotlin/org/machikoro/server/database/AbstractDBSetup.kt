@@ -17,7 +17,7 @@ abstract class AbstractDBSetup {
 
         @Container
         @JvmStatic
-        val postgres = object : PostgreSQLContainer<Nothing>("postgres:18") {
+        val postgres = object : PostgreSQLContainer<Nothing>("postgres:18.0") {
             init {
                 withDatabaseName("machikoro_test")
                 withUsername("test")
