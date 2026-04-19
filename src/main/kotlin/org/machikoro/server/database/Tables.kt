@@ -3,10 +3,10 @@ package org.machikoro.server.database
 import org.jetbrains.exposed.v1.core.ReferenceOption
 import org.jetbrains.exposed.v1.core.Table
 import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
-import org.machikoro.server.domain.GameStatus
-import org.machikoro.server.domain.TurnPhase
-import org.machikoro.server.domain.CardType
-import org.machikoro.server.domain.LandmarkType
+import org.machikoro.server.domain.enums.GameStatus
+import org.machikoro.server.domain.enums.TurnPhase
+import org.machikoro.server.domain.enums.CardType
+import org.machikoro.server.domain.enums.LandmarkType
 
 // STATIC CLASSES -----------------------------
 

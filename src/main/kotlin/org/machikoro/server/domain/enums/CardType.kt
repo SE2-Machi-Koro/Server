@@ -1,4 +1,4 @@
-package org.machikoro.server.domain
+package org.machikoro.server.domain.enums
 
 enum class CardType(val color: CardColor) {
     WHEAT_FIELD(CardColor.BLUE),
