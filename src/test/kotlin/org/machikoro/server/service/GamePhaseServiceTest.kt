@@ -2,7 +2,7 @@ package org.machikoro.server.service
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import org.machikoro.server.domain.TurnPhase
+import org.machikoro.server.domain.enums.TurnPhase
 
 class GamePhaseServiceTest {
 
