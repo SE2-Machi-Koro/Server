@@ -66,13 +66,8 @@ class PlayerLandmarkDao {
     }
 
     fun findAll(): List<PlayerLandmarkModel> = transaction {
-        PlayerLandmarks.selectAll().map {
-            PlayerLandmarkModel(
-                playerId = it[PlayerLandmarks.playerId].value,
-                landmarkType = it[PlayerLandmarks.landmarkType],
-                isBuilt = it[PlayerLandmarks.isBuilt]
-            )
-        }
+        PlayerLandmarks.selectAll()
+            .map { it.toPlayerLandmarkModel() }
     }
 
     fun delete(playerId: Int, landmarkType: LandmarkType): Unit = transaction {
