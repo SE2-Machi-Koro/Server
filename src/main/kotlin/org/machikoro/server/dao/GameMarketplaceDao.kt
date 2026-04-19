@@ -73,13 +73,8 @@ class GameMarketplaceDao {
     }
 
     fun findAll(): List<GameMarketplaceModel> = transaction {
-        GameMarketplace.selectAll().map {
-            GameMarketplaceModel(
-                gameId = it[GameMarketplace.gameId].value,
-                cardType = it[GameMarketplace.cardType],
-                quantityAvailable = it[GameMarketplace.quantityAvailable]
-            )
-        }
+        GameMarketplace.selectAll()
+            .map { it.toMarketplaceEntryModel() }
     }
 
     fun updateQuantity(gameId: Int, cardType: CardType, quantity: Int): Unit = transaction {
