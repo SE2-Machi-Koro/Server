@@ -6,11 +6,13 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.database.AbstractDBSetup
 import org.machikoro.server.database.Games
 import org.machikoro.server.database.Users
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
+import org.machikoro.server.exception.GameNotFoundException
 
 class GameDaoTest : AbstractDBSetup() {
 
@@ -72,6 +74,28 @@ class GameDaoTest : AbstractDBSetup() {
         val id = gameDao.create(hostId)
         gameDao.updateTurnPhase(id, TurnPhase.BUY_OR_BUILD)
         assertEquals(TurnPhase.BUY_OR_BUILD, gameDao.findById(id)!!.turnPhase)
+    }
+
+    @Test
+    fun `updateTurnPhase throws when game does not exist`() {
+        assertThrows<GameNotFoundException> {
+            gameDao.updateTurnPhase(999999, TurnPhase.ROLL_DICE)
+        }
+    }
+
+    @Test
+    fun `getPhase returns current phase`() {
+        val id = gameDao.create(hostId)
+        assertEquals(TurnPhase.ROLL_DICE, gameDao.getPhase(id))
+        gameDao.updateTurnPhase(id, TurnPhase.RESOLVE_EFFECTS)
+        assertEquals(TurnPhase.RESOLVE_EFFECTS, gameDao.getPhase(id))
+    }
+
+    @Test
+    fun `getPhase throws when game does not exist`() {
+        assertThrows<GameNotFoundException> {
+            gameDao.getPhase(999999)
+        }
     }
 
     @Test

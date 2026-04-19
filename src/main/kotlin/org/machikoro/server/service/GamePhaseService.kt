@@ -1,12 +1,12 @@
 package org.machikoro.server.service
 
+import org.machikoro.server.dao.GameDao
 import org.machikoro.server.domain.enums.TurnPhase
-import org.machikoro.server.repository.GameRepository
 import org.springframework.stereotype.Service
 
 @Service
 class GamePhaseService(
-    private val gameRepository: GameRepository,
+    private val gameDao: GameDao,
 ) {
 
     /** Returns the next phase in the Machi Koro turn cycle. */
@@ -22,8 +22,8 @@ class GamePhaseService(
 
     /** Advances a game to the next phase and persists it. */
     fun advancePhase(gameId: Int): TurnPhase {
-        val next = nextPhase(gameRepository.getPhase(gameId))
-        gameRepository.updatePhase(gameId, next)
+        val next = nextPhase(gameDao.getPhase(gameId))
+        gameDao.updateTurnPhase(gameId, next)
         return next
     }
 }
