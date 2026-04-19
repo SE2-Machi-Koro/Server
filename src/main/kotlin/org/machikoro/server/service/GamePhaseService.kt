@@ -1,6 +1,6 @@
 package org.machikoro.server.service
 
-import org.machikoro.server.domain.TurnPhase
+import org.machikoro.server.domain.enums.TurnPhase
 import org.springframework.stereotype.Service
 
 @Service
