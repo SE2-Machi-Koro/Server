@@ -46,13 +46,8 @@ class PlayerCardDao {
     }
 
     fun findAll(): List<PlayerCardModel> = transaction {
-        PlayerCards.selectAll().map {
-            PlayerCardModel(
-                playerId = it[PlayerCards.playerId].value,
-                cardType = it[PlayerCards.cardType],
-                quantity = it[PlayerCards.quantity]
-            )
-        }
+        PlayerCards.selectAll()
+            .map { it.toPlayerCardModel() }
     }
 
     fun delete(playerId: Int, cardType: CardType): Unit = transaction {
