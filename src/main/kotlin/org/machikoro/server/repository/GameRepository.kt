@@ -5,7 +5,7 @@ import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
 import org.machikoro.server.database.Games
-import org.machikoro.server.domain.TurnPhase
+import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.exception.GameNotFoundException
 import org.springframework.stereotype.Repository
 

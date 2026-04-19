@@ -11,7 +11,7 @@ import org.machikoro.server.database.AbstractDBSetup
 import org.machikoro.server.database.Games
 import org.machikoro.server.database.Users
 import org.machikoro.server.database.initDatabase
-import org.machikoro.server.domain.TurnPhase
+import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.exception.GameNotFoundException
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
