@@ -8,6 +8,7 @@ import org.machikoro.server.database.entities.UserEntity
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.GameModel
+import org.machikoro.server.exception.GameNotFoundException
 import org.springframework.stereotype.Repository
 
 @Repository
@@ -40,10 +41,15 @@ class GameDao {
         }
     }
 
+    fun getPhase(id: Int): TurnPhase = transaction {
+        GameEntity.findById(id)?.turnPhase
+            ?: throw GameNotFoundException("Game $id not found")
+    }
+
     fun updateTurnPhase(id: Int, phase: TurnPhase): Unit = transaction {
-        GameEntity.findById(id)?.apply {
-            turnPhase = phase
-        }
+        val game = GameEntity.findById(id)
+            ?: throw GameNotFoundException("Game $id not found")
+        game.turnPhase = phase
     }
 
     fun updateAfterRoll(id: Int, diceRoll: Int, phase: TurnPhase): Unit = transaction {

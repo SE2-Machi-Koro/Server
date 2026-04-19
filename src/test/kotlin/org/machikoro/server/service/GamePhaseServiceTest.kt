@@ -2,11 +2,16 @@ package org.machikoro.server.service
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import org.machikoro.server.dao.GameDao
 import org.machikoro.server.domain.enums.TurnPhase
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.verify
+import org.mockito.kotlin.whenever
 
 class GamePhaseServiceTest {
 
-    private val service = GamePhaseService()
+    private val gameDao = mock<GameDao>()
+    private val service = GamePhaseService(gameDao)
 
     @Test
     fun `initial phase is ROLL_DICE`() {
@@ -56,5 +61,27 @@ class GamePhaseServiceTest {
 
         phase = service.nextPhase(phase)
         assertEquals(TurnPhase.ROLL_DICE, phase)
+    }
+
+    @Test
+    fun `advancePhase reads current phase and persists the next one`() {
+        val gameId = 42
+        whenever(gameDao.getPhase(gameId)).thenReturn(TurnPhase.ROLL_DICE)
+
+        val result = service.advancePhase(gameId)
+
+        assertEquals(TurnPhase.RESOLVE_EFFECTS, result)
+        verify(gameDao).updateTurnPhase(gameId, TurnPhase.RESOLVE_EFFECTS)
+    }
+
+    @Test
+    fun `advancePhase wraps END_TURN back to ROLL_DICE`() {
+        val gameId = 7
+        whenever(gameDao.getPhase(gameId)).thenReturn(TurnPhase.END_TURN)
+
+        val result = service.advancePhase(gameId)
+
+        assertEquals(TurnPhase.ROLL_DICE, result)
+        verify(gameDao).updateTurnPhase(gameId, TurnPhase.ROLL_DICE)
     }
 }
