@@ -1,5 +1,6 @@
 package org.machikoro.server.dao
 
+import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -19,6 +20,7 @@ class PlayerDao {
 
     fun findByGameId(gameId: Int): List<PlayerModel> = transaction {
         PlayerEntity.find { Players.gameId eq gameId }
+            .orderBy(Players.turnOrder to SortOrder.ASC)
             .map { it.toModel() }
     }
 
