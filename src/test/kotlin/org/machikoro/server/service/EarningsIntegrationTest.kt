@@ -5,9 +5,6 @@ import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
-import org.machikoro.server.dao.GameDao
-import org.machikoro.server.dao.PlayerCardDao
-import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.database.AbstractDBSetup
 import org.machikoro.server.database.Cards
 import org.machikoro.server.database.Games
@@ -27,13 +24,13 @@ class EarningsIntegrationTest : AbstractDBSetup() {
     private lateinit var earningsService: EarningsService
 
     @Autowired
-    private lateinit var gameDao: GameDao
+    private lateinit var gameDao: org.machikoro.server.dao.GameDao
 
     @Autowired
-    private lateinit var playerDao: PlayerDao
+    private lateinit var playerDao: org.machikoro.server.dao.PlayerDao
 
     @Autowired
-    private lateinit var playerCardDao: PlayerCardDao
+    private lateinit var playerCardDao: org.machikoro.server.dao.PlayerCardDao
 
     private var gameId: Int = 0
     private var player1Id: Int = 0
@@ -59,11 +56,19 @@ class EarningsIntegrationTest : AbstractDBSetup() {
                 it[income] = 1
             }
             Cards.insert {
-                it[cardType] = CardType.RANCH
-                it[name] = "Ranch"
+                it[cardType] = CardType.BAKERY
+                it[name] = "Bakery"
                 it[cost] = 1
                 it[diceMin] = 2
-                it[diceMax] = 2
+                it[diceMax] = 3
+                it[income] = 1
+            }
+            Cards.insert {
+                it[cardType] = CardType.CAFE
+                it[name] = "Cafe"
+                it[cost] = 2
+                it[diceMin] = 3
+                it[diceMax] = 3
                 it[income] = 1
             }
 
@@ -89,7 +94,8 @@ class EarningsIntegrationTest : AbstractDBSetup() {
 
             playerCardDao.upsert(player1Id, CardType.WHEAT_FIELD, 2)
             playerCardDao.upsert(player2Id, CardType.WHEAT_FIELD, 1)
-            playerCardDao.upsert(player2Id, CardType.RANCH, 1)
+
+            playerCardDao.upsert(player2Id, CardType.CAFE, 1)
         }
     }
 
@@ -104,5 +110,47 @@ class EarningsIntegrationTest : AbstractDBSetup() {
         assertEquals(5, p1.coins)
         assertEquals(4, p2.coins)
         assertEquals(TurnPhase.BUY_OR_BUILD, game.turnPhase)
+    }
+
+    @Test
+    fun `green card only pays active player`() {
+        transaction {
+            Games.deleteAll()
+            PlayerCards.deleteAll()
+            Players.deleteAll()
+        }
+
+        transaction {
+            val user1Id = (Users.insert {
+                it[username] = "p1green"
+            } get Users.id).value
+
+            val user2Id = (Users.insert {
+                it[username] = "p2green"
+            } get Users.id).value
+
+            val gId = (Games.insert {
+                it[status] = GameStatus.IN_PROGRESS
+                it[hostUserId] = user1Id
+                it[currentTurnIndex] = 0
+                it[turnPhase] = TurnPhase.RESOLVE_EFFECTS
+                it[lastDiceRoll] = 2
+                it[roundNumber] = 1
+            } get Games.id).value
+
+            val p1 = playerDao.create(gId, user1Id, 0)
+            val p2 = playerDao.create(gId, user2Id, 1)
+
+            playerCardDao.upsert(p1, CardType.BAKERY, 1)
+            playerCardDao.upsert(p2, CardType.BAKERY, 1)
+
+            earningsService.resolveEffects(gId)
+
+            val rp1 = playerDao.findById(p1)!!
+            val rp2 = playerDao.findById(p2)!!
+
+            assertEquals(4, rp1.coins)
+            assertEquals(3, rp2.coins)
+        }
     }
 }
