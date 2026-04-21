@@ -23,7 +23,9 @@ import org.springframework.stereotype.Repository
 @Repository
 class LandmarkDao {
 
-    // Finds all available card definitions from database
+    /**
+     * Finds all available card definitions from database
+     */
     fun findAll(): List<LandmarkModel> = transaction {
         LandmarkEntity.all().map { it.toModel() }
     }

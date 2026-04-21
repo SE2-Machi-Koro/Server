@@ -13,21 +13,44 @@ import org.machikoro.server.domain.enums.LandmarkType
 import org.machikoro.server.domain.models.PlayerLandmarkModel
 import org.springframework.stereotype.Repository
 
+/**
+ * Data Access Object responsible for interacting with the database
+ * - Encapsulated all database operations
+ * - Uses Exposed DSL and transactions to access persistence layer
+ * - Converts raw database rows into domain models
+ *
+ * - Only layer that directly interacts with database tables
+ * - Returns domain models instead of entities to keep persistence isolated
+ * - All operations are executed inside a transaction
+ *
+ * DAOs are used by the service layer to retrieve and modify the game state
+ */
 @Repository
 class PlayerLandmarkDao {
 
+    /**
+     * Maps a raw database row (ResultRow) to a domain models
+     * Needed because this DAO uses Exposed DSL instead of DAO entities
+     */
     private fun ResultRow.toPlayerLandmarkModel() = PlayerLandmarkModel(
         playerId = this[PlayerLandmarks.playerId].value,
         landmarkType = this[PlayerLandmarks.landmarkType],
         isBuilt = this[PlayerLandmarks.isBuilt]
     )
 
+    /**
+     * Finds all landmarks for a given player
+     */
     fun findByPlayerId(playerId: Int): List<PlayerLandmarkModel> = transaction {
         PlayerLandmarks.selectAll()
             .where { PlayerLandmarks.playerId eq playerId }
             .map { it.toPlayerLandmarkModel() }
     }
 
+    /**
+     * Finds a specific landmark for a player
+     * Return null if player does not have this landmark entry
+     */
     fun findByPlayerIdAndType(playerId: Int, landmarkType: LandmarkType): PlayerLandmarkModel? = transaction {
         PlayerLandmarks.selectAll()
             .where {
@@ -38,6 +61,12 @@ class PlayerLandmarkDao {
             ?.toPlayerLandmarkModel()
     }
 
+    /**
+     * Initializes all landmark entries for a player
+     * For each LandmarkType
+     * - Creates an entry with isBuilt = false
+     * - Prevents duplicate entries if initialization runs multiple times
+     */
     fun initForPlayer(playerId: Int): Unit = transaction {
         LandmarkType.entries.forEach { type ->
             PlayerLandmarks.insertIgnore {
@@ -48,6 +77,9 @@ class PlayerLandmarkDao {
         }
     }
 
+    /**
+     * Marks a specific landmark as built for a player
+     */
     fun markBuilt(playerId: Int, landmarkType: LandmarkType): Unit = transaction {
         PlayerLandmarks.update({
             (PlayerLandmarks.playerId eq playerId) and
@@ -57,6 +89,14 @@ class PlayerLandmarkDao {
         }
     }
 
+    /**
+     * Checks whether a player has built all landmarks
+     * Returns true only if:
+     * - Player has landmark entries
+     * - All landmarks are marked as built
+     *
+     * Can be used as a win condition
+     */
     fun allBuilt(playerId: Int): Boolean = transaction {
         val landmarks = PlayerLandmarks.selectAll()
             .where { PlayerLandmarks.playerId eq playerId }
@@ -65,11 +105,17 @@ class PlayerLandmarkDao {
         landmarks.isNotEmpty() && landmarks.all { it[PlayerLandmarks.isBuilt] }
     }
 
+    /**
+     * Finds all player landmark entries across all players
+     */
     fun findAll(): List<PlayerLandmarkModel> = transaction {
         PlayerLandmarks.selectAll()
             .map { it.toPlayerLandmarkModel() }
     }
 
+    /**
+     * Deletes a specific landmark entry for a player
+     */
     fun delete(playerId: Int, landmarkType: LandmarkType): Unit = transaction {
         PlayerLandmarks.deleteWhere {
             (PlayerLandmarks.playerId eq playerId) and
