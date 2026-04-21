@@ -12,21 +12,49 @@ import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.models.PlayerCardModel
 import org.springframework.stereotype.Repository
 
+/**
+ * Data Access Object responsible for interacting with the database
+ * - Encapsulated all database operations
+ * - Uses Exposed DSL and transactions to access persistence layer
+ * - Converts raw database rows into domain models
+ *
+ * - Only layer that directly interacts with database tables
+ * - Returns domain models instead of entities to keep persistence isolated
+ * - All operations are executed inside a transaction
+ *
+ * DAOs are used by the service layer to retrieve and modify the game state
+ */
 @Repository
 class PlayerCardDao {
 
+    /*
+    Maps a raw database row (ResultRow) to a domain models
+    Needed because this DAO uses Exposed DSL instead of DAO entities
+     */
     private fun ResultRow.toPlayerCardModel() = PlayerCardModel(
         playerId = this[PlayerCards.playerId].value,
         cardType = this[PlayerCards.cardType],
         quantity = this[PlayerCards.quantity]
     )
 
+    /**
+     * Finds all cards owned by a specific player
+     */
     fun findByPlayerId(playerId: Int): List<PlayerCardModel> = transaction {
         PlayerCards.selectAll()
             .where { PlayerCards.playerId eq playerId }
             .map { it.toPlayerCardModel() }
     }
 
+    /**
+     * Inserts or updates a player's card entity
+     *
+     * If quantity < 0 -> Entry is deleted
+     * Otherwise entry is inserted or updated
+     *
+     * If playerId, cardType exists -> update quantity
+     * If not -> insert new row
+     */
     fun upsert(playerId: Int, cardType: CardType, quantity: Int): Unit = transaction {
         if (quantity <= 0) {
             PlayerCards.deleteWhere {
@@ -45,11 +73,17 @@ class PlayerCardDao {
         }
     }
 
+    /**
+     * Finds all player card entries across all players
+     */
     fun findAll(): List<PlayerCardModel> = transaction {
         PlayerCards.selectAll()
             .map { it.toPlayerCardModel() }
     }
 
+    /**
+     * Deletes a specific card entry for a player
+     */
     fun delete(playerId: Int, cardType: CardType): Unit = transaction {
         PlayerCards.deleteWhere {
             (PlayerCards.playerId eq playerId) and
