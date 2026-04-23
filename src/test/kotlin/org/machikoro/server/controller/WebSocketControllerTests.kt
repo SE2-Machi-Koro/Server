@@ -5,11 +5,14 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.WebSocketMessage
+import org.machikoro.server.service.DiceService
+import org.mockito.Mockito.mock
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor
 
 class WebSocketControllerTests {
 
-    private val controller = WebSocketController()
+    private val diceService: DiceService = mock(DiceService::class.java)
+    private val controller = WebSocketController(diceService)
 
     @Test
     fun sendMessageShouldReturnUnchangedMessage() {
@@ -47,4 +50,3 @@ class WebSocketControllerTests {
         assertNull(accessor.sessionAttributes)
     }
 }
-
