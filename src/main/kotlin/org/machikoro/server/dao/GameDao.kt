@@ -57,6 +57,10 @@ class GameDao {
             currentTurnIndex = 0
             roundNumber = 1
             lastDiceRoll = null
+
+
+            lobbyCode = "TEMP123"
+            maxPlayers = 4
         }.id.value
     }
 
