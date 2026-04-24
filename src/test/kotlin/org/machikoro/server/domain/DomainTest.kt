@@ -7,6 +7,7 @@ import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.LandmarkType
 import org.machikoro.server.domain.enums.TurnPhase
+import org.machikoro.server.domain.models.GameModel
 
 class DomainTest {
 
@@ -63,5 +64,23 @@ class DomainTest {
         assertTrue(colors.contains(CardColor.GREEN))
         assertTrue(colors.contains(CardColor.RED))
         assertTrue(colors.contains(CardColor.PURPLE))
+    }
+    @Test
+    fun `GameModel can represent a waiting lobby`() {
+        val game = GameModel(
+            id = 1,
+            status = GameStatus.WAITING,
+            hostUserId = 1,
+            lobbyCode = "ABC1234",
+            maxPlayers = 4,
+            currentTurnIndex = 0,
+            turnPhase = TurnPhase.ROLL_DICE,
+            lastDiceRoll = null,
+            roundNumber = 1
+        )
+
+        assertEquals(GameStatus.WAITING, game.status)
+        assertEquals("ABC1234", game.lobbyCode)
+        assertEquals(4, game.maxPlayers)
     }
 }
