@@ -1,15 +1,14 @@
 package org.machikoro.server.domain
 
-import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Test
 import org.machikoro.server.domain.enums.CardColor
 import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.LandmarkType
 import org.machikoro.server.domain.enums.TurnPhase
-import org.machikoro.server.domain.utils.LobbyCodeGenerator
 import org.machikoro.server.domain.models.GameModel
-
+import org.machikoro.server.domain.utils.LobbyCodeGenerator
 
 class DomainTest {
 
@@ -70,10 +69,12 @@ class DomainTest {
 
     @Test
     fun `LobbyCodeGenerator generates valid code`() {
-        val code = LobbyCodeGenerator.generate()
+        repeat(100) {
+            val code = LobbyCodeGenerator.generate()
 
-        assertEquals(7, code.length)
-        assertTrue(code.all { it.isUpperCase() || it.isDigit() })
+            assertEquals(7, code.length)
+            assertTrue(code.all { it.isUpperCase() || it.isDigit() })
+        }
     }
 
     @Test
