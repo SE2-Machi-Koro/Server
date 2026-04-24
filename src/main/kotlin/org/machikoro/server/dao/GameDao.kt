@@ -59,7 +59,7 @@ class GameDao {
             lastDiceRoll = null
 
 
-            lobbyCode = "TEMP123"
+            lobbyCode = (1000000..9999999).random().toString()
             maxPlayers = 4
         }.id.value
     }

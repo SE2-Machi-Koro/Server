@@ -83,6 +83,8 @@ class EarningsIntegrationTest : AbstractDBSetup() {
             gameId = (Games.insert {
                 it[status] = GameStatus.IN_PROGRESS
                 it[hostUserId] = user1Id
+                it[lobbyCode] = (1000000..9999999).random().toString()
+                it[maxPlayers] = 4
                 it[currentTurnIndex] = 0
                 it[turnPhase] = TurnPhase.RESOLVE_EFFECTS
                 it[lastDiceRoll] = 1
@@ -132,6 +134,8 @@ class EarningsIntegrationTest : AbstractDBSetup() {
             val gId = (Games.insert {
                 it[status] = GameStatus.IN_PROGRESS
                 it[hostUserId] = user1Id
+                it[lobbyCode] = (1000000..9999999).random().toString()
+                it[maxPlayers] = 4
                 it[currentTurnIndex] = 0
                 it[turnPhase] = TurnPhase.RESOLVE_EFFECTS
                 it[lastDiceRoll] = 2
