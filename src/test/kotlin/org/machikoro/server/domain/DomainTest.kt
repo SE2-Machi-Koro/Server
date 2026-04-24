@@ -7,6 +7,7 @@ import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.LandmarkType
 import org.machikoro.server.domain.enums.TurnPhase
+import org.machikoro.server.domain.utils.LobbyCodeGenerator
 
 class DomainTest {
 
@@ -63,5 +64,13 @@ class DomainTest {
         assertTrue(colors.contains(CardColor.GREEN))
         assertTrue(colors.contains(CardColor.RED))
         assertTrue(colors.contains(CardColor.PURPLE))
+    }
+
+    @Test
+    fun `LobbyCodeGenerator generates valid code`() {
+        val code = LobbyCodeGenerator.generate()
+
+        assertEquals(7, code.length)
+        assertTrue(code.all { it.isUpperCase() || it.isDigit() })
     }
 }
