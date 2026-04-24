@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service
 class GamePhaseService(
     private val gameDao: GameDao,
     private val playerDao: PlayerDao,
+    private val gameStateGuard: GameStateGuard,
 ) {
 
     /** Returns the next phase in the Machi Koro turn cycle. */
@@ -24,6 +25,7 @@ class GamePhaseService(
 
     /** Advances a game to the next phase and persists it. */
     fun advancePhase(gameId: Int): TurnPhase {
+        gameStateGuard.ensureGameIsRunning(gameId)
         val next = nextPhase(gameDao.getPhase(gameId))
         gameDao.updateTurnPhase(gameId, next)
         return next

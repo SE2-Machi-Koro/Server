@@ -1,25 +1,28 @@
 package org.machikoro.server.service
 
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
+import org.machikoro.server.exception.CustomWebSocketException
+import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
-import org.mockito.kotlin.verifyNoMoreInteractions
 import org.mockito.kotlin.verify
+import org.mockito.kotlin.verifyNoMoreInteractions
 import org.mockito.kotlin.whenever
 
 class GamePhaseServiceTest {
 
     private val gameDao = mock<GameDao>()
     private val playerDao = mock<PlayerDao>()
-    private val service = GamePhaseService(gameDao, playerDao)
+    private val gameStateGuard = mock<GameStateGuard>()
+    private val service = GamePhaseService(gameDao, playerDao, gameStateGuard)
 
     @Test
     fun `initial phase is ROLL_DICE`() {
@@ -79,6 +82,7 @@ class GamePhaseServiceTest {
         val result = service.advancePhase(gameId)
 
         assertEquals(TurnPhase.RESOLVE_EFFECTS, result)
+        verify(gameStateGuard).ensureGameIsRunning(gameId)
         verify(gameDao).updateTurnPhase(gameId, TurnPhase.RESOLVE_EFFECTS)
     }
 
@@ -91,6 +95,20 @@ class GamePhaseServiceTest {
 
         assertEquals(TurnPhase.ROLL_DICE, result)
         verify(gameDao).updateTurnPhase(gameId, TurnPhase.ROLL_DICE)
+    }
+
+    @Test
+    fun `advancePhase rejects FINISHED games and does not persist`() {
+        val gameId = 99
+        whenever(gameStateGuard.ensureGameIsRunning(gameId))
+            .thenThrow(CustomWebSocketException("GAME_FINISHED", "Game $gameId has already ended"))
+
+        val ex = assertThrows<CustomWebSocketException> {
+            service.advancePhase(gameId)
+        }
+        assertEquals("GAME_FINISHED", ex.errorCode)
+        verify(gameDao, never()).getPhase(gameId)
+        verify(gameDao, never()).updateTurnPhase(any(), any())
     }
 
     @Test
