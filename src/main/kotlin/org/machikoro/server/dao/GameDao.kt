@@ -57,6 +57,8 @@ class GameDao {
             currentTurnIndex = 0
             roundNumber = 1
             lastDiceRoll = null
+            lobbyCode = (1000000..9999999).random().toString()
+            maxPlayers = 4
         }.id.value
     }
 
