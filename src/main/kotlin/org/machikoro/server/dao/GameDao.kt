@@ -8,6 +8,7 @@ import org.machikoro.server.database.entities.UserEntity
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.GameModel
+import org.machikoro.server.domain.utils.LobbyCodeGenerator
 import org.machikoro.server.exception.GameNotFoundException
 import org.springframework.stereotype.Repository
 
@@ -48,7 +49,7 @@ class GameDao {
      * - turnPhase = ROLL_DICE
      * - roundNumber = 1
      */
-    fun create(hostUserId: Int): Int = transaction {
+    fun create(hostUserId: Int, lobbyCode: String = generateUniqueLobbyCode(), maxPlayers: Int = 4): Int = transaction {
         GameEntity.new {
             hostUser = UserEntity.findById(hostUserId)
                 ?: error("User $hostUserId not found")
@@ -57,11 +58,23 @@ class GameDao {
             currentTurnIndex = 0
             roundNumber = 1
             lastDiceRoll = null
-
-
-            lobbyCode = (1000000..9999999).random().toString()
-            maxPlayers = 4
+            this.lobbyCode = lobbyCode
+            this.maxPlayers = maxPlayers
         }.id.value
+    }
+
+    private fun generateUniqueLobbyCode(): String {
+        var code: String
+
+        do {
+            code = LobbyCodeGenerator.generate()
+        } while (existsByLobbyCode(code))
+
+        return code
+    }
+
+    fun existsByLobbyCode(code: String): Boolean = transaction {
+        !GameEntity.find { Games.lobbyCode eq code }.empty()
     }
 
     /**
