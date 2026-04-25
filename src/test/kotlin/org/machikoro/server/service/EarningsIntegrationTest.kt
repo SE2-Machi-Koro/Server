@@ -89,8 +89,8 @@ class EarningsIntegrationTest : AbstractDBSetup() {
                 it[roundNumber] = 1
             } get Games.id).value
 
-            player1Id = playerDao.create(gameId, user1Id, 0)
-            player2Id = playerDao.create(gameId, user2Id, 1)
+            player1Id = playerDao.addPlayer(gameId, user1Id).id
+            player2Id = playerDao.addPlayer(gameId, user2Id).id
 
             playerCardDao.upsert(player1Id, CardType.WHEAT_FIELD, 2)
             playerCardDao.upsert(player2Id, CardType.WHEAT_FIELD, 1)
@@ -139,8 +139,8 @@ class EarningsIntegrationTest : AbstractDBSetup() {
                 it[roundNumber] = 1
             } get Games.id).value
 
-            val p1 = playerDao.create(gId, user1Id, 0)
-            val p2 = playerDao.create(gId, user2Id, 1)
+            val p1 = playerDao.addPlayer(gId, user1Id).id
+            val p2 = playerDao.addPlayer(gId, user2Id).id
 
             playerCardDao.upsert(p1, CardType.BAKERY, 1)
             playerCardDao.upsert(p2, CardType.BAKERY, 1)

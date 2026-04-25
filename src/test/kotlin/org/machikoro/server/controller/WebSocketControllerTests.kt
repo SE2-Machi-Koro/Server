@@ -3,13 +3,18 @@ package org.machikoro.server.controller
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
+import org.machikoro.server.dao.UserDao
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.WebSocketMessage
+import org.machikoro.server.service.LobbyService
+import org.mockito.kotlin.mock
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor
 
 class WebSocketControllerTests {
 
-    private val controller = WebSocketController()
+    private val lobbyService = mock<LobbyService>()
+    private val userDao = mock<UserDao>()
+    private val controller = WebSocketController(lobbyService, userDao)
 
     @Test
     fun sendMessageShouldReturnUnchangedMessage() {
@@ -47,4 +52,3 @@ class WebSocketControllerTests {
         assertNull(accessor.sessionAttributes)
     }
 }
-
