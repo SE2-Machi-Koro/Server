@@ -25,10 +25,6 @@ class OpenApiConfig {
     ## WebSocket Connection
     Connect via STOMP at ws://localhost:8080/ws.
     
-    ### How to connect (JS example)
-    const client = new StompJs.Client({ brokerURL: 'ws://localhost:8080/ws' });
-    client.activate();
-    
     ### Endpoints
     | Destination | Payload | Broadcasts to |
     |---|---|---|
