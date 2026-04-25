@@ -12,7 +12,8 @@ class SecurityConfig {
 
     /**
      * Configure security filter chain.
-     * Permits unauthenticated access to WebSocket endpoints, static resources, and the root/index page.
+     * Permits unauthenticated access to WebSocket endpoints, static resources, the root/index page,
+     * and the `/actuator/health` endpoint so Docker, CI, and monitoring can poll it without credentials.
      * Requires authentication for API endpoints.
      * CSRF is disabled for WebSocket endpoints to allow SockJS fallback HTTP POST requests.
      * CSRF remains enabled for all other endpoints including API routes.
@@ -26,6 +27,7 @@ class SecurityConfig {
             .authorizeHttpRequests { auth ->
                 auth.requestMatchers("/", "/index.html", "/css/**", "/js/**", "/webjars/**").permitAll()
                 auth.requestMatchers("/ws", "/ws/**", "/ws-sockjs", "/ws-sockjs/**").permitAll()
+                auth.requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                 auth.requestMatchers("/api/**").authenticated()
                 auth.anyRequest().authenticated()
             }

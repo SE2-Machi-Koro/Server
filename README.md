@@ -125,6 +125,22 @@ Currently emitted by the server: `CHAT`, `JOIN`, `LEAVE`.
 
 ---
 
+## Health Endpoint
+
+Spring Boot Actuator exposes a liveness endpoint used by Docker, CI, and monitoring to confirm the service is up and its datastore is reachable.
+
+| Parameter | Value |
+|-----------|-------|
+| **URL** | `http://localhost:8080/actuator/health` |
+| **Method** | `GET` |
+| **Auth** | Not required (publicly accessible) |
+| **Response** | `200 OK` with `{"status":"UP"}` when the service and DB are healthy; `503` with `DOWN` otherwise |
+| **Details** | Only returned for authenticated callers (`management.endpoint.health.show-details=when-authorized`) |
+
+The `backend` service in `compose.yaml` polls this endpoint via `curl` and Docker marks the container unhealthy after repeated failures, triggering `restart: unless-stopped` to recover the process.
+
+---
+
 ## Error Handling
 
 ### Current Behavior
