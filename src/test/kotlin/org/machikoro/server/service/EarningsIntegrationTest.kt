@@ -112,6 +112,7 @@ class EarningsIntegrationTest : AbstractDBSetup() {
         assertEquals(5, p1.coins)
         assertEquals(4, p2.coins)
         assertEquals(TurnPhase.BUY_OR_BUILD, game.turnPhase)
+        assertEquals(0, game.currentTurnIndex)
     }
 
     @Test
