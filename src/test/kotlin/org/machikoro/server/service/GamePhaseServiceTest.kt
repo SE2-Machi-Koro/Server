@@ -135,6 +135,7 @@ class GamePhaseServiceTest {
         val result = service.endTurn(gameId)
 
         assertEquals(TurnPhase.ROLL_DICE, result)
+        verify(gameStateGuard).ensureGameIsRunning(gameId)
         verify(gameDao).updateTurnPhase(gameId, TurnPhase.END_TURN)
         verify(gameDao).advanceTurn(gameId, 1, 1)
     }
@@ -188,6 +189,22 @@ class GamePhaseServiceTest {
 
         verify(gameDao, never()).updateTurnPhase(gameId, TurnPhase.END_TURN)
         verify(gameDao, never()).advanceTurn(gameId, 0, 2)
+        verifyNoMoreInteractions(playerDao)
+    }
+
+    @Test
+    fun `endTurn rejects FINISHED games and does not advance`() {
+        val gameId = 88
+        whenever(gameStateGuard.ensureGameIsRunning(gameId))
+            .thenThrow(CustomWebSocketException("GAME_FINISHED", "Game $gameId has already ended"))
+
+        val ex = assertThrows<CustomWebSocketException> {
+            service.endTurn(gameId)
+        }
+        assertEquals("GAME_FINISHED", ex.errorCode)
+        verify(gameDao, never()).findById(gameId)
+        verify(gameDao, never()).updateTurnPhase(any(), any())
+        verify(gameDao, never()).advanceTurn(any(), any(), any())
         verifyNoMoreInteractions(playerDao)
     }
 }

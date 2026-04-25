@@ -33,6 +33,7 @@ class GamePhaseService(
 
     /** Ends the active player's buy-or-build window and starts the next turn. */
     fun endTurn(gameId: Int): TurnPhase {
+        gameStateGuard.ensureGameIsRunning(gameId)
         val game = gameDao.findById(gameId)
             ?: error("Game $gameId not found")
         check(game.turnPhase == TurnPhase.BUY_OR_BUILD) { "Game is not in BUY_OR_BUILD phase" }
