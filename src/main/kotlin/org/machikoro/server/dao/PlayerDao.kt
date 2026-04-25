@@ -32,4 +32,10 @@ class PlayerDao {
         }
         return findById(playerId)!!
     }
+
+    fun updateCoins(playerId: Int, newCoins: Int): Unit = transaction {
+        PlayerEntity.findById(playerId)?.let {
+            it.coins = newCoins
+        }
+    }
 }
