@@ -1,6 +1,7 @@
 package org.machikoro.server.controller
 
 import org.machikoro.server.domain.enums.TurnPhase
+import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.dto.AdvancePhaseRequest
 import org.machikoro.server.dto.EndTurnRequest
 import org.machikoro.server.dto.MessageType
@@ -43,6 +44,17 @@ class GameController(
                 sender = "server",
                 payload = mapOf("turnPhase" to newPhase.name),
             ),
+        )
+    }
+
+    private fun broadcastWinner(winner: PlayerModel) {
+        messagingTemplate.convertAndSend(
+            "/topic/public",
+            WebSocketMessage(
+                type = MessageType.GAME_END,
+                sender = "server",
+                payload = mapOf("winnerId" to winner.id)
+            )
         )
     }
 }
