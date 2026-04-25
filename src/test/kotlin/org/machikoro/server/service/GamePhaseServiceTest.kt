@@ -193,4 +193,12 @@ class GamePhaseServiceTest {
         verify(gameDao, never()).advanceTurn(any(), any(), any())
         verifyNoMoreInteractions(playerDao)
     }
+    @Test
+    fun `finishGame updates game status to FINISHED`() {
+        val gameId = 123
+
+        service.finishGame(gameId)
+
+        verify(gameDao).updateStatus(gameId, GameStatus.FINISHED)
+    }
 }

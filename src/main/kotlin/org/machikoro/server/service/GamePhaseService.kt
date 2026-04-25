@@ -2,6 +2,7 @@ package org.machikoro.server.service
 
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.PlayerDao
+import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
 import org.springframework.stereotype.Service
 
@@ -46,5 +47,9 @@ class GamePhaseService(
 
         gameDao.advanceTurn(gameId, nextTurnIndex, nextRoundNumber)
         return TurnPhase.ROLL_DICE
+    }
+
+    fun finishGame(gameId: Int) {
+        gameDao.updateStatus(gameId, GameStatus.FINISHED)
     }
 }
