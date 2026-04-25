@@ -1,6 +1,8 @@
 package org.machikoro.server.controller
 
+import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.dto.AdvancePhaseRequest
+import org.machikoro.server.dto.EndTurnRequest
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.service.GamePhaseService
@@ -21,7 +23,17 @@ class GameController(
     fun advancePhase(@Payload request: AdvancePhaseRequest) {
         val newPhase = gamePhaseService.advancePhase(request.gameId)
         logger.info("Advanced game ${request.gameId} to phase $newPhase")
+        broadcastPhase(newPhase)
+    }
 
+    @MessageMapping("/game.endTurn")
+    fun endTurn(@Payload request: EndTurnRequest) {
+        val newPhase = gamePhaseService.endTurn(request.gameId)
+        logger.info("Ended turn for game ${request.gameId}, new phase $newPhase")
+        broadcastPhase(newPhase)
+    }
+
+    private fun broadcastPhase(newPhase: TurnPhase) {
         messagingTemplate.convertAndSend(
             "/topic/public",
             WebSocketMessage(

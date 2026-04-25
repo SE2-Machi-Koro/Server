@@ -1,17 +1,25 @@
 package org.machikoro.server.service
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.Test
 import org.machikoro.server.dao.GameDao
+import org.machikoro.server.dao.PlayerDao
+import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
+import org.machikoro.server.domain.models.GameModel
+import org.machikoro.server.domain.models.PlayerModel
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
+import org.mockito.kotlin.verifyNoMoreInteractions
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 
 class GamePhaseServiceTest {
 
     private val gameDao = mock<GameDao>()
-    private val service = GamePhaseService(gameDao)
+    private val playerDao = mock<PlayerDao>()
+    private val service = GamePhaseService(gameDao, playerDao)
 
     @Test
     fun `initial phase is ROLL_DICE`() {
@@ -83,5 +91,85 @@ class GamePhaseServiceTest {
 
         assertEquals(TurnPhase.ROLL_DICE, result)
         verify(gameDao).updateTurnPhase(gameId, TurnPhase.ROLL_DICE)
+    }
+
+    @Test
+    fun `endTurn updates phase and rotates to next player`() {
+        val gameId = 21
+        whenever(gameDao.findById(gameId)).thenReturn(
+            GameModel(
+                id = gameId,
+                status = GameStatus.IN_PROGRESS,
+                hostUserId = 1,
+                currentTurnIndex = 0,
+                turnPhase = TurnPhase.BUY_OR_BUILD,
+                lastDiceRoll = 5,
+                roundNumber = 1
+            )
+        )
+        whenever(playerDao.findByGameId(gameId)).thenReturn(
+            listOf(
+                PlayerModel(1, gameId, 10, 0, 3),
+                PlayerModel(2, gameId, 11, 1, 3)
+            )
+        )
+
+        val result = service.endTurn(gameId)
+
+        assertEquals(TurnPhase.ROLL_DICE, result)
+        verify(gameDao).updateTurnPhase(gameId, TurnPhase.END_TURN)
+        verify(gameDao).advanceTurn(gameId, 1, 1)
+    }
+
+    @Test
+    fun `endTurn wraps back to first player and increments round`() {
+        val gameId = 22
+        whenever(gameDao.findById(gameId)).thenReturn(
+            GameModel(
+                id = gameId,
+                status = GameStatus.IN_PROGRESS,
+                hostUserId = 1,
+                currentTurnIndex = 1,
+                turnPhase = TurnPhase.BUY_OR_BUILD,
+                lastDiceRoll = 6,
+                roundNumber = 3
+            )
+        )
+        whenever(playerDao.findByGameId(gameId)).thenReturn(
+            listOf(
+                PlayerModel(1, gameId, 10, 0, 3),
+                PlayerModel(2, gameId, 11, 1, 3)
+            )
+        )
+
+        val result = service.endTurn(gameId)
+
+        assertEquals(TurnPhase.ROLL_DICE, result)
+        verify(gameDao).updateTurnPhase(gameId, TurnPhase.END_TURN)
+        verify(gameDao).advanceTurn(gameId, 0, 4)
+    }
+
+    @Test
+    fun `endTurn rejects games outside buy or build phase`() {
+        val gameId = 23
+        whenever(gameDao.findById(gameId)).thenReturn(
+            GameModel(
+                id = gameId,
+                status = GameStatus.IN_PROGRESS,
+                hostUserId = 1,
+                currentTurnIndex = 0,
+                turnPhase = TurnPhase.RESOLVE_EFFECTS,
+                lastDiceRoll = 4,
+                roundNumber = 2
+            )
+        )
+
+        assertThrows<IllegalStateException> {
+            service.endTurn(gameId)
+        }
+
+        verify(gameDao, never()).updateTurnPhase(gameId, TurnPhase.END_TURN)
+        verify(gameDao, never()).advanceTurn(gameId, 0, 2)
+        verifyNoMoreInteractions(playerDao)
     }
 }
