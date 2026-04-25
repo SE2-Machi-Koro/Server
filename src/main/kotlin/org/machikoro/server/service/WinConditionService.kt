@@ -17,6 +17,6 @@ class WinConditionService(
 
     /** Returns the winner in the given game, or null if nobody has won yet. */
     fun detectWinner(gameId: Int): PlayerModel? =
-        playerDao.findByGameId(gameId)
+        playerDao.getPlayers(gameId)
             .firstOrNull { hasPlayerWon(it.id) }
 }
