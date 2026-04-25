@@ -31,6 +31,14 @@ class GameController(
 
     @MessageMapping("/game.endTurn")
     fun endTurn(@Payload request: EndTurnRequest) {
+        val winner = winConditionService.detectWinner(request.gameId)
+
+        if (winner != null) {
+            logger.info("Game ${request.gameId} has ended. Winner: ${winner.id}")
+
+            broadcastWinner(winner)
+            return
+        }
         val newPhase = gamePhaseService.endTurn(request.gameId)
         logger.info("Ended turn for game ${request.gameId}, new phase $newPhase")
         broadcastPhase(newPhase)
