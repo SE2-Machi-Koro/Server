@@ -11,7 +11,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate
 import org.springframework.stereotype.Controller
 
 /**
- * Handles earnings resolution triggered by the frontend after a dice roll
+ * Handles earnings resolution triggered by the frontend after a dice roll.
  */
 @Controller
 class EarningsController(
@@ -21,15 +21,16 @@ class EarningsController(
     private val logger = LoggerFactory.getLogger(EarningsController::class.java)
 
     /**
-     * Resolves card effects for all players and notifies everyone in the game
+     * Resolves card effects for all players and broadcasts the result to the game topic.
      */
     @MessageMapping("/game.resolveEffects")
     fun resolveEffects(@Payload request: ResolveEffectsRequest) {
+        val gameTopic = "/topic/game/${request.gameId}"
         try {
             earningsService.resolveEffects(request.gameId)
             logger.info("Resolved effects for game ${request.gameId}")
             messagingTemplate.convertAndSend(
-                "/topic/public",
+                gameTopic,
                 WebSocketMessage(
                     type = MessageType.GAME_ACTION,
                     sender = "server",
@@ -38,6 +39,14 @@ class EarningsController(
             )
         } catch (e: Exception) {
             logger.error("Failed to resolve effects for game ${request.gameId}", e)
+            messagingTemplate.convertAndSend(
+                gameTopic,
+                WebSocketMessage(
+                    type = MessageType.ERROR,
+                    sender = "server",
+                    payload = mapOf("event" to "EFFECTS_FAILED", "message" to (e.message ?: "Unknown error"))
+                )
+            )
         }
     }
 }
