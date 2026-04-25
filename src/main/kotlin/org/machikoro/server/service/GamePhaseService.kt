@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service
 class GamePhaseService(
     private val gameDao: GameDao,
     private val playerDao: PlayerDao,
+    private val gameStateGuard: GameStateGuard,
 ) {
 
     /** Returns the next phase in the Machi Koro turn cycle. */
@@ -24,15 +25,15 @@ class GamePhaseService(
 
     /** Advances a game to the next phase and persists it. */
     fun advancePhase(gameId: Int): TurnPhase {
-        val next = nextPhase(gameDao.getPhase(gameId))
+        val game = gameStateGuard.ensureGameIsRunning(gameId)
+        val next = nextPhase(game.turnPhase)
         gameDao.updateTurnPhase(gameId, next)
         return next
     }
 
     /** Ends the active player's buy-or-build window and starts the next turn. */
     fun endTurn(gameId: Int): TurnPhase {
-        val game = gameDao.findById(gameId)
-            ?: error("Game $gameId not found")
+        val game = gameStateGuard.ensureGameIsRunning(gameId)
         check(game.turnPhase == TurnPhase.BUY_OR_BUILD) { "Game is not in BUY_OR_BUILD phase" }
 
         val players = playerDao.findByGameId(gameId)
