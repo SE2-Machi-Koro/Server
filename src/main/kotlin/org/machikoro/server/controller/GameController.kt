@@ -35,7 +35,7 @@ class GameController(
 
         if (winner != null) {
             logger.info("Game ${request.gameId} has ended. Winner: ${winner.id}")
-
+            gamePhaseService.finishGame(request.gameId)
             broadcastWinner(winner)
             return
         }
