@@ -33,7 +33,7 @@ class LobbyServiceTest {
     fun `addUserToLobby adds player successfully`() {
         val gameId = 1
         val userId = 10
-        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.LOBBY))
+        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING))
         whenever(playerDao.getPlayers(gameId)).thenReturn(emptyList())
         whenever(playerDao.addPlayer(gameId, userId)).thenReturn(player(1))
 
@@ -65,7 +65,7 @@ class LobbyServiceTest {
     @Test
     fun `addUserToLobby throws LobbyFullException`() {
         val gameId = 1
-        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.LOBBY))
+        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING))
         whenever(playerDao.getPlayers(gameId)).thenReturn(
             listOf(player(1), player(2), player(3), player(4))
         )
@@ -78,7 +78,7 @@ class LobbyServiceTest {
     @Test
     fun `startGame sets status to in progress`() {
         val gameId = 1
-        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.LOBBY))
+        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING))
 
         val result = lobbyService.startGame(gameId)
 
