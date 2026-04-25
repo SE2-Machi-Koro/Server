@@ -1,7 +1,7 @@
 package org.machikoro.server.service
 
-import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import org.machikoro.server.dao.GameDao
@@ -29,19 +29,21 @@ class GameStateGuardTest {
     )
 
     @Test
-    fun `ensureGameIsRunning succeeds when status is IN_PROGRESS`() {
+    fun `ensureGameIsRunning returns the loaded game when status is IN_PROGRESS`() {
         val gameId = 1
-        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.IN_PROGRESS))
+        val loaded = game(gameId, GameStatus.IN_PROGRESS)
+        whenever(gameDao.findById(gameId)).thenReturn(loaded)
 
-        assertDoesNotThrow { guard.ensureGameIsRunning(gameId) }
+        assertSame(loaded, guard.ensureGameIsRunning(gameId))
     }
 
     @Test
-    fun `ensureGameIsRunning succeeds when status is WAITING`() {
+    fun `ensureGameIsRunning returns the loaded game when status is WAITING`() {
         val gameId = 1
-        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING))
+        val loaded = game(gameId, GameStatus.WAITING)
+        whenever(gameDao.findById(gameId)).thenReturn(loaded)
 
-        assertDoesNotThrow { guard.ensureGameIsRunning(gameId) }
+        assertSame(loaded, guard.ensureGameIsRunning(gameId))
     }
 
     @Test
