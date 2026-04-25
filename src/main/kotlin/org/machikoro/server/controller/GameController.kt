@@ -6,6 +6,7 @@ import org.machikoro.server.dto.EndTurnRequest
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.service.GamePhaseService
+import org.machikoro.server.service.WinConditionService
 import org.slf4j.LoggerFactory
 import org.springframework.messaging.handler.annotation.MessageMapping
 import org.springframework.messaging.handler.annotation.Payload
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Controller
 class GameController(
     private val gamePhaseService: GamePhaseService,
     private val messagingTemplate: SimpMessagingTemplate,
+    private val winConditionService: WinConditionService
 ) {
     private val logger = LoggerFactory.getLogger(GameController::class.java)
 
