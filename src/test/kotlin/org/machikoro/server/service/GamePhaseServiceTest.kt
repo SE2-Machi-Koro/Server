@@ -11,6 +11,7 @@ import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.exception.CustomWebSocketException
 import org.mockito.kotlin.any
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -23,6 +24,17 @@ class GamePhaseServiceTest {
     private val playerDao = mock<PlayerDao>()
     private val gameStateGuard = mock<GameStateGuard>()
     private val service = GamePhaseService(gameDao, playerDao, gameStateGuard)
+
+    private fun gameInPhase(id: Int, phase: TurnPhase, currentTurnIndex: Int = 0, roundNumber: Int = 1) =
+        GameModel(
+            id = id,
+            status = GameStatus.IN_PROGRESS,
+            hostUserId = 1,
+            currentTurnIndex = currentTurnIndex,
+            turnPhase = phase,
+            lastDiceRoll = null,
+            roundNumber = roundNumber,
+        )
 
     @Test
     fun `initial phase is ROLL_DICE`() {
@@ -77,7 +89,8 @@ class GamePhaseServiceTest {
     @Test
     fun `advancePhase reads current phase and persists the next one`() {
         val gameId = 42
-        whenever(gameDao.getPhase(gameId)).thenReturn(TurnPhase.ROLL_DICE)
+        whenever(gameStateGuard.ensureGameIsRunning(gameId))
+            .thenReturn(gameInPhase(gameId, TurnPhase.ROLL_DICE))
 
         val result = service.advancePhase(gameId)
 
@@ -89,7 +102,8 @@ class GamePhaseServiceTest {
     @Test
     fun `advancePhase wraps END_TURN back to ROLL_DICE`() {
         val gameId = 7
-        whenever(gameDao.getPhase(gameId)).thenReturn(TurnPhase.END_TURN)
+        whenever(gameStateGuard.ensureGameIsRunning(gameId))
+            .thenReturn(gameInPhase(gameId, TurnPhase.END_TURN))
 
         val result = service.advancePhase(gameId)
 
@@ -107,56 +121,39 @@ class GamePhaseServiceTest {
             service.advancePhase(gameId)
         }
         assertEquals("GAME_FINISHED", ex.errorCode)
-        verify(gameDao, never()).getPhase(gameId)
         verify(gameDao, never()).updateTurnPhase(any(), any())
     }
 
     @Test
     fun `endTurn updates phase and rotates to next player`() {
         val gameId = 21
-        whenever(gameDao.findById(gameId)).thenReturn(
-            GameModel(
-                id = gameId,
-                status = GameStatus.IN_PROGRESS,
-                hostUserId = 1,
-                currentTurnIndex = 0,
-                turnPhase = TurnPhase.BUY_OR_BUILD,
-                lastDiceRoll = 5,
-                roundNumber = 1
-            )
-        )
+        whenever(gameStateGuard.ensureGameIsRunning(gameId))
+            .thenReturn(gameInPhase(gameId, TurnPhase.BUY_OR_BUILD, currentTurnIndex = 0, roundNumber = 1))
         whenever(playerDao.findByGameId(gameId)).thenReturn(
             listOf(
                 PlayerModel(1, gameId, 10, 0, 3),
-                PlayerModel(2, gameId, 11, 1, 3)
+                PlayerModel(2, gameId, 11, 1, 3),
             )
         )
 
         val result = service.endTurn(gameId)
 
         assertEquals(TurnPhase.ROLL_DICE, result)
-        verify(gameDao).updateTurnPhase(gameId, TurnPhase.END_TURN)
-        verify(gameDao).advanceTurn(gameId, 1, 1)
+        val ordered = inOrder(gameStateGuard, gameDao)
+        ordered.verify(gameStateGuard).ensureGameIsRunning(gameId)
+        ordered.verify(gameDao).updateTurnPhase(gameId, TurnPhase.END_TURN)
+        ordered.verify(gameDao).advanceTurn(gameId, 1, 1)
     }
 
     @Test
     fun `endTurn wraps back to first player and increments round`() {
         val gameId = 22
-        whenever(gameDao.findById(gameId)).thenReturn(
-            GameModel(
-                id = gameId,
-                status = GameStatus.IN_PROGRESS,
-                hostUserId = 1,
-                currentTurnIndex = 1,
-                turnPhase = TurnPhase.BUY_OR_BUILD,
-                lastDiceRoll = 6,
-                roundNumber = 3
-            )
-        )
+        whenever(gameStateGuard.ensureGameIsRunning(gameId))
+            .thenReturn(gameInPhase(gameId, TurnPhase.BUY_OR_BUILD, currentTurnIndex = 1, roundNumber = 3))
         whenever(playerDao.findByGameId(gameId)).thenReturn(
             listOf(
                 PlayerModel(1, gameId, 10, 0, 3),
-                PlayerModel(2, gameId, 11, 1, 3)
+                PlayerModel(2, gameId, 11, 1, 3),
             )
         )
 
@@ -170,24 +167,30 @@ class GamePhaseServiceTest {
     @Test
     fun `endTurn rejects games outside buy or build phase`() {
         val gameId = 23
-        whenever(gameDao.findById(gameId)).thenReturn(
-            GameModel(
-                id = gameId,
-                status = GameStatus.IN_PROGRESS,
-                hostUserId = 1,
-                currentTurnIndex = 0,
-                turnPhase = TurnPhase.RESOLVE_EFFECTS,
-                lastDiceRoll = 4,
-                roundNumber = 2
-            )
-        )
+        whenever(gameStateGuard.ensureGameIsRunning(gameId))
+            .thenReturn(gameInPhase(gameId, TurnPhase.RESOLVE_EFFECTS, currentTurnIndex = 0, roundNumber = 2))
 
         assertThrows<IllegalStateException> {
             service.endTurn(gameId)
         }
 
         verify(gameDao, never()).updateTurnPhase(gameId, TurnPhase.END_TURN)
-        verify(gameDao, never()).advanceTurn(gameId, 0, 2)
+        verify(gameDao, never()).advanceTurn(any(), any(), any())
+        verifyNoMoreInteractions(playerDao)
+    }
+
+    @Test
+    fun `endTurn rejects FINISHED games and does not advance`() {
+        val gameId = 88
+        whenever(gameStateGuard.ensureGameIsRunning(gameId))
+            .thenThrow(CustomWebSocketException("GAME_FINISHED", "Game $gameId has already ended"))
+
+        val ex = assertThrows<CustomWebSocketException> {
+            service.endTurn(gameId)
+        }
+        assertEquals("GAME_FINISHED", ex.errorCode)
+        verify(gameDao, never()).updateTurnPhase(any(), any())
+        verify(gameDao, never()).advanceTurn(any(), any(), any())
         verifyNoMoreInteractions(playerDao)
     }
 }
