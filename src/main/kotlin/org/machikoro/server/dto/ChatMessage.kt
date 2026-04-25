@@ -14,7 +14,6 @@ data class WebSocketMessage(
     val sender: String,
     val content: String? = null,
     val payload: Any? = null,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val gameId: Int? = null
 )
-
-
