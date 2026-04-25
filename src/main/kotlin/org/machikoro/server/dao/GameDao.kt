@@ -57,6 +57,7 @@ class GameDao {
             currentTurnIndex = 0
             roundNumber = 1
             lastDiceRoll = null
+            hasPurchasedThisTurn = false
         }.id.value
     }
 
@@ -97,6 +98,15 @@ class GameDao {
     }
 
     /**
+     * Updates whether the active turn has already used its purchase.
+     */
+    fun updateHasPurchasedThisTurn(id: Int, hasPurchasedThisTurn: Boolean): Unit = transaction {
+        val game = GameEntity.findById(id)
+            ?: throw GameNotFoundException("Game $id not found")
+        game.hasPurchasedThisTurn = hasPurchasedThisTurn
+    }
+
+    /**
      * Advances the game to the next player's turn
      * - Resets phase to ROLL_DICE
      * - Clears last dice roll
@@ -107,6 +117,7 @@ class GameDao {
             this.roundNumber = roundNumber
             turnPhase = TurnPhase.ROLL_DICE
             lastDiceRoll = null
+            hasPurchasedThisTurn = false
         }
     }
 
