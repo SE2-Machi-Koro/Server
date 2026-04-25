@@ -6,7 +6,8 @@ enum class MessageType {
     LEAVE,
     GAME_START,
     GAME_ACTION,
-    GAME_END
+    GAME_END,
+    ERROR
 }
 
 data class WebSocketMessage(
