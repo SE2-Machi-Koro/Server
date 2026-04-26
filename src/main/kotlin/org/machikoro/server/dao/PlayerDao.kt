@@ -43,6 +43,10 @@ class PlayerDao {
             .map { it.toModel() }
     }
 
+    fun countByGameId(gameId: Int): Int {
+        return findByGameId(gameId).size
+    }
+
     /**
      * Finds a specific player by userId within a given game
      * Return null if user is not part of the game
