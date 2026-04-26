@@ -38,8 +38,8 @@ class GameController(
     @MessageMapping("/game.leave")
     fun leaveFinishedGame(@Payload request: LeaveGameRequest) {
         leaveFinishedGameService.leaveGame(request.gameId, request.playerId)
-        logger.info("${request.playerId} leaves game ${request.gameId}")
-        broadcastPlayerLeave(request.gameId, request.playerId)
+        logger.info("${request.playerId} left game ${request.gameId}")
+        broadcastPlayerLeftFinishedGame(request.gameId, request.playerId)
     }
     private fun broadcastPhase(newPhase: TurnPhase) {
         messagingTemplate.convertAndSend(
@@ -52,11 +52,11 @@ class GameController(
         )
     }
 
-    private fun broadcastPlayerLeave(gameId: Int, playerId: Int) {
+    private fun broadcastPlayerLeftFinishedGame(gameId: Int, playerId: Int) {
         messagingTemplate.convertAndSend(
             "/topic/game/${gameId}",
             WebSocketMessage(
-                type = MessageType.LEAVE,
+                type = MessageType.PLAYER_LEFT_FINISHED_GAME,
                 sender = "server",
                 payload = mapOf("playerId" to playerId),
             ),
