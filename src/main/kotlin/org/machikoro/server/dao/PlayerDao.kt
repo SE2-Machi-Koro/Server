@@ -42,9 +42,11 @@ class PlayerDao {
             .orderBy(Players.turnOrder to SortOrder.ASC)
             .map { it.toModel() }
     }
-
-    fun countByGameId(gameId: Int): Int {
-        return findByGameId(gameId).size
+    /**
+     * Returns counter of players in game who didn't leave yet
+     */
+    fun countByGameId(gameId: Int): Int = transaction {
+        PlayerEntity.find { Players.gameId eq gameId }.count().toInt()
     }
 
     /**
