@@ -8,6 +8,7 @@ import org.machikoro.server.dto.EndTurnRequest
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.service.GamePhaseService
+import org.machikoro.server.service.LeaveFinishedGameService
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -19,7 +20,8 @@ class GameControllerTest {
 
     private val gamePhaseService = mock<GamePhaseService>()
     private val messagingTemplate = mock<SimpMessagingTemplate>()
-    private val controller = GameController(gamePhaseService, messagingTemplate)
+    private val leaveFinishedGameService = mock<LeaveFinishedGameService>()
+    private val controller = GameController(gamePhaseService, messagingTemplate, leaveFinishedGameService)
 
     @Test
     fun `advancePhase delegates to service with the requested game id`() {
