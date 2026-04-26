@@ -2,6 +2,7 @@ package org.machikoro.server.service
 
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.PlayerDao
+import org.springframework.transaction.annotation.Transactional
 
 class LeaveFinishedGameService(
     private val gameDao: GameDao,
@@ -12,12 +13,11 @@ class LeaveFinishedGameService(
         gameStateGuard.ensureGameIsFinished(gameId)
 
         val players = playerDao.findByGameId(gameId)
-
-        val isLastPlayer = players.size == 1 && players.first().id == playerId
-
+        val player = players.find { it.id == playerId }
+            ?: throw IllegalArgumentException("Player not in game")
         playerDao.delete(playerId)
-
-        if (isLastPlayer) {
+        val remainingPlayers = playerDao.countByGameId(gameId)
+        if (remainingPlayers == 0) {
             gameDao.delete(gameId)
         }
     }
