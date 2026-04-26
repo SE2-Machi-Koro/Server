@@ -11,7 +11,7 @@ class LeaveFinishedGameService(
     private val gameStateGuard: GameStateGuard,
 ){
     @Transactional
-    fun leaveGame(gameId: Int, playerId: Int) {
+    fun leaveFinishedGame(gameId: Int, playerId: Int) {
         gameStateGuard.ensureGameIsFinished(gameId)
         val players = playerDao.findByGameId(gameId)
         players.find { it.id == playerId }

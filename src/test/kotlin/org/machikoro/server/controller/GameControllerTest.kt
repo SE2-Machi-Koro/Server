@@ -5,10 +5,12 @@ import org.junit.jupiter.api.Test
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.dto.AdvancePhaseRequest
 import org.machikoro.server.dto.EndTurnRequest
+import org.machikoro.server.dto.LeaveGameRequest
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.service.GamePhaseService
 import org.machikoro.server.service.LeaveFinishedGameService
+import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -73,5 +75,52 @@ class GameControllerTest {
         assertEquals(MessageType.GAME_ACTION, message.type)
         assertEquals("server", message.sender)
         assertEquals(mapOf("turnPhase" to "ROLL_DICE"), message.payload)
+    }
+
+    @Test
+    fun `leaveFinishedGame calls service before broadcasting`() {
+        val gameId = 1
+        val playerId = 10
+
+        controller.leaveFinishedGame(LeaveGameRequest(gameId, playerId))
+
+        val order = org.mockito.kotlin.inOrder(leaveFinishedGameService, messagingTemplate)
+        order.verify(leaveFinishedGameService).leaveFinishedGame(gameId, playerId)
+        order.verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), any<WebSocketMessage>())
+    }
+
+    @Test
+    fun `leaveGame gets exception from service`() {
+        val gameId = 1
+        val playerId = 10
+
+        whenever(leaveFinishedGameService.leaveFinishedGame(gameId, playerId))
+            .thenThrow(RuntimeException("boom"))
+
+        org.junit.jupiter.api.assertThrows<RuntimeException> {
+            controller.leaveFinishedGame(LeaveGameRequest(gameId, playerId))
+        }
+    }
+    @Test
+    fun `leaveGame sends message to correct topic`() {
+        val gameId = 5
+        val playerId = 20
+
+        controller.leaveFinishedGame(LeaveGameRequest(gameId, playerId))
+
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), any<WebSocketMessage>())
+    }
+    @Test
+    fun `leaveGame payload contains correct playerId`() {
+        val gameId = 3
+        val playerId = 99
+
+        controller.leaveFinishedGame(LeaveGameRequest(gameId, playerId))
+
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+
+        val message = captor.firstValue
+        assertEquals(mapOf("playerId" to playerId), message.payload)
     }
 }
