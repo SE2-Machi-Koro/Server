@@ -3,6 +3,7 @@ package org.machikoro.server.controller
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.dto.AdvancePhaseRequest
 import org.machikoro.server.dto.EndTurnRequest
+import org.machikoro.server.dto.LeaveGameRequest
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.service.GamePhaseService
@@ -32,7 +33,10 @@ class GameController(
         logger.info("Ended turn for game ${request.gameId}, new phase $newPhase")
         broadcastPhase(newPhase)
     }
-
+    @MessageMapping("/game.leave")
+    fun leaveGame(@Payload request: LeaveGameRequest) {
+        logger.info("${request.playerId} leaves game ${request.gameId}")
+    }
     private fun broadcastPhase(newPhase: TurnPhase) {
         messagingTemplate.convertAndSend(
             "/topic/public",

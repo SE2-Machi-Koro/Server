@@ -47,4 +47,8 @@ class GamePhaseService(
         gameDao.advanceTurn(gameId, nextTurnIndex, nextRoundNumber)
         return TurnPhase.ROLL_DICE
     }
+
+    fun leaveGame(gameId: Int): TurnPhase {
+        return TurnPhase.ROLL_DICE
+    }
 }
