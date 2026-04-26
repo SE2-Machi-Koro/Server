@@ -9,17 +9,42 @@ import org.machikoro.server.database.entities.UserEntity
 import org.machikoro.server.domain.models.PlayerModel
 import org.springframework.stereotype.Repository
 
+/**
+ * Data Access Object (DAO) for Player-related database operations.
+ *
+ * Encapsulates all database access for Player entities, providing methods to
+ * retrieve, create, and update player data. This DAO uses Exposed DAO entities
+ * and transactions to ensure safe and isolated persistence operations.
+ *
+ * Note: Some methods may appear unused but are kept for future extensibility and
+ * will be reviewed in Sprint 3.
+ */
 @Repository
 class PlayerDao {
-
+    /**
+     * Finds a player by their unique ID.
+     * @param id Player ID
+     * @return PlayerModel or null if not found
+     */
     fun findById(id: Int): PlayerModel? = transaction {
         PlayerEntity.findById(id)?.toModel()
     }
 
+    /**
+     * Retrieves all players in a given game.
+     * @param gameId Game ID
+     * @return List of PlayerModel
+     */
     fun getPlayers(gameId: Int): List<PlayerModel> = transaction {
         PlayerEntity.find { Players.gameId eq gameId }.map { it.toModel() }
     }
 
+    /**
+     * Adds a new player to a game.
+     * @param gameId Game ID
+     * @param userId User ID
+     * @return The created PlayerModel
+     */
     fun addPlayer(gameId: Int, userId: Int): PlayerModel {
         val turnOrder = getPlayers(gameId).size
         val playerId = transaction {
@@ -33,9 +58,43 @@ class PlayerDao {
         return findById(playerId)!!
     }
 
+    /**
+     * Updates the coin count for a player.
+     * @param playerId Player ID
+     * @param newCoins New coin value
+     */
     fun updateCoins(playerId: Int, newCoins: Int): Unit = transaction {
         PlayerEntity.findById(playerId)?.let {
             it.coins = newCoins
+        }
+    }
+
+    // --- The following methods are kept for future use and will be reviewed in Sprint 3 ---
+
+    /**
+     * Finds all players in the database.
+     * @return List of PlayerModel
+     */
+    fun findAll(): List<PlayerModel> = transaction {
+        PlayerEntity.all().map { it.toModel() }
+    }
+
+    /**
+     * Deletes a player by their ID.
+     * @param playerId Player ID
+     */
+    fun delete(playerId: Int): Unit = transaction {
+        PlayerEntity.findById(playerId)?.delete()
+    }
+
+    /**
+     * Updates the turn order for a player.
+     * @param playerId Player ID
+     * @param newOrder New turn order
+     */
+    fun updateTurnOrder(playerId: Int, newOrder: Int): Unit = transaction {
+        PlayerEntity.findById(playerId)?.let {
+            it.turnOrder = newOrder
         }
     }
 }
