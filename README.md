@@ -1,8 +1,8 @@
 # Machi Koro Server
 
-> A robust, real-time multiplayer backend for the Machi Koro board game, built with Kotlin, Spring Boot, and WebSockets.
+> Robust real-time multiplayer backend for the Machi Koro board game, built with Kotlin, Spring Boot, and WebSockets.
 
-The Machi Koro Server provides a complete backend infrastructure for hosting real-time Machi Koro game sessions. It handles game state management, real-time player communication, dice rolls, turn phases, and win condition evaluations, all backed by a PostgreSQL database for persistent state.
+This server manages real-time Machi Koro game sessions, player communication, game state, and persistent storage on PostgreSQL. Designed for reliability, scalability, and developer productivity.
 
 ## Key Features
 
@@ -35,58 +35,85 @@ The project follows a standard multi-layer Spring Boot architecture:
 - **DTOs (`dto/`):** Data Transfer Objects for client-server communication.
 - **Configuration (`config/`):** Setup for WebSockets, Spring Security, and OpenAPI.
 
-## Prerequisites & Installation
+## Environment Configuration
 
-### Prerequisites
-- Docker & Docker Compose
+1. Copy the example environment file and adjust as needed:
+   ```bash
+   cp .env.example .env
+   ```
+2. Edit the following required variables in `.env`:
 
-### Start the Application
+   | Variable         | Description                       |
+   |------------------|-----------------------------------|
+   | DB_USERNAME      | PostgreSQL database username       |
+   | DB_PASSWORD      | PostgreSQL database password       |
+   | DB_NAME          | Database name                     |
+   | DB_PORT          | Database port (default: 5432)     |
+   | PGADMIN_EMAIL    | Email for pgAdmin (optional)      |
+   | PGADMIN_PASSWORD | Password for pgAdmin (optional)   |
+   | SERVER_PORT      | Port for backend server           |
 
-The entire application (Database, pgAdmin, and the Spring Boot Backend) is containerized and can be started with a single command. Environment variables are managed automatically by Docker Compose.
-
-```bash
-# Start all services in the background
-docker compose up -d
+Example `.env`:
+```env
+DB_USERNAME=admin
+DB_PASSWORD=password123
+DB_NAME=machikoro
+DB_PORT=5432
+PGADMIN_EMAIL=admin@admin.com
+PGADMIN_PASSWORD=admin
+SERVER_PORT=8080
 ```
 
-### Accessing the Services
+## Local Build & Run
 
-- **Backend API & WebSockets:** `http://localhost:8080`
-- **pgAdmin (Database Management):** `http://localhost:5050`
-  - **Email**: `admin@admin.com` (default)
-  - **Password**: `admin` (default)
-  - **Database Connection**: Use host `postgres`, port `5432`, user `myuser`, database `mydatabase` (default environment configuration).
+Clone the repository and set up your environment:
+```bash
+git clone <repo-url>
+cd SE2-SERVER
+cp .env.example .env
+# Edit .env as needed
+```
 
-## Usage
+Build the project:
+```bash
+./gradlew build
+```
 
-Once the server is running via Docker, you can connect via a WebSocket client or use the built-in testing features.
+Run the server locally:
+```bash
+./gradlew bootRun
+```
+The backend will be available at: `http://localhost:8080`
 
-**API Documentation (Swagger UI):**
-Available at `http://localhost:8080/swagger-ui.html` (via Springdoc).
+## Testing
 
-**Health Endpoint:**
-You can check the server status via Spring Boot Actuator at `http://localhost:8080/actuator/health`.
+Run the full test suite (unit + integration):
+```bash
+./gradlew check
+```
 
-## API Endpoints & WebSockets
+Generate a coverage report:
+```bash
+./gradlew jacocoTestReport
+```
+HTML report: `build/reports/jacoco/test/html/index.html`
 
-### WebSocket Connection
-- **Endpoint:** `ws://localhost:8080/ws` (Native) or `http://localhost:8080/ws-sockjs` (SockJS fallback)
-- **Broker Topics:**
-  - `/topic/public`: Global broadcast channel (Chat, User Joins, Game events)
+## API & WebSocket Documentation
 
-### Key Message Mappings
-- **`SEND` `/app/chat.send`**: Send a chat message.
-- **`SEND` `/app/chat.addUser`**: Register a user connection.
-- **`SEND` `/app/game.advancePhase`**: Advances the game state to the next phase.
-- **`SEND` `/app/game.endTurn`**: Ends a player's turn and evaluates win conditions.
+For detailed REST and WebSocket API documentation, see the `docs/` directory or access Swagger UI at `/swagger-ui.html` after starting the server.
 
-### Message Format Example
-```json
-{
-  "type": "GAME_ACTION",
-  "sender": "server",
-  "payload": {
-    "turnPhase": "BUY_OR_BUILD"
-  }
-}
+Key endpoints:
+- API: `http://localhost:8080`
+- WebSocket: `ws://localhost:8080/ws`
+- Swagger UI: `http://localhost:8080/swagger-ui.html`
+
+---
+
+For advanced usage, message formats, and integration details, refer to the dedicated documentation.
+
+## Health Check
+
+To verify the server is running:
+```
+GET http://localhost:8080/actuator/health
 ```
