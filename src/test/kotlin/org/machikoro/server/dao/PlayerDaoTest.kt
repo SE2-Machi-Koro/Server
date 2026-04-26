@@ -71,4 +71,29 @@ class PlayerDaoTest : AbstractDBSetup() {
         playerDao.updateCoins(player.id, 10)
         assertEquals(10, playerDao.findById(player.id)!!.coins)
     }
+
+    @Test
+    fun `findAll returns all players in db`() {
+        val player1 = playerDao.addPlayer(gameId, userId)
+        val userId2 = userDao.create("player_user_2")
+        val player2 = playerDao.addPlayer(gameId, userId2)
+        val allPlayers = playerDao.findAll()
+        assertTrue(allPlayers.any { it.id == player1.id })
+        assertTrue(allPlayers.any { it.id == player2.id })
+    }
+
+    @Test
+    fun `delete removes player from db`() {
+        val player = playerDao.addPlayer(gameId, userId)
+        playerDao.delete(player.id)
+        assertNull(playerDao.findById(player.id))
+    }
+
+    @Test
+    fun `updateTurnOrder changes player turn order`() {
+        val player = playerDao.addPlayer(gameId, userId)
+        playerDao.updateTurnOrder(player.id, 5)
+        val updated = playerDao.findById(player.id)
+        assertEquals(5, updated?.turnOrder)
+    }
 }
