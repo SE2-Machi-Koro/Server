@@ -26,6 +26,7 @@ class GameStateGuardTest {
         turnPhase = TurnPhase.ROLL_DICE,
         lastDiceRoll = null,
         roundNumber = 1,
+        hasPurchasedThisTurn = false,
     )
 
     @Test
