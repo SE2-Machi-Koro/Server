@@ -1,12 +1,14 @@
 package org.machikoro.server.domain
 
-import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Test
 import org.machikoro.server.domain.enums.CardColor
 import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.LandmarkType
 import org.machikoro.server.domain.enums.TurnPhase
+import org.machikoro.server.domain.models.GameModel
+import org.machikoro.server.domain.utils.LobbyCodeGenerator
 
 class DomainTest {
 
@@ -50,10 +52,10 @@ class DomainTest {
     @Test
     fun `TurnPhase covers all phases in order`() {
         val phases = TurnPhase.entries
-        assertEquals(TurnPhase.ROLL_DICE,       phases[0])
+        assertEquals(TurnPhase.ROLL_DICE, phases[0])
         assertEquals(TurnPhase.RESOLVE_EFFECTS, phases[1])
-        assertEquals(TurnPhase.BUY_OR_BUILD,    phases[2])
-        assertEquals(TurnPhase.END_TURN,        phases[3])
+        assertEquals(TurnPhase.BUY_OR_BUILD, phases[2])
+        assertEquals(TurnPhase.END_TURN, phases[3])
     }
 
     @Test
@@ -63,5 +65,34 @@ class DomainTest {
         assertTrue(colors.contains(CardColor.GREEN))
         assertTrue(colors.contains(CardColor.RED))
         assertTrue(colors.contains(CardColor.PURPLE))
+    }
+
+    @Test
+    fun `LobbyCodeGenerator generates valid code`() {
+        repeat(100) {
+            val code = LobbyCodeGenerator.generate()
+
+            assertEquals(7, code.length)
+            assertTrue(code.all { it.isUpperCase() || it.isDigit() })
+        }
+    }
+
+    @Test
+    fun `GameModel can represent a waiting lobby`() {
+        val game = GameModel(
+            id = 1,
+            status = GameStatus.WAITING,
+            hostUserId = 1,
+            lobbyCode = "ABC1234",
+            maxPlayers = 4,
+            currentTurnIndex = 0,
+            turnPhase = TurnPhase.ROLL_DICE,
+            lastDiceRoll = null,
+            roundNumber = 1
+        )
+
+        assertEquals(GameStatus.WAITING, game.status)
+        assertEquals("ABC1234", game.lobbyCode)
+        assertEquals(4, game.maxPlayers)
     }
 }

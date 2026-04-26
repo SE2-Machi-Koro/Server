@@ -30,6 +30,8 @@ class GamePhaseServiceTest {
             id = id,
             status = GameStatus.IN_PROGRESS,
             hostUserId = 1,
+            lobbyCode = "ABC1234",
+            maxPlayers = 4,
             currentTurnIndex = currentTurnIndex,
             turnPhase = phase,
             lastDiceRoll = null,

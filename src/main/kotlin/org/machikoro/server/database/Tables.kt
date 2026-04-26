@@ -69,6 +69,8 @@ object Users : IntIdTable("users") {
 object Games : IntIdTable("games") {
     val status = enumerationByName("status", 20, GameStatus::class).default(GameStatus.WAITING)
     val hostUserId = reference("host_user_id", Users)
+    val lobbyCode = varchar("lobby_code", 7).uniqueIndex()
+    val maxPlayers = integer("max_players").default(4)
     val currentTurnIndex = integer("current_turn_index").default(0)
     val turnPhase = enumerationByName("turn_phase", 20, TurnPhase::class).default(TurnPhase.ROLL_DICE)
     val lastDiceRoll = integer("last_dice_roll").nullable()
