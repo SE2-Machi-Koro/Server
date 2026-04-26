@@ -30,6 +30,8 @@ class GamePhaseServiceTest {
             id = id,
             status = GameStatus.IN_PROGRESS,
             hostUserId = 1,
+            lobbyCode = "ABC1234",
+            maxPlayers = 4,
             currentTurnIndex = currentTurnIndex,
             turnPhase = phase,
             lastDiceRoll = null,
@@ -192,5 +194,13 @@ class GamePhaseServiceTest {
         verify(gameDao, never()).updateTurnPhase(any(), any())
         verify(gameDao, never()).advanceTurn(any(), any(), any())
         verifyNoMoreInteractions(playerDao)
+    }
+    @Test
+    fun `finishGame updates game status to FINISHED`() {
+        val gameId = 123
+
+        service.finishGame(gameId)
+
+        verify(gameDao).updateStatus(gameId, GameStatus.FINISHED)
     }
 }
