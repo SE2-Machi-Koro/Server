@@ -37,8 +37,8 @@ class GameController(
     }
     @MessageMapping("/game.leave")
     fun leaveFinishedGame(@Payload request: LeaveGameRequest) {
-        logger.info("${request.playerId} leaves game ${request.gameId}")
         leaveFinishedGameService.leaveGame(request.gameId, request.playerId)
+        logger.info("${request.playerId} leaves game ${request.gameId}")
         broadcastPlayerLeave(request.gameId, request.playerId)
     }
     private fun broadcastPhase(newPhase: TurnPhase) {

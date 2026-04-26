@@ -32,7 +32,7 @@ class GameStateGuard(
         return game
     }
 
-    fun ensureGameIsFinished(gameId: Int): GameModel {
+    fun ensureGameIsFinished(gameId: Int) {
         val game = gameDao.findById(gameId)
             ?: throw GameNotFoundException("Game $gameId not found")
 
@@ -42,7 +42,6 @@ class GameStateGuard(
                 message = "Game $gameId has not ended yet"
             )
         }
-        return game
     }
 
 }
