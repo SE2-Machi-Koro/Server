@@ -1,6 +1,6 @@
 package org.machikoro.server.dto
 
-data class LeaveGameRequest(
+data class LeaveFinishedGameRequest(
     val gameId: Int,
     val playerId: Int
 )

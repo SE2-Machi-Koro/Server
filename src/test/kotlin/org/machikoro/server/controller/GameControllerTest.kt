@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.dto.AdvancePhaseRequest
 import org.machikoro.server.dto.EndTurnRequest
-import org.machikoro.server.dto.LeaveGameRequest
+import org.machikoro.server.dto.LeaveFinishedGameRequest
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.service.GamePhaseService
@@ -82,7 +82,7 @@ class GameControllerTest {
         val gameId = 1
         val playerId = 10
 
-        controller.leaveFinishedGame(LeaveGameRequest(gameId, playerId))
+        controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId))
 
         val order = org.mockito.kotlin.inOrder(leaveFinishedGameService, messagingTemplate)
         order.verify(leaveFinishedGameService).leaveFinishedGame(gameId, playerId)
@@ -90,7 +90,7 @@ class GameControllerTest {
     }
 
     @Test
-    fun `leaveGame gets exception from service`() {
+    fun `leaveFinishedGame gets exception from service`() {
         val gameId = 1
         val playerId = 10
 
@@ -98,24 +98,24 @@ class GameControllerTest {
             .thenThrow(RuntimeException("boom"))
 
         org.junit.jupiter.api.assertThrows<RuntimeException> {
-            controller.leaveFinishedGame(LeaveGameRequest(gameId, playerId))
+            controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId))
         }
     }
     @Test
-    fun `leaveGame sends message to correct topic`() {
+    fun `leaveFinishedGame sends message to correct topic`() {
         val gameId = 5
         val playerId = 20
 
-        controller.leaveFinishedGame(LeaveGameRequest(gameId, playerId))
+        controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId))
 
         verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), any<WebSocketMessage>())
     }
     @Test
-    fun `leaveGame payload contains correct playerId`() {
+    fun `leaveFinishedGame payload contains correct playerId`() {
         val gameId = 3
         val playerId = 99
 
-        controller.leaveFinishedGame(LeaveGameRequest(gameId, playerId))
+        controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId))
 
         val captor = argumentCaptor<WebSocketMessage>()
         verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())

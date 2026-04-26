@@ -76,7 +76,7 @@ class LeaveFinishedGameServiceTest {
     }
 
     @Test
-    fun `leaveGame throws if player not in game`() {
+    fun `leaveFinishedGame throws if player not in game`() {
         val gameId = 1
         val playerId = 10
 
@@ -91,7 +91,7 @@ class LeaveFinishedGameServiceTest {
     }
 
     @Test
-    fun `leaveGame calls gameStateGuard`() {
+    fun `leaveFinishedGame calls gameStateGuard`() {
         val gameId = 1
         val playerId = 10
 
