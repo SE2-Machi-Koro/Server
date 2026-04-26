@@ -7,6 +7,7 @@ import org.machikoro.server.dto.LeaveGameRequest
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.service.GamePhaseService
+import org.machikoro.server.service.LeaveFinishedGameService
 import org.slf4j.LoggerFactory
 import org.springframework.messaging.handler.annotation.MessageMapping
 import org.springframework.messaging.handler.annotation.Payload
@@ -17,6 +18,7 @@ import org.springframework.stereotype.Controller
 class GameController(
     private val gamePhaseService: GamePhaseService,
     private val messagingTemplate: SimpMessagingTemplate,
+    private val leaveFinishedGameService: LeaveFinishedGameService
 ) {
     private val logger = LoggerFactory.getLogger(GameController::class.java)
 
@@ -34,8 +36,10 @@ class GameController(
         broadcastPhase(newPhase)
     }
     @MessageMapping("/game.leave")
-    fun leaveGame(@Payload request: LeaveGameRequest) {
+    fun leaveFinishedGame(@Payload request: LeaveGameRequest) {
         logger.info("${request.playerId} leaves game ${request.gameId}")
+        leaveFinishedGameService.leaveGame(request.gameId, request.playerId)
+        broadcastPlayerLeave(request.gameId, request.playerId)
     }
     private fun broadcastPhase(newPhase: TurnPhase) {
         messagingTemplate.convertAndSend(
@@ -44,6 +48,17 @@ class GameController(
                 type = MessageType.GAME_ACTION,
                 sender = "server",
                 payload = mapOf("turnPhase" to newPhase.name),
+            ),
+        )
+    }
+
+    private fun broadcastPlayerLeave(gameId: Int, playerId: Int) {
+        messagingTemplate.convertAndSend(
+            "/topic/game/${gameId}",
+            WebSocketMessage(
+                type = MessageType.LEAVE,
+                sender = "server",
+                payload = mapOf("playerId" to playerId),
             ),
         )
     }
