@@ -45,6 +45,7 @@ class GameDaoTest : AbstractDBSetup() {
         assertEquals(1, game.roundNumber)
         assertEquals(0, game.currentTurnIndex)
         assertNull(game.lastDiceRoll)
+        assertFalse(game.hasPurchasedThisTurn)
     }
 
     @Test
@@ -105,17 +106,28 @@ class GameDaoTest : AbstractDBSetup() {
         val game = gameDao.findById(id)!!
         assertEquals(6, game.lastDiceRoll)
         assertEquals(TurnPhase.RESOLVE_EFFECTS, game.turnPhase)
+        assertFalse(game.hasPurchasedThisTurn)
     }
 
     @Test
-    fun `advanceTurn resets to ROLL_DICE and clears dice roll`() {
+    fun `updateHasPurchasedThisTurn changes purchase state`() {
+        val id = gameDao.create(hostId)
+        gameDao.updateHasPurchasedThisTurn(id, true)
+
+        assertTrue(gameDao.findById(id)!!.hasPurchasedThisTurn)
+    }
+
+    @Test
+    fun `advanceTurn resets to ROLL_DICE clears dice roll and purchase state`() {
         val id = gameDao.create(hostId)
         gameDao.updateAfterRoll(id, diceRoll = 4, phase = TurnPhase.RESOLVE_EFFECTS)
+        gameDao.updateHasPurchasedThisTurn(id, true)
         gameDao.advanceTurn(id, nextTurnIndex = 1, roundNumber = 2)
         val game = gameDao.findById(id)!!
         assertEquals(1, game.currentTurnIndex)
         assertEquals(2, game.roundNumber)
         assertEquals(TurnPhase.ROLL_DICE, game.turnPhase)
         assertNull(game.lastDiceRoll)
+        assertFalse(game.hasPurchasedThisTurn)
     }
 }
