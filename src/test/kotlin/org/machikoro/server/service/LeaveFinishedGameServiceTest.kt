@@ -22,90 +22,69 @@ class LeaveFinishedGameServiceTest {
     private val service = LeaveFinishedGameService(gameDao, playerDao, gameStateGuard)
 
     @Test
-    fun `leaveGame removes player`() {
+    fun `leaveFinishedGame removes player`() {
         val gameId = 1
         val playerId = 10
 
-        whenever(gameStateGuard.ensureGameIsFinished(gameId))
-            .thenReturn(mock())
-
-        whenever(playerDao.findById(playerId))
-            .thenReturn(PlayerModel(playerId, gameId, 1, 0, 3))
-
         whenever(playerDao.findByGameId(gameId))
-            .thenReturn(listOf()) // empty after delete
+            .thenReturn(listOf(PlayerModel(playerId, gameId, 1, 0, 3)))
 
-        service.leaveGame(gameId, playerId)
+        whenever(playerDao.countByGameId(gameId))
+            .thenReturn(0)
+
+        service.leaveFinishedGame(gameId, playerId)
 
         verify(playerDao).delete(playerId)
     }
 
     @Test
-    fun `leaveGame deletes game if no players left`() {
+    fun `leaveFinishedGame deletes game if no players left`() {
         val gameId = 1
         val playerId = 10
 
-        whenever(gameDao.findById(gameId))
-            .thenReturn(
-                GameModel(
-                    id = gameId,
-                    status = GameStatus.FINISHED,
-                    hostUserId = 1,
-                    currentTurnIndex = 0,
-                    turnPhase = TurnPhase.END_TURN,
-                    lastDiceRoll = null,
-                    roundNumber = 1
-                )
-            )
-
-        whenever(playerDao.findById(playerId))
-            .thenReturn(PlayerModel(playerId, gameId, 1, 0, 3))
-
         whenever(playerDao.findByGameId(gameId))
-            .thenReturn(
-                listOf(PlayerModel(playerId, gameId, 1, 0, 3)),
-                emptyList()
-            )
+            .thenReturn(listOf(PlayerModel(playerId, gameId, 1, 0, 3)))
 
-        service.leaveGame(gameId, playerId)
+        whenever(playerDao.countByGameId(gameId))
+            .thenReturn(0)
+
+        service.leaveFinishedGame(gameId, playerId)
 
         verify(gameDao).delete(gameId)
     }
 
     @Test
-    fun `leaveGame does not delete game if players remain`() {
+    fun `leaveFinishedGame does not delete game if players remain`() {
         val gameId = 1
         val playerId = 10
 
-        whenever(gameStateGuard.ensureGameIsFinished(gameId))
-            .thenReturn(mock())
-
-        whenever(playerDao.findById(playerId))
-            .thenReturn(PlayerModel(playerId, gameId, 1, 0, 3))
-
         whenever(playerDao.findByGameId(gameId))
-            .thenReturn(listOf(
-                PlayerModel(2,  gameId, 2, 1, 3)
-            ))
+            .thenReturn(
+                listOf(
+                    PlayerModel(playerId, gameId, 1, 0, 3),
+                    PlayerModel(2, gameId, 2, 1, 3)
+                )
+            )
 
-        service.leaveGame(gameId, playerId)
+        whenever(playerDao.countByGameId(gameId))
+            .thenReturn(1)
 
+        service.leaveFinishedGame(gameId, playerId)
+
+        verify(playerDao).delete(playerId)
         verify(gameDao, never()).delete(gameId)
     }
 
     @Test
-    fun `leaveGame throws if player not found`() {
+    fun `leaveGame throws if player not in game`() {
         val gameId = 1
         val playerId = 10
 
-        whenever(gameStateGuard.ensureGameIsFinished(gameId))
-            .thenReturn(mock())
+        whenever(playerDao.findByGameId(gameId))
+            .thenReturn(emptyList())
 
-        whenever(playerDao.findById(playerId))
-            .thenReturn(null)
-
-        assertThrows<IllegalStateException> {
-            service.leaveGame(gameId, playerId)
+        assertThrows<IllegalArgumentException> {
+            service.leaveFinishedGame(gameId, playerId)
         }
 
         verify(playerDao, never()).delete(playerId)
@@ -116,16 +95,13 @@ class LeaveFinishedGameServiceTest {
         val gameId = 1
         val playerId = 10
 
-        whenever(gameStateGuard.ensureGameIsFinished(gameId))
-            .thenReturn(mock())
-
-        whenever(playerDao.findById(playerId))
-            .thenReturn(PlayerModel(playerId, gameId, 1, 0, 3))
-
         whenever(playerDao.findByGameId(gameId))
-            .thenReturn(emptyList())
+            .thenReturn(listOf(PlayerModel(playerId, gameId, 1, 0, 3)))
 
-        service.leaveGame(gameId, playerId)
+        whenever(playerDao.countByGameId(gameId))
+            .thenReturn(0)
+
+        service.leaveFinishedGame(gameId, playerId)
 
         verify(gameStateGuard).ensureGameIsFinished(gameId)
     }
