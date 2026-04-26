@@ -34,6 +34,7 @@ class GamePhaseServiceTest {
             turnPhase = phase,
             lastDiceRoll = null,
             roundNumber = roundNumber,
+            hasPurchasedThisTurn = false,
         )
 
     @Test
