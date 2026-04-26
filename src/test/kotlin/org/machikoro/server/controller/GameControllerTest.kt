@@ -26,7 +26,7 @@ class GameControllerTest {
     private val messagingTemplate = mock<SimpMessagingTemplate>()
     private val leaveFinishedGameService = mock<LeaveFinishedGameService>()
     private val winConditionService = mock<WinConditionService>()
-    private val controller = GameController(gamePhaseService, messagingTemplate, winConditionService, leaveFinishedGameService)
+    private val controller = GameController(gamePhaseService, messagingTemplate, leaveFinishedGameService, winConditionService)
 
     @Test
     fun `advancePhase delegates to service with the requested game id`() {

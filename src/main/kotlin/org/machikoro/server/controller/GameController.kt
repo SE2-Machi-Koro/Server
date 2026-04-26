@@ -20,7 +20,7 @@ import org.springframework.stereotype.Controller
 class GameController(
     private val gamePhaseService: GamePhaseService,
     private val messagingTemplate: SimpMessagingTemplate,
-    private val leaveFinishedGameService: LeaveFinishedGameService
+    private val leaveFinishedGameService: LeaveFinishedGameService,
     private val winConditionService: WinConditionService
 ) {
     private val logger = LoggerFactory.getLogger(GameController::class.java)
@@ -70,7 +70,9 @@ class GameController(
                 type = MessageType.PLAYER_LEFT_FINISHED_GAME,
                 sender = "server",
                 payload = mapOf("playerId" to playerId),
-            ),
+            )
+        )
+    }
     private fun broadcastWinner(winner: PlayerModel) {
         messagingTemplate.convertAndSend(
             "/topic/public",
