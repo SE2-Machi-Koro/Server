@@ -13,6 +13,7 @@ import org.machikoro.server.service.GamePhaseService
 import org.machikoro.server.service.LeaveFinishedGameService
 import org.mockito.kotlin.any
 import org.machikoro.server.service.WinConditionService
+import org.mockito.kotlin.argThat
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -127,6 +128,7 @@ class GameControllerTest {
         val message = captor.firstValue
         assertEquals(mapOf("playerId" to playerId), message.payload)
     }
+    @Test
     fun `endTurn broadcasts GAME_END when winner exists`() {
         val gameId = 42
         val winner = mock<PlayerModel>()
@@ -144,5 +146,4 @@ class GameControllerTest {
         assertEquals("server", message.sender)
         assertEquals(mapOf("winnerId" to 1), message.payload)
     }
-
 }
