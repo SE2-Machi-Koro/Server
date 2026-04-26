@@ -22,6 +22,8 @@ class GameStateGuardTest {
         id = id,
         status = status,
         hostUserId = 1,
+        lobbyCode = "ABC1234",
+        maxPlayers = 4,
         currentTurnIndex = 0,
         turnPhase = TurnPhase.ROLL_DICE,
         lastDiceRoll = null,
