@@ -11,13 +11,11 @@ class LeaveFinishedGameService(
 ){
     fun leaveGame(gameId: Int, playerId: Int) {
         gameStateGuard.ensureGameIsFinished(gameId)
-
         val players = playerDao.findByGameId(gameId)
         val player = players.find { it.id == playerId }
             ?: throw IllegalArgumentException("Player not in game")
         playerDao.delete(playerId)
-        val remainingPlayers = playerDao.countByGameId(gameId)
-        if (remainingPlayers == 0) {
+        if (playerDao.countByGameId(gameId) == 0) {
             gameDao.delete(gameId)
         }
     }
