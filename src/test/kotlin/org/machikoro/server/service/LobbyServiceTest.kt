@@ -24,7 +24,17 @@ class LobbyServiceTest {
     private val lobbyService = LobbyService(gameDao, playerDao)
 
     private fun game(id: Int, status: GameStatus) =
-        GameModel(id = id, status = status, hostUserId = 1, currentTurnIndex = 0, turnPhase = org.machikoro.server.domain.enums.TurnPhase.ROLL_DICE, lastDiceRoll = null, roundNumber = 1)
+        GameModel(
+            id = id,
+            status = status,
+            hostUserId = 1,
+            lobbyCode = "ABC123",
+            maxPlayers = 4,
+            currentTurnIndex = 0,
+            turnPhase = org.machikoro.server.domain.enums.TurnPhase.ROLL_DICE,
+            lastDiceRoll = null,
+            roundNumber = 1
+        )
 
     private fun player(id: Int) =
         PlayerModel(id = id, gameId = 1, userId = id, turnOrder = 0, coins = 3)

@@ -35,8 +35,7 @@ class GamePhaseServiceTest {
             currentTurnIndex = currentTurnIndex,
             turnPhase = phase,
             lastDiceRoll = null,
-            roundNumber = roundNumber,
-        )
+            roundNumber = roundNumber,)
 
     @Test
     fun `initial phase is ROLL_DICE`() {

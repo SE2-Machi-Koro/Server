@@ -22,6 +22,8 @@ class LobbyControllerTests {
                 id = gameId,
                 status = GameStatus.IN_PROGRESS,
                 hostUserId = 10,
+                lobbyCode = "ABC123",
+                maxPlayers = 4,
                 currentTurnIndex = 0,
                 turnPhase = org.machikoro.server.domain.enums.TurnPhase.ROLL_DICE,
                 lastDiceRoll = null,
