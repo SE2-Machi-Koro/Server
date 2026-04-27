@@ -7,6 +7,7 @@ enum class MessageType {
     GAME_START,
     GAME_ACTION,
     GAME_END,
+    PLAYER_LEFT_FINISHED_GAME,
     ERROR
 }
 

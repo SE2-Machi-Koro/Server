@@ -111,4 +111,21 @@ class PlayerDaoTest : AbstractDBSetup() {
     fun `delete on unknown id does not throw`() {
         assertDoesNotThrow { playerDao.delete(999) }
     }
+
+    @Test
+    fun `countByGameId returns 0 when no players exist`() {
+        val count = playerDao.countByGameId(gameId)
+
+        assertEquals(0, count)
+    }
+    @Test
+    fun `countByGameId decreases after player deletion`() {
+        val id = playerDao.create(gameId, userId, turnOrder = 0)
+
+        assertEquals(1, playerDao.countByGameId(gameId))
+
+        playerDao.delete(id)
+
+        assertEquals(0, playerDao.countByGameId(gameId))
+    }
 }
