@@ -73,6 +73,21 @@ Exposed entities are object-oriented wrappers around a single database row. They
 via delegated properties and handle the persistence mechanics internally. Entities are strictly internal to the database
 layer — they are always converted into domain models before being passed to services or controllers.
 
+### Data Transfer Objects (DTOs)
+
+DTOs are simple objects used exclusively to carry data between the server and clients. They define the shape of requests
+and responses for REST and WebSocket communication, decoupling the API contract from internal domain models.
+
+Key responsibilities:
+
+- Represent the structure of incoming requests (e.g., a player joining a game) and outgoing responses (e.g., the current
+  game state sent to all clients)
+- Contain only the fields relevant to the client — no business logic, no persistence concerns
+- Prevent internal domain models from leaking into the API layer, making it safe to evolve the two independently
+
+For example, a `GameStateDto` sent over WebSocket may include only the data a client needs to render the UI, while the
+internal `GameModel` may hold additional state used purely for server-side logic.
+
 ## Environment Configuration
 
 1. Copy the example environment file and adjust as needed:
@@ -81,15 +96,15 @@ layer — they are always converted into domain models before being passed to se
    ```
 2. Edit the following required variables in `.env`:
 
-   | Variable         | Description                       |
-         |------------------|-----------------------------------|
-   | DB_USERNAME      | PostgreSQL database username       |
-   | DB_PASSWORD      | PostgreSQL database password       |
-   | DB_NAME          | Database name                     |
-   | DB_PORT          | Database port (default: 5432)     |
-   | PGADMIN_EMAIL    | Email for pgAdmin (optional)      |
-   | PGADMIN_PASSWORD | Password for pgAdmin (optional)   |
-   | SERVER_PORT      | Port for backend server           |
+   | Variable         | Description                     | 
+   |------------------|---------------------------------|
+   | DB_USERNAME      | PostgreSQL database username    |
+   | DB_PASSWORD      | PostgreSQL database password    |
+   | DB_NAME          | Database name                   |
+   | DB_PORT          | Database port (default: 5432)   |
+   | PGADMIN_EMAIL    | Email for pgAdmin (optional)    |
+   | PGADMIN_PASSWORD | Password for pgAdmin (optional) |
+   | SERVER_PORT      | Port for backend server         |
 
 Example `.env`:
 

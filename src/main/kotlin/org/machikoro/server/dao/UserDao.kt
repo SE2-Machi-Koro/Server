@@ -9,18 +9,6 @@ import org.machikoro.server.database.Users
 import org.machikoro.server.domain.models.UserModel
 import org.springframework.stereotype.Repository
 
-/**
- * Data Access Object responsible for interacting with the database
- * - Encapsulated all database operations
- * - Uses Exposed entities and transactions to access persistence layer
- * - Converts database entities into domain models via toModel()
- *
- * - Only layer that should directly access Exposed/DB tables
- * - Returns domain models instead of entities to keep persistence isolated
- * - All operations are executed inside a transaction
- *
- * DAOs are used by the service layer to retrieve and modify the game state
- */
 @Repository
 class UserDao {
 

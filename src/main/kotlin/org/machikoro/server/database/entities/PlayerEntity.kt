@@ -6,16 +6,6 @@ import org.jetbrains.exposed.v1.dao.IntEntityClass
 import org.machikoro.server.database.Players
 import org.machikoro.server.domain.models.PlayerModel
 
-/**
- * Exposed DAO entity representing a single row in corresponding database table
- * - Acts as an object-oriented wrapper around database row
- * - Provides direct-access to table columns via delegated properties
- * - Allows navigation of relationships
- * - Encapsulation persistence logic handled by Exposed
- *
- * Entities are part of the database layer and should not be exposed outside
- * They are converted into domain models using toModel()
- */
 class PlayerEntity(id: EntityID<Int>) : IntEntity(id) {
     /**
      * Companion object required by Exposed DAO
