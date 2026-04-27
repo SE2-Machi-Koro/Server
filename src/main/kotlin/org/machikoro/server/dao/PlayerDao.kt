@@ -1,5 +1,6 @@
 package org.machikoro.server.dao
 
+import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.machikoro.server.database.entities.GameEntity
@@ -36,7 +37,9 @@ class PlayerDao {
      * @return List of PlayerModel
      */
     fun getPlayers(gameId: Int): List<PlayerModel> = transaction {
-        PlayerEntity.find { Players.gameId eq gameId }.map { it.toModel() }
+        PlayerEntity.find { Players.gameId eq gameId }
+            .orderBy(Players.turnOrder to SortOrder.ASC)
+            .map { it.toModel() }
     }
     /**
      * Returns counter of players in game who didn't leave yet
