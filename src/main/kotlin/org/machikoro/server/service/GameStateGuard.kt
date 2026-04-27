@@ -31,4 +31,17 @@ class GameStateGuard(
         }
         return game
     }
+
+    fun ensureGameIsFinished(gameId: Int) {
+        val game = gameDao.findById(gameId)
+            ?: throw GameNotFoundException("Game $gameId not found")
+
+        if (game.status != GameStatus.FINISHED) {
+            throw CustomWebSocketException(
+                errorCode = "GAME_RUNNING",
+                message = "Game $gameId has not ended yet"
+            )
+        }
+    }
+
 }

@@ -38,6 +38,12 @@ class PlayerDao {
     fun getPlayers(gameId: Int): List<PlayerModel> = transaction {
         PlayerEntity.find { Players.gameId eq gameId }.map { it.toModel() }
     }
+    /**
+     * Returns counter of players in game who didn't leave yet
+     */
+    fun countByGameId(gameId: Int): Int = transaction {
+        PlayerEntity.find { Players.gameId eq gameId }.count().toInt()
+    }
 
     /**
      * Adds a new player to a game.
