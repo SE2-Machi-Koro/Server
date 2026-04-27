@@ -1,6 +1,8 @@
 package org.machikoro.server.controller
 
+import org.machikoro.server.dao.UserDao
 import org.machikoro.server.dto.WebSocketMessage
+import org.machikoro.server.service.LobbyService
 import org.springframework.messaging.handler.annotation.MessageMapping
 import org.springframework.messaging.handler.annotation.Payload
 import org.springframework.messaging.handler.annotation.SendTo
@@ -9,7 +11,10 @@ import org.springframework.stereotype.Controller
 import org.slf4j.LoggerFactory
 
 @Controller
-class WebSocketController {
+class WebSocketController(
+    private val lobbyService: LobbyService,
+    private val userDao: UserDao
+) {
     private val logger = LoggerFactory.getLogger(WebSocketController::class.java)
 
     /**
@@ -32,7 +37,10 @@ class WebSocketController {
     fun addUser(@Payload message: WebSocketMessage, headerAccessor: SimpMessageHeaderAccessor): WebSocketMessage {
         logger.info("User ${message.sender} joined the chat")
         headerAccessor.sessionAttributes?.put("username", message.sender)
+        val user = userDao.findByUsername(message.sender)
+        if (user != null && message.gameId != null) {
+            lobbyService.addUserToLobby(message.gameId, user.id)
+        }
         return message
     }
 }
-

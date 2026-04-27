@@ -37,7 +37,7 @@ class GamePhaseService(
         val game = gameStateGuard.ensureGameIsRunning(gameId)
         check(game.turnPhase == TurnPhase.BUY_OR_BUILD) { "Game is not in BUY_OR_BUILD phase" }
 
-        val players = playerDao.findByGameId(gameId)
+        val players = playerDao.getPlayers(gameId)
         check(players.isNotEmpty()) { "Game $gameId has no players" }
 
         gameDao.updateTurnPhase(gameId, TurnPhase.END_TURN)

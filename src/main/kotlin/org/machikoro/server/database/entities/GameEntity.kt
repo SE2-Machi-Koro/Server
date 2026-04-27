@@ -15,6 +15,8 @@ class GameEntity(id: EntityID<Int>) : IntEntity(id) {
 
     var status by Games.status
     var hostUser by UserEntity referencedOn Games.hostUserId
+    var lobbyCode by Games.lobbyCode     // Lobby-specific field
+    var maxPlayers by Games.maxPlayers    // Lobby-specific fields
     var currentTurnIndex by Games.currentTurnIndex
     var turnPhase by Games.turnPhase
     var lastDiceRoll by Games.lastDiceRoll
@@ -30,6 +32,8 @@ class GameEntity(id: EntityID<Int>) : IntEntity(id) {
         id = id.value,
         status = status,
         hostUserId = hostUser.id.value,
+        lobbyCode = lobbyCode,
+        maxPlayers = maxPlayers,
         currentTurnIndex = currentTurnIndex,
         turnPhase = turnPhase,
         lastDiceRoll = lastDiceRoll,

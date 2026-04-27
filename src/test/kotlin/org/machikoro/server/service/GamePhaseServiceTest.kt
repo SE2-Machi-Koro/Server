@@ -30,11 +30,12 @@ class GamePhaseServiceTest {
             id = id,
             status = GameStatus.IN_PROGRESS,
             hostUserId = 1,
+            lobbyCode = "ABC1234",
+            maxPlayers = 4,
             currentTurnIndex = currentTurnIndex,
             turnPhase = phase,
             lastDiceRoll = null,
-            roundNumber = roundNumber,
-        )
+            roundNumber = roundNumber,)
 
     @Test
     fun `initial phase is ROLL_DICE`() {
@@ -129,7 +130,7 @@ class GamePhaseServiceTest {
         val gameId = 21
         whenever(gameStateGuard.ensureGameIsRunning(gameId))
             .thenReturn(gameInPhase(gameId, TurnPhase.BUY_OR_BUILD, currentTurnIndex = 0, roundNumber = 1))
-        whenever(playerDao.findByGameId(gameId)).thenReturn(
+        whenever(playerDao.getPlayers(gameId)).thenReturn(
             listOf(
                 PlayerModel(1, gameId, 10, 0, 3),
                 PlayerModel(2, gameId, 11, 1, 3),
@@ -150,7 +151,7 @@ class GamePhaseServiceTest {
         val gameId = 22
         whenever(gameStateGuard.ensureGameIsRunning(gameId))
             .thenReturn(gameInPhase(gameId, TurnPhase.BUY_OR_BUILD, currentTurnIndex = 1, roundNumber = 3))
-        whenever(playerDao.findByGameId(gameId)).thenReturn(
+        whenever(playerDao.getPlayers(gameId)).thenReturn(
             listOf(
                 PlayerModel(1, gameId, 10, 0, 3),
                 PlayerModel(2, gameId, 11, 1, 3),

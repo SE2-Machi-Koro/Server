@@ -16,6 +16,7 @@ class ChatMessageTests {
             "GAME_START",
             "GAME_ACTION",
             "GAME_END",
+            "PLAYER_LEFT_FINISHED_GAME",
             "ERROR"
         )
         val actual = MessageType.entries.map { it.name }.toSet()
