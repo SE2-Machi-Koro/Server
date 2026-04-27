@@ -2,16 +2,20 @@
 
 > Robust real-time multiplayer backend for the Machi Koro board game, built with Kotlin, Spring Boot, and WebSockets.
 
-This server manages real-time Machi Koro game sessions, player communication, game state, and persistent storage on PostgreSQL. Designed for reliability, scalability, and developer productivity.
+This server manages real-time Machi Koro game sessions, player communication, game state, and persistent storage on
+PostgreSQL. Designed for reliability, scalability, and developer productivity.
 
 ## Key Features
 
 - **Real-Time Multiplayer:** Instant bidirectional communication using STOMP over WebSockets.
-- **Game State Management:** Strict tracking of turn phases (Roll Dice, Resolve Effects, Buy/Build, End Turn) and game statuses.
-- **Game Logic Engine:** Calculates earnings, applies card effects based on dice rolls, and detects win conditions (e.g., landmark completion).
+- **Game State Management:** Strict tracking of turn phases (Roll Dice, Resolve Effects, Buy/Build, End Turn) and game
+  statuses.
+- **Game Logic Engine:** Calculates earnings, applies card effects based on dice rolls, and detects win conditions (
+  e.g., landmark completion).
 - **In-Game Chat:** Built-in chat system for players in the lobby and during the game.
 - **Data Persistence:** Uses JetBrains Exposed ORM to safely store users, games, cards, and landmarks in PostgreSQL.
-- **Quality Assured:** Comprehensive test suite with Testcontainers, JUnit5, and a strict ≥80% Jacoco coverage quality gate.
+- **Quality Assured:** Comprehensive test suite with Testcontainers, JUnit5, and a strict ≥80% Jacoco coverage quality
+  gate.
 
 ## Tech Stack
 
@@ -30,10 +34,44 @@ The project follows a standard multi-layer Spring Boot architecture:
 
 - **Controllers (`controller/`):** Expose WebSocket and REST endpoints (e.g., `GameController`, `WebSocketController`).
 - **Services (`service/`):** Contain the core game logic (`GamePhaseService`, `EarningsService`, `WinConditionService`).
-- **Domain Models (`domain/`):** Pure Kotlin data classes representing the business logic and game state (`GameModel`, `PlayerModel`, Enums like `TurnPhase`).
+- **Domain Models (`domain/`):** Pure Kotlin data classes representing the business logic and game state (`GameModel`,
+  `PlayerModel`, Enums like `TurnPhase`).
 - **Data Access (`database/`):** Defines database tables and entities using Exposed ORM (`GameEntity`, `CardEntity`).
 - **DTOs (`dto/`):** Data Transfer Objects for client-server communication.
 - **Configuration (`config/`):** Setup for WebSockets, Spring Security, and OpenAPI.
+
+## Data Layer Concepts
+
+### Data Access Objects (DAOs)
+
+DAOs are the only layer that directly interacts with the database.
+Each DAO encapsulates all database operations for its domain (e.g., games, players, cards) and is used by the service
+layer to retrieve and modify state.
+
+Key responsibilities:
+
+- Execute all queries inside a transaction
+- Use JetBrains Exposed (either DSL or Entity API) to interact with the persistence layer
+- Return domain models instead of raw entities or rows, keeping persistence details isolated from the rest of the
+  application
+
+### Exposed DSL vs. Entity API
+
+This project uses JetBrains Exposed, which offers two complementary styles for database access:
+
+- **DSL (Domain-Specific Language):** A type-safe, SQL-like query builder. Queries return raw `ResultRow` objects that
+  must be manually mapped to domain models. Best suited for complex queries, batch operations, or cases where
+  fine-grained control over SQL is needed.
+
+- **Entity API:** An object-relational mapper (ORM) style where each database row is represented as a Kotlin object (an
+  `Entity`). Properties map directly to table columns, and relationships between tables can be navigated naturally.
+  Entities are converted to domain models via a `toModel()` function before being returned outside the data layer.
+
+### Entities
+
+Exposed entities are object-oriented wrappers around a single database row. They provide direct access to column values
+via delegated properties and handle the persistence mechanics internally. Entities are strictly internal to the database
+layer — they are always converted into domain models before being passed to services or controllers.
 
 ## Environment Configuration
 
@@ -44,7 +82,7 @@ The project follows a standard multi-layer Spring Boot architecture:
 2. Edit the following required variables in `.env`:
 
    | Variable         | Description                       |
-   |------------------|-----------------------------------|
+         |------------------|-----------------------------------|
    | DB_USERNAME      | PostgreSQL database username       |
    | DB_PASSWORD      | PostgreSQL database password       |
    | DB_NAME          | Database name                     |
@@ -54,6 +92,7 @@ The project follows a standard multi-layer Spring Boot architecture:
    | SERVER_PORT      | Port for backend server           |
 
 Example `.env`:
+
 ```env
 DB_USERNAME=admin
 DB_PASSWORD=password123
@@ -67,6 +106,7 @@ SERVER_PORT=8080
 ## Local Build & Run
 
 Clone the repository and set up your environment:
+
 ```bash
 git clone <repo-url>
 cd SE2-SERVER
@@ -75,34 +115,42 @@ cp .env.example .env
 ```
 
 Build the project:
+
 ```bash
 ./gradlew build
 ```
 
 Run the server locally:
+
 ```bash
 ./gradlew bootRun
 ```
+
 The backend will be available at: `http://localhost:8080`
 
 ## Testing
 
 Run the full test suite (unit + integration):
+
 ```bash
 ./gradlew check
 ```
 
 Generate a coverage report:
+
 ```bash
 ./gradlew jacocoTestReport
 ```
+
 HTML report: `build/reports/jacoco/test/html/index.html`
 
 ## API & WebSocket Documentation
 
-For detailed REST and WebSocket API documentation, see the `docs/` directory or access Swagger UI at `/swagger-ui.html` after starting the server.
+For detailed REST and WebSocket API documentation, see the `docs/` directory or access Swagger UI at `/swagger-ui.html`
+after starting the server.
 
 Key endpoints:
+
 - API: `http://localhost:8080`
 - WebSocket: `ws://localhost:8080/ws`
 - Swagger UI: `http://localhost:8080/swagger-ui.html`
@@ -114,6 +162,7 @@ For advanced usage, message formats, and integration details, refer to the dedic
 ## Health Check
 
 To verify the server is running:
+
 ```
 GET http://localhost:8080/actuator/health
 ```
