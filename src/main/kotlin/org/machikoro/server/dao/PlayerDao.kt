@@ -10,16 +10,6 @@ import org.machikoro.server.database.entities.UserEntity
 import org.machikoro.server.domain.models.PlayerModel
 import org.springframework.stereotype.Repository
 
-/**
- * Data Access Object (DAO) for Player-related database operations.
- *
- * Encapsulates all database access for Player entities, providing methods to
- * retrieve, create, and update player data. This DAO uses Exposed DAO entities
- * and transactions to ensure safe and isolated persistence operations.
- *
- * Note: Some methods may appear unused but are kept for future extensibility and
- * will be reviewed in Sprint 3.
- */
 @Repository
 class PlayerDao {
     /**
