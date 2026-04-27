@@ -96,7 +96,6 @@ class PlayerDaoTest : AbstractDBSetup() {
         val updated = playerDao.findById(player.id)
         assertEquals(5, updated?.turnOrder)
     }
-}
 
     @Test
     fun `countByGameId returns 0 when no players exist`() {
@@ -104,13 +103,14 @@ class PlayerDaoTest : AbstractDBSetup() {
 
         assertEquals(0, count)
     }
+
     @Test
     fun `countByGameId decreases after player deletion`() {
-        val id = playerDao.create(gameId, userId, turnOrder = 0)
+        val player = playerDao.addPlayer(gameId, userId)
 
         assertEquals(1, playerDao.countByGameId(gameId))
 
-        playerDao.delete(id)
+        playerDao.delete(player.id)
 
         assertEquals(0, playerDao.countByGameId(gameId))
     }
