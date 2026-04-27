@@ -3,9 +3,6 @@ package org.machikoro.server.service
 import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.PlayerDao
-import org.machikoro.server.domain.enums.GameStatus
-import org.machikoro.server.domain.enums.TurnPhase
-import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
@@ -26,7 +23,7 @@ class LeaveFinishedGameServiceTest {
         val gameId = 1
         val playerId = 10
 
-        whenever(playerDao.findByGameId(gameId))
+        whenever(playerDao.getPlayers(gameId))
             .thenReturn(listOf(PlayerModel(playerId, gameId, 1, 0, 3)))
 
         whenever(playerDao.countByGameId(gameId))
@@ -42,7 +39,7 @@ class LeaveFinishedGameServiceTest {
         val gameId = 1
         val playerId = 10
 
-        whenever(playerDao.findByGameId(gameId))
+        whenever(playerDao.getPlayers(gameId))
             .thenReturn(listOf(PlayerModel(playerId, gameId, 1, 0, 3)))
 
         whenever(playerDao.countByGameId(gameId))
@@ -58,7 +55,7 @@ class LeaveFinishedGameServiceTest {
         val gameId = 1
         val playerId = 10
 
-        whenever(playerDao.findByGameId(gameId))
+        whenever(playerDao.getPlayers(gameId))
             .thenReturn(
                 listOf(
                     PlayerModel(playerId, gameId, 1, 0, 3),
@@ -80,7 +77,7 @@ class LeaveFinishedGameServiceTest {
         val gameId = 1
         val playerId = 10
 
-        whenever(playerDao.findByGameId(gameId))
+        whenever(playerDao.getPlayers(gameId))
             .thenReturn(emptyList())
 
         assertThrows<IllegalArgumentException> {
@@ -95,7 +92,7 @@ class LeaveFinishedGameServiceTest {
         val gameId = 1
         val playerId = 10
 
-        whenever(playerDao.findByGameId(gameId))
+        whenever(playerDao.getPlayers(gameId))
             .thenReturn(listOf(PlayerModel(playerId, gameId, 1, 0, 3)))
 
         whenever(playerDao.countByGameId(gameId))

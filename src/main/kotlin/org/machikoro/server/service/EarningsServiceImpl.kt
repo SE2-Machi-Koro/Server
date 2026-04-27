@@ -41,7 +41,7 @@ class EarningsServiceImpl(
                 .filter { it.diceMin <= diceRoll && it.diceMax >= diceRoll }
                 .associateBy { it.cardType }
 
-            val players = playerDao.findByGameId(gameId)
+            val players = playerDao.getPlayers(gameId)
 
             // Iterate through every player in the game to see if their cards trigger
             players.forEach { player ->
@@ -90,7 +90,7 @@ class EarningsServiceImpl(
         check(game.turnPhase == TurnPhase.RESOLVE_EFFECTS) { "Game is not in RESOLVE_EFFECTS phase" }
         val diceRoll = checkNotNull(game.lastDiceRoll) { "Dice roll not set" }
 
-        val players = playerDao.findByGameId(gameId)
+        val players = playerDao.getPlayers(gameId)
         val activePlayer = players[game.currentTurnIndex]
 
         // Distribute coins
