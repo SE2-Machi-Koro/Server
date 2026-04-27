@@ -14,9 +14,7 @@ class LeaveFinishedGameService(
     fun leaveFinishedGame(gameId: Int, playerId: Int) {
         gameStateGuard.ensureGameIsFinished(gameId)
         val players = playerDao.getPlayers(gameId)
-        if (players.none { it.id == playerId }) {
-            throw IllegalArgumentException("Player not in game")
-        }
+        require(!(players.none { it.id == playerId })) { "Player not in game" }
         playerDao.delete(playerId)
         if (playerDao.countByGameId(gameId) == 0) {
             gameDao.delete(gameId)
