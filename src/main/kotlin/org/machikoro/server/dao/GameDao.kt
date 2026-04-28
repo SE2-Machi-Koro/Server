@@ -1,7 +1,9 @@
 package org.machikoro.server.dao
 
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.update
 import org.machikoro.server.database.entities.GameEntity
 import org.machikoro.server.database.Games
 import org.machikoro.server.database.entities.UserEntity
@@ -109,6 +111,19 @@ class GameDao {
         val game = GameEntity.findById(id)
             ?: throw GameNotFoundException("Game $id not found")
         game.hasPurchasedThisTurn = hasPurchasedThisTurn
+    }
+
+    /**
+     * Atomically marks the current turn as having purchased only if it has not
+     * already been marked by another request.
+     */
+    fun tryMarkPurchasedThisTurn(id: Int): Boolean = transaction {
+        Games.update({
+            (Games.id eq id) and
+                (Games.hasPurchasedThisTurn eq false)
+        }) {
+            it[hasPurchasedThisTurn] = true
+        } > 0
     }
 
     /**
