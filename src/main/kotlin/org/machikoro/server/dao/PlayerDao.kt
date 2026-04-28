@@ -1,7 +1,6 @@
 package org.machikoro.server.dao
 
 import org.jetbrains.exposed.v1.core.SortOrder
-import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.machikoro.server.database.entities.GameEntity
@@ -11,97 +10,90 @@ import org.machikoro.server.database.entities.UserEntity
 import org.machikoro.server.domain.models.PlayerModel
 import org.springframework.stereotype.Repository
 
-/**
- * Data Access Object responsible for interacting with the database
- * - Encapsulated all database operations
- * - Uses Exposed entities and transactions to access persistence layer
- * - Converts database entities into domain models via toModel()
- *
- * - Only layer that should directly access Exposed/DB tables
- * - Returns domain models instead of entities to keep persistence isolated
- * - All operations are executed inside a transaction
- *
- * DAOs are used by the service layer to retrieve and modify the game state
- */
 @Repository
 class PlayerDao {
-
     /**
-     * Finds a player by its unique ID
+     * Finds a player by their unique ID.
+     * @param id Player ID
+     * @return PlayerModel or null if not found
      */
     fun findById(id: Int): PlayerModel? = transaction {
         PlayerEntity.findById(id)?.toModel()
     }
 
     /**
-     * Finds all players for a given game
-     * Players are ordered by turnOrder to reflect the correct turn sequence
+     * Retrieves all players in a given game.
+     * @param gameId Game ID
+     * @return List of PlayerModel
      */
-    fun findByGameId(gameId: Int): List<PlayerModel> = transaction {
+    fun getPlayers(gameId: Int): List<PlayerModel> = transaction {
         PlayerEntity.find { Players.gameId eq gameId }
             .orderBy(Players.turnOrder to SortOrder.ASC)
             .map { it.toModel() }
     }
-
     /**
-     * Finds a specific player by userId within a given game
-     * Return null if user is not part of the game
+     * Returns counter of players in game who didn't leave yet
      */
-    fun findByUserIdAndGameId(userId: Int, gameId: Int): PlayerModel? = transaction {
-        PlayerEntity.find {
-            (Players.userId eq userId) and (Players.gameId eq gameId)
-        }.singleOrNull()?.toModel()
+    fun countByGameId(gameId: Int): Int = transaction {
+        PlayerEntity.find { Players.gameId eq gameId }.count().toInt()
     }
 
     /**
-     * Creates a new player entry in a game
-     * Initializes:
-     * - turnOrder -> determines position in turn sequence
-     * - coins -> starts with 3 coins
-     *
-     * Fails if referenced game or user does not exist
+     * Adds a new player to a game.
+     * @param gameId Game ID
+     * @param userId User ID
+     * @return The created PlayerModel
      */
-    fun create(gameId: Int, userId: Int, turnOrder: Int): Int = transaction {
-        PlayerEntity.new {
-            game = GameEntity.findById(gameId)
-                ?: error("Game $gameId not found")
-            user = UserEntity.findById(userId)
-                ?: error("User $userId not found")
-            this.turnOrder = turnOrder
-            coins = 3
-        }.id.value
+    fun addPlayer(gameId: Int, userId: Int): PlayerModel {
+        val turnOrder = getPlayers(gameId).size
+        val playerId = transaction {
+            PlayerEntity.new {
+                this.game = GameEntity.findById(gameId) ?: error("Game not found")
+                this.user = UserEntity.findById(userId) ?: error("User not found")
+                this.turnOrder = turnOrder
+                this.coins = 3
+            }.id.value
+        }
+        return findById(playerId)!!
     }
 
     /**
-     * Updates coin count for a player
+     * Updates the coin count for a player.
+     * @param playerId Player ID
+     * @param newCoins New coin value
      */
-    fun updateCoins(id: Int, coins: Int): Unit = transaction {
-        PlayerEntity.findById(id)?.apply {
-            this.coins = coins
+    fun updateCoins(playerId: Int, newCoins: Int): Unit = transaction {
+        PlayerEntity.findById(playerId)?.let {
+            it.coins = newCoins
         }
     }
 
+    // --- The following methods are kept for future use and will be reviewed in Sprint 3 ---
+
     /**
-     * Finds all players across all games
+     * Finds all players in the database.
+     * @return List of PlayerModel
      */
     fun findAll(): List<PlayerModel> = transaction {
         PlayerEntity.all().map { it.toModel() }
     }
 
     /**
-     * Updates the turn order of a player
-     * Affects sequence in which players take turn
+     * Deletes a player by their ID.
+     * @param playerId Player ID
      */
-    fun updateTurnOrder(id: Int, turnOrder: Int): Unit = transaction {
-        PlayerEntity.findById(id)?.apply {
-            this.turnOrder = turnOrder
-        }
+    fun delete(playerId: Int): Unit = transaction {
+        PlayerEntity.findById(playerId)?.delete()
     }
 
     /**
-     * Deletes a player by ID
+     * Updates the turn order for a player.
+     * @param playerId Player ID
+     * @param newOrder New turn order
      */
-    fun delete(id: Int): Unit = transaction {
-        PlayerEntity.findById(id)?.delete()
+    fun updateTurnOrder(playerId: Int, newOrder: Int): Unit = transaction {
+        PlayerEntity.findById(playerId)?.let {
+            it.turnOrder = newOrder
+        }
     }
 }
