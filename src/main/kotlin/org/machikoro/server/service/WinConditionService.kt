@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service
 class WinConditionService(
     private val playerDao: PlayerDao,
     private val playerLandmarkDao: PlayerLandmarkDao,
+    private val gameStateGuard: GameStateGuard
 ) {
 
     /** True iff the given player has built all landmarks. */
@@ -16,7 +17,12 @@ class WinConditionService(
         playerLandmarkDao.allBuilt(playerId)
 
     /** Returns the winner in the given game, or null if nobody has won yet. */
-    fun detectWinner(gameId: Int): PlayerModel? =
-        playerDao.getPlayers(gameId)
-            .firstOrNull { hasPlayerWon(it.id) }
+    fun detectWinner(gameId: Int): PlayerModel? {
+        val game = gameStateGuard.ensureGameIsRunning(gameId)
+        return playerDao.getPlayers(gameId)
+            .firstOrNull {
+                hasPlayerWon(it.id)
+            }
+    }
+
 }
