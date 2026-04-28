@@ -33,6 +33,7 @@ class DiceServiceTests {
         lastDiceRoll = null,
         roundNumber = 1,
         lobbyCode = "ABC123",
+        hasPurchasedThisTurn = false,
         maxPlayers = 4
     )
 

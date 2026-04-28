@@ -29,6 +29,7 @@ class GameStateGuardTest {
         turnPhase = TurnPhase.ROLL_DICE,
         lastDiceRoll = null,
         roundNumber = 1,
+        hasPurchasedThisTurn = false,
     )
 
     @Test
@@ -83,6 +84,7 @@ class GameStateGuardTest {
                 lastDiceRoll = null,
                 roundNumber = 1,
                 lobbyCode = "",
+                hasPurchasedThisTurn = false,
                 maxPlayers = 2
             )
         )
@@ -103,6 +105,7 @@ class GameStateGuardTest {
                 lastDiceRoll = null,
                 roundNumber = 1,
                 lobbyCode = "",
+                hasPurchasedThisTurn = false,
                 maxPlayers = 2
             )
         )

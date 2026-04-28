@@ -2,18 +2,24 @@ package org.machikoro.server.controller
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import org.machikoro.server.domain.enums.CardType
+import org.machikoro.server.domain.enums.LandmarkType
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.dto.AdvancePhaseRequest
 import org.machikoro.server.dto.EndTurnRequest
 import org.machikoro.server.dto.LeaveFinishedGameRequest
 import org.machikoro.server.dto.MessageType
+import org.machikoro.server.dto.PurchaseRequest
+import org.machikoro.server.dto.PurchaseType
 import org.machikoro.server.dto.RollDiceRequest
 import org.machikoro.server.dto.RollDiceResponse
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.service.DiceService
 import org.machikoro.server.service.GamePhaseService
 import org.machikoro.server.service.LeaveFinishedGameService
+import org.machikoro.server.service.PurchaseResult
+import org.machikoro.server.service.PurchaseService
 import org.machikoro.server.service.WinConditionService
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
@@ -30,8 +36,9 @@ class GameControllerTest {
     private val messagingTemplate = mock<SimpMessagingTemplate>()
     private val leaveFinishedGameService = mock<LeaveFinishedGameService>()
     private val winConditionService = mock<WinConditionService>()
+    private val purchaseService = mock<PurchaseService>()
     private val diceService = mock<DiceService>()
-    private val controller = GameController(gamePhaseService, messagingTemplate, leaveFinishedGameService, winConditionService, diceService)
+    private val controller = GameController(gamePhaseService, messagingTemplate, leaveFinishedGameService, winConditionService, purchaseService, diceService)
 
     @Test
     fun `advancePhase delegates to service with the requested game id`() {
@@ -84,6 +91,55 @@ class GameControllerTest {
         assertEquals(MessageType.GAME_ACTION, message.type)
         assertEquals("server", message.sender)
         assertEquals(mapOf("turnPhase" to "ROLL_DICE"), message.payload)
+    }
+
+    @Test
+    fun `purchase delegates to service with the requested payload`() {
+        val gameId = 42
+        whenever(
+            purchaseService.purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.BAKERY, null)
+        ).thenReturn(
+            PurchaseResult(
+                turnPhase = TurnPhase.BUY_OR_BUILD,
+                purchaseType = PurchaseType.ESTABLISHMENT,
+                cardType = CardType.BAKERY,
+            )
+        )
+
+        controller.purchase(PurchaseRequest(gameId, PurchaseType.ESTABLISHMENT, cardType = CardType.BAKERY))
+
+        verify(purchaseService).purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.BAKERY, null)
+    }
+
+    @Test
+    fun `purchase broadcasts resulting purchase payload as GAME_ACTION on game topic`() {
+        val gameId = 42
+        whenever(
+            purchaseService.purchase(gameId, PurchaseType.LANDMARK, null, LandmarkType.TRAIN_STATION)
+        ).thenReturn(
+            PurchaseResult(
+                turnPhase = TurnPhase.BUY_OR_BUILD,
+                purchaseType = PurchaseType.LANDMARK,
+                landmarkType = LandmarkType.TRAIN_STATION,
+            )
+        )
+
+        controller.purchase(PurchaseRequest(gameId, PurchaseType.LANDMARK, landmarkType = LandmarkType.TRAIN_STATION))
+
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+
+        val message = captor.firstValue
+        assertEquals(MessageType.GAME_ACTION, message.type)
+        assertEquals("server", message.sender)
+        assertEquals(
+            mapOf(
+                "turnPhase" to "BUY_OR_BUILD",
+                "purchaseType" to "LANDMARK",
+                "landmarkType" to "TRAIN_STATION",
+            ),
+            message.payload,
+        )
     }
 
     @Test

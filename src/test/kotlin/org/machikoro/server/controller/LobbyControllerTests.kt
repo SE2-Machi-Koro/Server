@@ -27,6 +27,7 @@ class LobbyControllerTests {
                 currentTurnIndex = 0,
                 turnPhase = org.machikoro.server.domain.enums.TurnPhase.ROLL_DICE,
                 lastDiceRoll = null,
+                hasPurchasedThisTurn = false,
                 roundNumber = 1
             )
         )

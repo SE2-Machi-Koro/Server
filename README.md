@@ -73,6 +73,20 @@ Exposed entities are object-oriented wrappers around a single database row. They
 via delegated properties and handle the persistence mechanics internally. Entities are strictly internal to the database
 layer — they are always converted into domain models before being passed to services or controllers.
 
+### Domain Models
+
+Domain models represent the data used in the application's core business logic.
+
+They are pure Kotlin data classes that encapsulate business state independently of persistence frameworks and transport layers. These models are used primarily by the service layer to implement game rules and manage the overall game state.
+
+Key characteristics:
+
+- Encapsulate pure business data independent of persistence and frameworks
+- Used by the service layer to implement game logic
+- Represent the current game state and rule-related state transitions
+- Do not contain database logic or persistence concerns
+- Can be used as a foundation for DTOs when appropriate, though DTOs should remain transport-focused
+
 ### Data Transfer Objects (DTOs)
 
 DTOs are simple objects used exclusively to carry data between the server and clients. They define the shape of requests

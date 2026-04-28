@@ -21,6 +21,7 @@ class GameEntity(id: EntityID<Int>) : IntEntity(id) {
     var turnPhase by Games.turnPhase
     var lastDiceRoll by Games.lastDiceRoll
     var roundNumber by Games.roundNumber
+    var hasPurchasedThisTurn by Games.hasPurchasedThisTurn
 
     /**
      * Converts this database entity into a domain model
@@ -37,6 +38,7 @@ class GameEntity(id: EntityID<Int>) : IntEntity(id) {
         currentTurnIndex = currentTurnIndex,
         turnPhase = turnPhase,
         lastDiceRoll = lastDiceRoll,
-        roundNumber = roundNumber
+        roundNumber = roundNumber,
+        hasPurchasedThisTurn = hasPurchasedThisTurn
     )
 }

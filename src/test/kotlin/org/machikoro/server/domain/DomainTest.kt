@@ -88,6 +88,7 @@ class DomainTest {
             currentTurnIndex = 0,
             turnPhase = TurnPhase.ROLL_DICE,
             lastDiceRoll = null,
+            hasPurchasedThisTurn = false,
             roundNumber = 1
         )
 
