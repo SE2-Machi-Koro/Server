@@ -1,7 +1,9 @@
 package org.machikoro.server.service
 
 import org.machikoro.server.dao.GameDao
+import org.machikoro.server.dao.GameMarketplaceDao
 import org.machikoro.server.dao.PlayerDao
+import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
@@ -13,7 +15,9 @@ import org.springframework.stereotype.Service
 @Service
 class LobbyService(
     private val gameDao: GameDao,
-    private val playerDao: PlayerDao
+    private val playerDao: PlayerDao,
+    private val gameMarketplaceDao: GameMarketplaceDao,
+    private val playerLandmarkDao: PlayerLandmarkDao,
 ) {
 
     private val lobbyLocks = mutableMapOf<Int, Any>()
@@ -38,8 +42,15 @@ class LobbyService(
 
     fun startGame(gameId: Int): GameModel {
         val game = gameDao.findById(gameId) ?: throw GameNotFoundException("Game with id $gameId not found")
+        val players = playerDao.getPlayers(gameId)
+
         gameDao.updateStatus(gameId, GameStatus.IN_PROGRESS)
-        // Here you would initialize the game state, e.g., by creating the initial deck of cards, etc.
+
+        gameMarketplaceDao.initForGame(gameId)
+        players.forEach { player ->
+            playerLandmarkDao.initForPlayer(player.id)
+        }
+
         return game.copy(status = GameStatus.IN_PROGRESS)
     }
 }
