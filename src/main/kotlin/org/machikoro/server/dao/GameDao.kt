@@ -8,21 +8,10 @@ import org.machikoro.server.database.entities.UserEntity
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.GameModel
+import org.machikoro.server.domain.utils.LobbyCodeGenerator
 import org.machikoro.server.exception.GameNotFoundException
 import org.springframework.stereotype.Repository
 
-/**
- * Data Access Object responsible for interacting with the database
- * - Encapsulated all database operations
- * - Uses Exposed entities and transactions to access persistence layer
- * - Converts database entities into domain models via toModel()
- *
- * - Only layer that should directly access Exposed/DB tables
- * - Returns domain models instead of entities to keep persistence isolated
- * - All operations are executed inside a transaction
- *
- * DAOs are used by the service layer to retrieve and modify the game state
- */
 @Repository
 class GameDao {
 
@@ -48,7 +37,7 @@ class GameDao {
      * - turnPhase = ROLL_DICE
      * - roundNumber = 1
      */
-    fun create(hostUserId: Int): Int = transaction {
+    fun create(hostUserId: Int, lobbyCode: String = generateUniqueLobbyCode(), maxPlayers: Int = 4): Int = transaction {
         GameEntity.new {
             hostUser = UserEntity.findById(hostUserId)
                 ?: error("User $hostUserId not found")
@@ -57,7 +46,23 @@ class GameDao {
             currentTurnIndex = 0
             roundNumber = 1
             lastDiceRoll = null
+            this.lobbyCode = lobbyCode
+            this.maxPlayers = maxPlayers
         }.id.value
+    }
+
+    private fun generateUniqueLobbyCode(): String {
+        var code: String
+
+        do {
+            code = LobbyCodeGenerator.generate()
+        } while (existsByLobbyCode(code))
+
+        return code
+    }
+
+    fun existsByLobbyCode(code: String): Boolean = transaction {
+        !GameEntity.find { Games.lobbyCode eq code }.empty()
     }
 
     /**

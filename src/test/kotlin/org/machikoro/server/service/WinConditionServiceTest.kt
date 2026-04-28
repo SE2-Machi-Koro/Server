@@ -41,7 +41,7 @@ class WinConditionServiceTest {
     @Test
     fun `detectWinner returns null for a game with no players`() {
         val gameId = 1
-        whenever(playerDao.findByGameId(gameId)).thenReturn(emptyList())
+        whenever(playerDao.getPlayers(gameId)).thenReturn(emptyList())
 
         assertNull(service.detectWinner(gameId))
     }
@@ -49,7 +49,7 @@ class WinConditionServiceTest {
     @Test
     fun `detectWinner returns null when no player has built all landmarks`() {
         val gameId = 1
-        whenever(playerDao.findByGameId(gameId)).thenReturn(listOf(player(1), player(2)))
+        whenever(playerDao.getPlayers(gameId)).thenReturn(listOf(player(1), player(2)))
         whenever(playerLandmarkDao.allBuilt(1)).thenReturn(false)
         whenever(playerLandmarkDao.allBuilt(2)).thenReturn(false)
 
@@ -60,7 +60,7 @@ class WinConditionServiceTest {
     fun `detectWinner returns the winning player`() {
         val gameId = 1
         val winner = player(2)
-        whenever(playerDao.findByGameId(gameId)).thenReturn(listOf(player(1), winner, player(3)))
+        whenever(playerDao.getPlayers(gameId)).thenReturn(listOf(player(1), winner, player(3)))
         whenever(playerLandmarkDao.allBuilt(1)).thenReturn(false)
         whenever(playerLandmarkDao.allBuilt(2)).thenReturn(true)
 
@@ -70,7 +70,7 @@ class WinConditionServiceTest {
     @Test
     fun `detectWinner short-circuits and does not check players after the first winner`() {
         val gameId = 1
-        whenever(playerDao.findByGameId(gameId)).thenReturn(listOf(player(1), player(2), player(3)))
+        whenever(playerDao.getPlayers(gameId)).thenReturn(listOf(player(1), player(2), player(3)))
         whenever(playerLandmarkDao.allBuilt(1)).thenReturn(false)
         whenever(playerLandmarkDao.allBuilt(2)).thenReturn(true)
 

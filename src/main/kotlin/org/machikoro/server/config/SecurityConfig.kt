@@ -28,6 +28,14 @@ class SecurityConfig {
                 auth.requestMatchers("/", "/index.html", "/css/**", "/js/**", "/webjars/**").permitAll()
                 auth.requestMatchers("/ws", "/ws/**", "/ws-sockjs", "/ws-sockjs/**").permitAll()
                 auth.requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                auth.requestMatchers(
+                    "/swagger-ui.html",
+                    "/swagger-ui/**",
+                    "/api-docs",
+                    "/api-docs/**",
+                    "/v3/api-docs",
+                    "/v3/api-docs/**"
+                ).permitAll()
                 auth.requestMatchers("/api/**").authenticated()
                 auth.anyRequest().authenticated()
             }

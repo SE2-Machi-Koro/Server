@@ -54,18 +54,6 @@ class PlayerDao {
     }
 
     /**
-     * Finds the active player in a game by turnOrder index
-     */
-    fun findActivePlayer(gameId: Int, turnOrder: Int): PlayerModel? = transaction {
-        PlayerEntity.find {
-            (Players.gameId eq gameId) and (Players.turnOrder eq turnOrder)
-        }.singleOrNull()?.toModel()
-    }
-
-
-
-
-    /**
      * Creates a new player entry in a game
      * Initializes:
      * - turnOrder -> determines position in turn sequence
