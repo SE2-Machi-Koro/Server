@@ -52,8 +52,8 @@ class WebSocketController(
         return WebSocketMessage(
             type = MessageType.ROLL_DICE,
             sender = "SERVER",
-            content = "Player ${request.playerId} rolled: $result",
-            payload = result
+            content = "Player ${request.playerId} rolled: ${result.total}",
+            payload = mapOf("dice" to result.dice, "total" to result.total)
         )
     }
 }

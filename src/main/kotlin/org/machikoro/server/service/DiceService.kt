@@ -6,6 +6,7 @@ import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.domain.enums.LandmarkType
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.dto.RollDiceRequest
+import org.machikoro.server.dto.RollDiceResponse
 import org.machikoro.server.exception.CustomWebSocketException
 import org.springframework.stereotype.Service
 
@@ -15,15 +16,7 @@ class DiceService(
     private val playerDao: PlayerDao,
     private val playerLandmarkDao: PlayerLandmarkDao
 ) {
-    /**
-     * Validates and processes a dice roll request.
-     * - Checks if the game exists
-     * - Checks if it's the correct turn phase (ROLL_DICE)
-     * - Checks if the requesting player is the active player
-     * - Checks if player owns Train Station before allowing two dice
-     * - Rolls one or two dice and persists the result
-     */
-    fun rollDice(request: RollDiceRequest): Int {
+    fun rollDice(request: RollDiceRequest): RollDiceResponse {
         val game = gameDao.findById(request.gameId)
             ?: throw CustomWebSocketException("GAME_NOT_FOUND", "Game ${request.gameId} not found")
 
@@ -48,14 +41,15 @@ class DiceService(
             }
         }
 
-        val diceRoll = if (request.rollTwoDice) {
-            (1..6).random() + (1..6).random()
+        val dice = if (request.rollTwoDice) {
+            listOf((1..6).random(), (1..6).random())
         } else {
-            (1..6).random()
+            listOf((1..6).random())
         }
+        val total = dice.sum()
 
-        gameDao.updateAfterRoll(request.gameId, diceRoll, TurnPhase.RESOLVE_EFFECTS)
+        gameDao.updateAfterRoll(request.gameId, total, TurnPhase.RESOLVE_EFFECTS)
 
-        return diceRoll
+        return RollDiceResponse(dice = dice, total = total)
     }
 }
