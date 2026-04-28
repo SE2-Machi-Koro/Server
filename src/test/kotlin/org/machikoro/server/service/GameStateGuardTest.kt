@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
@@ -22,6 +23,8 @@ class GameStateGuardTest {
         id = id,
         status = status,
         hostUserId = 1,
+        lobbyCode = "ABC1234",
+        maxPlayers = 4,
         currentTurnIndex = 0,
         turnPhase = TurnPhase.ROLL_DICE,
         lastDiceRoll = null,
@@ -65,6 +68,60 @@ class GameStateGuardTest {
 
         assertThrows(GameNotFoundException::class.java) {
             guard.ensureGameIsRunning(gameId)
+        }
+    }
+
+    @Test
+    fun `ensureGameIsFinished does nothing if game is finished`() {
+        val gameId = 1
+        whenever(gameDao.findById(gameId)).thenReturn(
+            GameModel(
+                id = gameId,
+                status = GameStatus.FINISHED,
+                hostUserId = 1,
+                currentTurnIndex = 0,
+                turnPhase = TurnPhase.ROLL_DICE,
+                lastDiceRoll = null,
+                roundNumber = 1,
+                lobbyCode = "",
+                hasPurchasedThisTurn = false,
+                maxPlayers = 2
+            )
+        )
+
+        guard.ensureGameIsFinished(gameId)
+    }
+
+    @Test
+    fun `ensureGameIsFinished throws if game is not finished`() {
+        val gameId = 1
+        whenever(gameDao.findById(gameId)).thenReturn(
+            GameModel(
+                id = gameId,
+                status = GameStatus.IN_PROGRESS,
+                hostUserId = 1,
+                currentTurnIndex = 0,
+                turnPhase = TurnPhase.ROLL_DICE,
+                lastDiceRoll = null,
+                roundNumber = 1,
+                lobbyCode = "",
+                hasPurchasedThisTurn = false,
+                maxPlayers = 2
+            )
+        )
+
+        assertThrows<CustomWebSocketException> {
+            guard.ensureGameIsFinished(gameId)
+        }
+    }
+
+    @Test
+    fun `ensureGameIsFinished throws if game not found`() {
+        val gameId = 1
+        whenever(gameDao.findById(gameId)).thenReturn(null)
+
+        assertThrows<GameNotFoundException> {
+            guard.ensureGameIsFinished(gameId)
         }
     }
 }

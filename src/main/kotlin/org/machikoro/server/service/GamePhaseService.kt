@@ -2,6 +2,7 @@ package org.machikoro.server.service
 
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.PlayerDao
+import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
 import org.springframework.stereotype.Service
 
@@ -36,7 +37,7 @@ class GamePhaseService(
         val game = gameStateGuard.ensureGameIsRunning(gameId)
         check(game.turnPhase == TurnPhase.BUY_OR_BUILD) { "Game is not in BUY_OR_BUILD phase" }
 
-        val players = playerDao.findByGameId(gameId)
+        val players = playerDao.getPlayers(gameId)
         check(players.isNotEmpty()) { "Game $gameId has no players" }
 
         gameDao.updateTurnPhase(gameId, TurnPhase.END_TURN)
@@ -46,5 +47,9 @@ class GamePhaseService(
 
         gameDao.advanceTurn(gameId, nextTurnIndex, nextRoundNumber)
         return TurnPhase.ROLL_DICE
+    }
+
+    fun finishGame(gameId: Int) {
+        gameDao.updateStatus(gameId, GameStatus.FINISHED)
     }
 }

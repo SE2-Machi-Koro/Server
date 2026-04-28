@@ -47,7 +47,7 @@ class PurchaseService(
             )
         }
 
-        val activePlayer = playerDao.findByGameId(gameId).getOrNull(game.currentTurnIndex)
+        val activePlayer = playerDao.getPlayers(gameId).getOrNull(game.currentTurnIndex)
             ?: throw CustomWebSocketException(
                 errorCode = "ACTIVE_PLAYER_NOT_FOUND",
                 message = "Could not resolve the active player for game $gameId",

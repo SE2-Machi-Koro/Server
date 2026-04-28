@@ -44,7 +44,7 @@ fun initDatabase(dataSource: DataSource) {
      * - If something fails -> Rollback
      */
     transaction {
-        SchemaUtils.createMissingTablesAndColumns(
+        SchemaUtils.create(
             Cards,
             Landmarks,
             Users,

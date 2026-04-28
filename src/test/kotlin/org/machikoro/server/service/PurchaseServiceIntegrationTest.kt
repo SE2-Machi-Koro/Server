@@ -74,6 +74,7 @@ class PurchaseServiceIntegrationTest : AbstractDBSetup() {
                 it[diceMax] = 3
                 it[income] = 1
             }
+
             Landmarks.insert {
                 it[landmarkType] = LandmarkType.TRAIN_STATION
                 it[name] = "Train Station"
@@ -92,21 +93,31 @@ class PurchaseServiceIntegrationTest : AbstractDBSetup() {
                 it[status] = GameStatus.IN_PROGRESS
                 it[hostUserId] = user1Id
                 it[currentTurnIndex] = 0
+                it[lobbyCode] = (1000000..9999999).random().toString()
+                it[maxPlayers] = 4
                 it[turnPhase] = TurnPhase.BUY_OR_BUILD
                 it[lastDiceRoll] = 2
                 it[roundNumber] = 1
                 it[hasPurchasedThisTurn] = false
             } get Games.id).value
 
-            activePlayerId = playerDao.create(gameId, user1Id, 0)
-            playerDao.create(gameId, user2Id, 1)
+            // Updated for new PlayerDao API
+            activePlayerId = playerDao.addPlayer(gameId, user1Id).id
+            playerDao.addPlayer(gameId, user2Id)
+
+            // Override default starting coins (3) for test setup
             playerDao.updateCoins(activePlayerId, 6)
         }
     }
 
     @Test
     fun `establishment purchase updates coins ownership supply and purchase flag`() {
-        purchaseService.purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.BAKERY, null)
+        purchaseService.purchase(
+            gameId,
+            PurchaseType.ESTABLISHMENT,
+            CardType.BAKERY,
+            null
+        )
 
         val player = playerDao.findById(activePlayerId)!!
         val ownedCard = playerCardDao.findByPlayerId(activePlayerId).single()
@@ -123,10 +134,16 @@ class PurchaseServiceIntegrationTest : AbstractDBSetup() {
 
     @Test
     fun `landmark purchase updates coins built state and purchase flag`() {
-        purchaseService.purchase(gameId, PurchaseType.LANDMARK, null, LandmarkType.TRAIN_STATION)
+        purchaseService.purchase(
+            gameId,
+            PurchaseType.LANDMARK,
+            null,
+            LandmarkType.TRAIN_STATION
+        )
 
         val player = playerDao.findById(activePlayerId)!!
-        val landmark = playerLandmarkDao.findByPlayerIdAndType(activePlayerId, LandmarkType.TRAIN_STATION)!!
+        val landmark = playerLandmarkDao
+            .findByPlayerIdAndType(activePlayerId, LandmarkType.TRAIN_STATION)!!
         val game = gameDao.findById(gameId)!!
 
         assertEquals(2, player.coins)
@@ -137,8 +154,18 @@ class PurchaseServiceIntegrationTest : AbstractDBSetup() {
 
     @Test
     fun `advanceTurn resets purchase flag for next turn`() {
-        purchaseService.purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.BAKERY, null)
-        gameDao.advanceTurn(gameId, nextTurnIndex = 1, roundNumber = 1)
+        purchaseService.purchase(
+            gameId,
+            PurchaseType.ESTABLISHMENT,
+            CardType.BAKERY,
+            null
+        )
+
+        gameDao.advanceTurn(
+            gameId,
+            nextTurnIndex = 1,
+            roundNumber = 1
+        )
 
         assertFalse(gameDao.findById(gameId)!!.hasPurchasedThisTurn)
     }

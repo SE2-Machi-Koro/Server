@@ -26,7 +26,7 @@ class PlayerLandmarkDaoTest : AbstractDBSetup() {
     fun seed() {
         val userId = userDao.create("landmark_user")
         val gameId = gameDao.create(userId)
-        playerId = playerDao.create(gameId, userId, turnOrder = 0)
+        playerId = playerDao.addPlayer(gameId, userId).id
     }
 
     @AfterEach
