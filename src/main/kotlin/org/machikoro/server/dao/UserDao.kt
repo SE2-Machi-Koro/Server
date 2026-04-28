@@ -1,10 +1,13 @@
 package org.machikoro.server.dao
 
+import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.plus
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import org.jetbrains.exposed.v1.jdbc.insertAndGetId
+import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
-import org.machikoro.server.database.entities.UserEntity
 import org.machikoro.server.database.Users
 import org.machikoro.server.domain.models.UserModel
 import org.springframework.stereotype.Repository
@@ -12,11 +15,22 @@ import org.springframework.stereotype.Repository
 @Repository
 class UserDao {
 
+    private fun ResultRow.toModel() = UserModel(
+        id = this[Users.id].value,
+        username = this[Users.username],
+        sessionToken = this[Users.sessionToken],
+        totalWins = this[Users.totalWins],
+        totalGamesPlayed = this[Users.totalGamesPlayed]
+    )
+
     /**
      * Finds a specific user by their ID
      */
     fun findById(id: Int): UserModel? = transaction {
-        UserEntity.findById(id)?.toModel()
+        Users.selectAll()
+            .where { Users.id eq id }
+            .singleOrNull()
+            ?.toModel()
     }
 
     /**
@@ -24,7 +38,8 @@ class UserDao {
      * Return null if not found
      */
     fun findByUsername(username: String): UserModel? = transaction {
-        UserEntity.find { Users.username eq username }
+        Users.selectAll()
+            .where { Users.username eq username }
             .singleOrNull()
             ?.toModel()
     }
@@ -34,7 +49,8 @@ class UserDao {
      * Otherwise return null
      */
     fun findBySessionToken(token: String): UserModel? = transaction {
-        UserEntity.find { Users.sessionToken eq token }
+        Users.selectAll()
+            .where { Users.sessionToken eq token }
             .singleOrNull()
             ?.toModel()
     }
@@ -44,12 +60,12 @@ class UserDao {
      * Initializes gameplay statistics
      */
     fun create(username: String): Int = transaction {
-        UserEntity.new {
-            this.username = username
-            this.sessionToken = null
-            this.totalWins = 0
-            this.totalGamesPlayed = 0
-        }.id.value
+        Users.insertAndGetId {
+            it[Users.username] = username
+            it[Users.sessionToken] = null
+            it[Users.totalWins] = 0
+            it[Users.totalGamesPlayed] = 0
+        }.value
     }
 
     /**
@@ -58,7 +74,9 @@ class UserDao {
      * pass 'null' to invalidate the session when the user logs out
      */
     fun updateSessionToken(id: Int, token: String?): Unit = transaction {
-        UserEntity.findById(id)?.sessionToken = token
+        Users.update({ Users.id eq id }) {
+            it[Users.sessionToken] = token
+        }
     }
 
     /**
@@ -83,13 +101,13 @@ class UserDao {
      * Finds all registered users in the system
      */
     fun findAll(): List<UserModel> = transaction {
-        UserEntity.all().map { it.toModel() }
+        Users.selectAll().map { it.toModel() }
     }
 
     /**
      * Deletes a user by their ID
      */
     fun delete(id: Int): Unit = transaction {
-        UserEntity.findById(id)?.delete()
+        Users.deleteWhere { Users.id eq id }
     }
 }
