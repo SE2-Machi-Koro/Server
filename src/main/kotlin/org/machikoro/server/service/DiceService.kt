@@ -24,7 +24,8 @@ class DiceService(
             throw CustomWebSocketException("WRONG_PHASE", "It's not the roll dice phase")
         }
 
-        val activePlayer = playerDao.findActivePlayer(request.gameId, game.currentTurnIndex)
+        val activePlayer = playerDao.findByGameId(request.gameId)
+            .getOrNull(game.currentTurnIndex)
             ?: throw CustomWebSocketException("PLAYER_NOT_FOUND", "Active player not found")
 
         if (activePlayer.id != request.playerId) {
