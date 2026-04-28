@@ -31,7 +31,9 @@ class DiceServiceTests {
         currentTurnIndex = 0,
         turnPhase = TurnPhase.ROLL_DICE,
         lastDiceRoll = null,
-        roundNumber = 1
+        roundNumber = 1,
+        lobbyCode = "ABC123",
+        maxPlayers = 4
     )
 
     private val activePlayer = PlayerModel(
@@ -43,14 +45,16 @@ class DiceServiceTests {
     )
 
     @Test
-    fun rollDiceShouldReturnValueBetween1And6() {
+    fun rollDiceShouldReturnSingleDieValueBetween1And6() {
         `when`(gameDao.findById(1)).thenReturn(defaultGame)
-        `when`(playerDao.findActivePlayer(1, 0)).thenReturn(activePlayer)
+        `when`(playerDao.getPlayers(1)).thenReturn(listOf(activePlayer))
 
         val request = RollDiceRequest(gameId = 1, playerId = 2)
         val result = diceService.rollDice(request)
 
-        assert(result in 1..6)
+        assertEquals(1, result.dice.size)
+        assert(result.total in 1..6)
+        assertEquals(result.dice.sum(), result.total)
     }
 
     @Test
@@ -78,9 +82,9 @@ class DiceServiceTests {
     @Test
     fun rollDiceShouldThrowWhenNotActivePlayer() {
         `when`(gameDao.findById(1)).thenReturn(defaultGame)
-        `when`(playerDao.findActivePlayer(1, 0)).thenReturn(activePlayer)
+        `when`(playerDao.getPlayers(1)).thenReturn(listOf(activePlayer))
 
-        val request = RollDiceRequest(gameId = 1, playerId = 99) // falsche playerId
+        val request = RollDiceRequest(gameId = 1, playerId = 99)
 
         assertThrows(CustomWebSocketException::class.java) {
             diceService.rollDice(request)
@@ -90,7 +94,7 @@ class DiceServiceTests {
     @Test
     fun rollDiceShouldThrowWhenRollTwoDiceWithoutTrainStation() {
         `when`(gameDao.findById(1)).thenReturn(defaultGame)
-        `when`(playerDao.findActivePlayer(1, 0)).thenReturn(activePlayer)
+        `when`(playerDao.getPlayers(1)).thenReturn(listOf(activePlayer))
         `when`(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.TRAIN_STATION))
             .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.TRAIN_STATION, isBuilt = false))
 
@@ -102,15 +106,17 @@ class DiceServiceTests {
     }
 
     @Test
-    fun rollTwoDiceShouldReturnValueBetween2And12WhenTrainStationOwned() {
+    fun rollTwoDiceShouldReturnTwoDiceValuesBetween2And12WhenTrainStationOwned() {
         `when`(gameDao.findById(1)).thenReturn(defaultGame)
-        `when`(playerDao.findActivePlayer(1, 0)).thenReturn(activePlayer)
+        `when`(playerDao.getPlayers(1)).thenReturn(listOf(activePlayer))
         `when`(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.TRAIN_STATION))
             .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.TRAIN_STATION, isBuilt = true))
 
         val request = RollDiceRequest(gameId = 1, playerId = 2, rollTwoDice = true)
         val result = diceService.rollDice(request)
 
-        assert(result in 2..12)
+        assertEquals(2, result.dice.size)
+        assert(result.total in 2..12)
+        assertEquals(result.dice.sum(), result.total)
     }
 }
