@@ -6,7 +6,9 @@ import org.machikoro.server.dto.AdvancePhaseRequest
 import org.machikoro.server.dto.EndTurnRequest
 import org.machikoro.server.dto.LeaveFinishedGameRequest
 import org.machikoro.server.dto.MessageType
+import org.machikoro.server.dto.RollDiceRequest
 import org.machikoro.server.dto.WebSocketMessage
+import org.machikoro.server.service.DiceService
 import org.machikoro.server.service.GamePhaseService
 import org.machikoro.server.service.LeaveFinishedGameService
 import org.machikoro.server.service.WinConditionService
@@ -21,7 +23,8 @@ class GameController(
     private val gamePhaseService: GamePhaseService,
     private val messagingTemplate: SimpMessagingTemplate,
     private val leaveFinishedGameService: LeaveFinishedGameService,
-    private val winConditionService: WinConditionService
+    private val winConditionService: WinConditionService,
+    private val diceService: DiceService
 ) {
     private val logger = LoggerFactory.getLogger(GameController::class.java)
 
@@ -29,7 +32,7 @@ class GameController(
     fun advancePhase(@Payload request: AdvancePhaseRequest) {
         val newPhase = gamePhaseService.advancePhase(request.gameId)
         logger.info("Advanced game ${request.gameId} to phase $newPhase")
-        broadcastPhase(newPhase)
+        broadcastPhase(request.gameId, newPhase)
     }
 
     @MessageMapping("/game.endTurn")
@@ -39,22 +42,57 @@ class GameController(
         if (winner != null) {
             logger.info("Game ${request.gameId} has ended. Winner: ${winner.id}")
             gamePhaseService.finishGame(request.gameId)
-            broadcastWinner(winner)
+            broadcastWinner(request.gameId, winner)
             return
         }
+
         val newPhase = gamePhaseService.endTurn(request.gameId)
         logger.info("Ended turn for game ${request.gameId}, new phase $newPhase")
-        broadcastPhase(newPhase)
+        broadcastPhase(request.gameId, newPhase)
     }
+
     @MessageMapping("/game.leave")
     fun leaveFinishedGame(@Payload request: LeaveFinishedGameRequest) {
         leaveFinishedGameService.leaveFinishedGame(request.gameId, request.playerId)
         logger.info("${request.playerId} left game ${request.gameId}")
         broadcastPlayerLeftFinishedGame(request.gameId, request.playerId)
     }
-    private fun broadcastPhase(newPhase: TurnPhase) {
+
+    /**
+     * Handle dice roll requests and broadcast result to the specific game topic.
+     * Message is sent to /app/game.rollDice and broadcast to /topic/game/{gameId}
+     */
+    @MessageMapping("/game.rollDice")
+    fun rollDice(@Payload request: RollDiceRequest) {
+        val gameTopic = "/topic/game/${request.gameId}"
+        logger.info("Roll dice request from player ${request.playerId} in game ${request.gameId}")
+        try {
+            val result = diceService.rollDice(request)
+            messagingTemplate.convertAndSend(
+                gameTopic,
+                WebSocketMessage(
+                    type = MessageType.ROLL_DICE,
+                    sender = "SERVER",
+                    content = "Player ${request.playerId} rolled: ${result.total}",
+                    payload = mapOf("dice" to result.dice, "total" to result.total)
+                )
+            )
+        } catch (e: Exception) {
+            logger.error("Failed to roll dice for game ${request.gameId}", e)
+            messagingTemplate.convertAndSend(
+                gameTopic,
+                WebSocketMessage(
+                    type = MessageType.ERROR,
+                    sender = "SERVER",
+                    payload = mapOf("event" to "ROLL_FAILED", "message" to (e.message ?: "Unknown error"))
+                )
+            )
+        }
+    }
+
+    private fun broadcastPhase(gameId: Int, newPhase: TurnPhase) {
         messagingTemplate.convertAndSend(
-            "/topic/public",
+            "/topic/game/${gameId}",
             WebSocketMessage(
                 type = MessageType.GAME_ACTION,
                 sender = "server",
@@ -73,9 +111,10 @@ class GameController(
             )
         )
     }
-    private fun broadcastWinner(winner: PlayerModel) {
+
+    private fun broadcastWinner(gameId: Int, winner: PlayerModel) {
         messagingTemplate.convertAndSend(
-            "/topic/public",
+            "/topic/game/${gameId}",
             WebSocketMessage(
                 type = MessageType.GAME_END,
                 sender = "server",

@@ -10,6 +10,7 @@ import org.springframework.messaging.handler.annotation.MessageMapping
 import org.springframework.messaging.handler.annotation.Payload
 import org.springframework.messaging.handler.annotation.SendTo
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor
+import org.springframework.messaging.simp.SimpMessagingTemplate
 import org.springframework.stereotype.Controller
 import org.slf4j.LoggerFactory
 
@@ -17,10 +18,15 @@ import org.slf4j.LoggerFactory
 class WebSocketController(
     private val diceService: DiceService,
     private val lobbyService: LobbyService,
-    private val userDao: UserDao
+    private val userDao: UserDao,
+    private val messagingTemplate: SimpMessagingTemplate
 ) {
     private val logger = LoggerFactory.getLogger(WebSocketController::class.java)
 
+    /**
+     * Handle incoming chat messages and broadcast to all subscribers.
+     * Message is sent to /app/chat.send and broadcast to /topic/public
+     */
     @MessageMapping("/chat.send")
     @SendTo("/topic/public")
     fun sendMessage(@Payload message: WebSocketMessage): WebSocketMessage {
@@ -28,6 +34,10 @@ class WebSocketController(
         return message
     }
 
+    /**
+     * Handle user join events and broadcast to all subscribers.
+     * Stores username in session for later reference during disconnect.
+     */
     @MessageMapping("/chat.addUser")
     @SendTo("/topic/public")
     fun addUser(
@@ -41,21 +51,5 @@ class WebSocketController(
             lobbyService.addUserToLobby(message.gameId, user.id)
         }
         return message
-    }
-
-    @MessageMapping("/game.rollDice")
-    @SendTo("/topic/game")
-    fun rollDice(
-        @Payload request: RollDiceRequest,
-        headerAccessor: SimpMessageHeaderAccessor
-    ): WebSocketMessage {
-        logger.info("Roll dice request from player ${request.playerId} in game ${request.gameId}")
-        val result = diceService.rollDice(request)
-        return WebSocketMessage(
-            type = MessageType.ROLL_DICE,
-            sender = "SERVER",
-            content = "Player ${request.playerId} rolled: ${result.total}",
-            payload = mapOf("dice" to result.dice, "total" to result.total)
-        )
     }
 }
