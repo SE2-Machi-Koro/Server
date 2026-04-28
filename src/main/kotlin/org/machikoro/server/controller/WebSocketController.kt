@@ -1,25 +1,19 @@
 package org.machikoro.server.controller
 
 import org.machikoro.server.dao.UserDao
-import org.machikoro.server.dto.MessageType
-import org.machikoro.server.dto.RollDiceRequest
 import org.machikoro.server.dto.WebSocketMessage
-import org.machikoro.server.service.DiceService
 import org.machikoro.server.service.LobbyService
 import org.springframework.messaging.handler.annotation.MessageMapping
 import org.springframework.messaging.handler.annotation.Payload
 import org.springframework.messaging.handler.annotation.SendTo
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor
-import org.springframework.messaging.simp.SimpMessagingTemplate
 import org.springframework.stereotype.Controller
 import org.slf4j.LoggerFactory
 
 @Controller
 class WebSocketController(
-    private val diceService: DiceService,
     private val lobbyService: LobbyService,
     private val userDao: UserDao,
-    private val messagingTemplate: SimpMessagingTemplate
 ) {
     private val logger = LoggerFactory.getLogger(WebSocketController::class.java)
 
