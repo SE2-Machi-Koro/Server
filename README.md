@@ -22,7 +22,7 @@ PostgreSQL. Designed for reliability, scalability, and developer productivity.
 - **Language:** Kotlin 2.2.21
 - **Framework:** Spring Boot 4.0.3
 - **Database:** PostgreSQL 18.0
-- **ORM:** JetBrains Exposed 1.0.0
+- **ORM:** JetBrains Exposed 1.0.0 (DSL only)
 - **Real-Time Communication:** Spring WebSockets (STOMP / SockJS)
 - **API Documentation:** Springdoc OpenAPI (Swagger UI) 3.0.2
 - **Testing:** JUnit 5, Mockito-Kotlin, Testcontainers
@@ -36,7 +36,7 @@ The project follows a standard multi-layer Spring Boot architecture:
 - **Services (`service/`):** Contain the core game logic (`GamePhaseService`, `EarningsService`, `WinConditionService`).
 - **Domain Models (`domain/`):** Pure Kotlin data classes representing the business logic and game state (`GameModel`,
   `PlayerModel`, Enums like `TurnPhase`).
-- **Data Access (`database/`):** Defines database tables and entities using Exposed ORM (`GameEntity`, `CardEntity`).
+- **Data Access (`dao/`):** DAOs interact directly with the database using Exposed DSL and map raw results to domain models.
 - **DTOs (`dto/`):** Data Transfer Objects for client-server communication.
 - **Configuration (`config/`):** Setup for WebSockets, Spring Security, and OpenAPI.
 
@@ -51,33 +51,78 @@ layer to retrieve and modify state.
 Key responsibilities:
 
 - Execute all queries inside a transaction
-- Use JetBrains Exposed (either DSL or Entity API) to interact with the persistence layer
-- Return domain models instead of raw entities or rows, keeping persistence details isolated from the rest of the
-  application
+- Use JetBrains Exposed DSL to interact with the persistence layer
+- Return domain models instead of raw rows, keeping persistence details isolated from the rest of the application
 
-### Exposed DSL vs. Entity API
+### Exposed DSL
 
-This project uses JetBrains Exposed, which offers two complementary styles for database access:
+This project uses JetBrains Exposed exclusively in DSL (Domain-Specific Language) mode — a type-safe, SQL-like query
+builder that gives full, explicit control over every database operation.
 
-- **DSL (Domain-Specific Language):** A type-safe, SQL-like query builder. Queries return raw `ResultRow` objects that
-  must be manually mapped to domain models. Best suited for complex queries, batch operations, or cases where
-  fine-grained control over SQL is needed.
+Unlike an ORM's entity/object approach, the DSL does not hide what SQL runs behind the scenes. Every query is written
+explicitly and maps directly to the SQL it produces:
 
-- **Entity API:** An object-relational mapper (ORM) style where each database row is represented as a Kotlin object (an
-  `Entity`). Properties map directly to table columns, and relationships between tables can be navigated naturally.
-  Entities are converted to domain models via a `toModel()` function before being returned outside the data layer.
+```kotlin
+// Select
+Games.selectAll()
+    .where { Games.status eq GameStatus.WAITING }
+    .map { it.toModel() }
 
-### Entities
+// Insert
+Games.insertAndGetId {
+    it[Games.lobbyCode] = "ABC123"
+    it[Games.status] = GameStatus.WAITING
+}.value
 
-Exposed entities are object-oriented wrappers around a single database row. They provide direct access to column values
-via delegated properties and handle the persistence mechanics internally. Entities are strictly internal to the database
-layer — they are always converted into domain models before being passed to services or controllers.
+// Update
+Games.update({ Games.id eq id }) {
+    it[Games.turnPhase] = TurnPhase.ROLL_DICE
+}
+
+// Delete
+Games.deleteWhere { Games.id eq id }
+```
+
+Table definitions are written as Kotlin objects and serve as the single source of truth for the schema:
+
+```kotlin
+object Games : IntIdTable("games") {
+    val lobbyCode = varchar("lobby_code", 7).uniqueIndex()
+    val status = enumerationByName("status", 20, GameStatus::class)
+    val turnPhase = enumerationByName("turn_phase", 20, TurnPhase::class)
+}
+```
+
+### ResultRow and toModel()
+
+When the DSL executes a query, it returns `ResultRow` objects — essentially a raw map of column references to their
+values for a single database row. These are internal to Exposed and must be converted into domain models before leaving
+the DAO.
+
+Each DAO defines a private `ResultRow.toModel()` extension function that performs this mapping:
+
+```kotlin
+private fun ResultRow.toModel() = GameModel(
+    id = this[Games.id].value,
+    status = this[Games.status],
+    lobbyCode = this[Games.lobbyCode],
+    turnPhase = this[Games.turnPhase]
+)
+```
+
+Column values are accessed by referencing the table column directly (e.g., `this[Games.status]`), which is fully
+type-safe — accessing a column that does not exist in the result or reading it as the wrong type is caught at compile
+time.
+
+This pattern keeps the mapping logic close to where it is used, and ensures that no Exposed types ever leak outside the
+DAO layer. Services and controllers only ever see clean domain models.
 
 ### Domain Models
 
 Domain models represent the data used in the application's core business logic.
 
-They are pure Kotlin data classes that encapsulate business state independently of persistence frameworks and transport layers. These models are used primarily by the service layer to implement game rules and manage the overall game state.
+They are pure Kotlin data classes that encapsulate business state independently of persistence frameworks and transport
+layers. These models are used primarily by the service layer to implement game rules and manage the overall game state.
 
 Key characteristics:
 
@@ -105,13 +150,13 @@ internal `GameModel` may hold additional state used purely for server-side logic
 ## Environment Configuration
 
 1. Copy the example environment file and adjust as needed:
-   ```bash
+```bash
    cp .env.example .env
-   ```
+```
 2. Edit the following required variables in `.env`:
 
    | Variable         | Description                     | 
-   |------------------|---------------------------------|
+      |------------------|---------------------------------|
    | DB_USERNAME      | PostgreSQL database username    |
    | DB_PASSWORD      | PostgreSQL database password    |
    | DB_NAME          | Database name                   |
