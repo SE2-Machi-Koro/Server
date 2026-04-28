@@ -8,14 +8,17 @@ import org.machikoro.server.dto.AdvancePhaseRequest
 import org.machikoro.server.dto.EndTurnRequest
 import org.machikoro.server.dto.LeaveFinishedGameRequest
 import org.machikoro.server.dto.MessageType
+import org.machikoro.server.dto.RollDiceRequest
+import org.machikoro.server.dto.RollDiceResponse
 import org.machikoro.server.dto.WebSocketMessage
+import org.machikoro.server.service.DiceService
 import org.machikoro.server.service.GamePhaseService
 import org.machikoro.server.service.LeaveFinishedGameService
-import org.mockito.kotlin.any
 import org.machikoro.server.service.WinConditionService
-import org.mockito.kotlin.argThat
+import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -27,7 +30,8 @@ class GameControllerTest {
     private val messagingTemplate = mock<SimpMessagingTemplate>()
     private val leaveFinishedGameService = mock<LeaveFinishedGameService>()
     private val winConditionService = mock<WinConditionService>()
-    private val controller = GameController(gamePhaseService, messagingTemplate, leaveFinishedGameService, winConditionService)
+    private val diceService = mock<DiceService>()
+    private val controller = GameController(gamePhaseService, messagingTemplate, leaveFinishedGameService, winConditionService, diceService)
 
     @Test
     fun `advancePhase delegates to service with the requested game id`() {
@@ -40,14 +44,14 @@ class GameControllerTest {
     }
 
     @Test
-    fun `advancePhase broadcasts new phase as GAME_ACTION on topic public`() {
+    fun `advancePhase broadcasts new phase as GAME_ACTION on game topic`() {
         val gameId = 42
         whenever(gamePhaseService.advancePhase(gameId)).thenReturn(TurnPhase.RESOLVE_EFFECTS)
 
         controller.advancePhase(AdvancePhaseRequest(gameId))
 
         val captor = argumentCaptor<WebSocketMessage>()
-        verify(messagingTemplate).convertAndSend(eq("/topic/public"), captor.capture())
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
 
         val message = captor.firstValue
         assertEquals(MessageType.GAME_ACTION, message.type)
@@ -66,7 +70,7 @@ class GameControllerTest {
     }
 
     @Test
-    fun `endTurn broadcasts resulting phase as GAME_ACTION on topic public`() {
+    fun `endTurn broadcasts resulting phase as GAME_ACTION on game topic`() {
         val gameId = 42
         whenever(winConditionService.detectWinner(gameId)).thenReturn(null)
         whenever(gamePhaseService.endTurn(gameId)).thenReturn(TurnPhase.ROLL_DICE)
@@ -74,7 +78,7 @@ class GameControllerTest {
         controller.endTurn(EndTurnRequest(gameId))
 
         val captor = argumentCaptor<WebSocketMessage>()
-        verify(messagingTemplate).convertAndSend(eq("/topic/public"), captor.capture())
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
 
         val message = captor.firstValue
         assertEquals(MessageType.GAME_ACTION, message.type)
@@ -89,7 +93,7 @@ class GameControllerTest {
 
         controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId))
 
-        val order = org.mockito.kotlin.inOrder(leaveFinishedGameService, messagingTemplate)
+        val order = inOrder(leaveFinishedGameService, messagingTemplate)
         order.verify(leaveFinishedGameService).leaveFinishedGame(gameId, playerId)
         order.verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), any<WebSocketMessage>())
     }
@@ -106,6 +110,7 @@ class GameControllerTest {
             controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId))
         }
     }
+
     @Test
     fun `leaveFinishedGame sends message to correct topic`() {
         val gameId = 5
@@ -115,6 +120,7 @@ class GameControllerTest {
 
         verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), any<WebSocketMessage>())
     }
+
     @Test
     fun `leaveFinishedGame payload contains correct playerId`() {
         val gameId = 3
@@ -128,22 +134,60 @@ class GameControllerTest {
         val message = captor.firstValue
         assertEquals(mapOf("playerId" to playerId), message.payload)
     }
+
     @Test
-    fun `endTurn broadcasts GAME_END when winner exists`() {
+    fun `endTurn broadcasts GAME_END on game topic when winner exists`() {
         val gameId = 42
         val winner = mock<PlayerModel>()
-
         whenever(winner.id).thenReturn(1)
         whenever(winConditionService.detectWinner(gameId)).thenReturn(winner)
 
         controller.endTurn(EndTurnRequest(gameId))
 
         val captor = argumentCaptor<WebSocketMessage>()
-        verify(messagingTemplate).convertAndSend(eq("/topic/public"), captor.capture())
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
 
         val message = captor.firstValue
         assertEquals(MessageType.GAME_END, message.type)
         assertEquals("server", message.sender)
         assertEquals(mapOf("winnerId" to 1), message.payload)
+    }
+
+    @Test
+    fun `rollDice broadcasts result to correct game topic`() {
+        val gameId = 1
+        val playerId = 2
+        val request = RollDiceRequest(gameId = gameId, playerId = playerId)
+        val rollDiceResponse = RollDiceResponse(dice = listOf(3, 4), total = 7)
+        whenever(diceService.rollDice(request)).thenReturn(rollDiceResponse)
+
+        controller.rollDice(request)
+
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+
+        val message = captor.firstValue
+        assertEquals(MessageType.ROLL_DICE, message.type)
+        assertEquals("SERVER", message.sender)
+        assertEquals("Player $playerId rolled: 7", message.content)
+        assertEquals(mapOf("dice" to listOf(3, 4), "total" to 7), message.payload)
+    }
+
+    @Test
+    fun `rollDice broadcasts error to game topic on failure`() {
+        val gameId = 1
+        val playerId = 2
+        val request = RollDiceRequest(gameId = gameId, playerId = playerId)
+        whenever(diceService.rollDice(request)).thenThrow(RuntimeException("dice exploded"))
+
+        controller.rollDice(request)
+
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+
+        val message = captor.firstValue
+        assertEquals(MessageType.ERROR, message.type)
+        assertEquals("SERVER", message.sender)
+        assertEquals(mapOf("event" to "ROLL_FAILED", "message" to "dice exploded"), message.payload)
     }
 }

@@ -13,7 +13,7 @@ import org.slf4j.LoggerFactory
 @Controller
 class WebSocketController(
     private val lobbyService: LobbyService,
-    private val userDao: UserDao
+    private val userDao: UserDao,
 ) {
     private val logger = LoggerFactory.getLogger(WebSocketController::class.java)
 
@@ -34,7 +34,10 @@ class WebSocketController(
      */
     @MessageMapping("/chat.addUser")
     @SendTo("/topic/public")
-    fun addUser(@Payload message: WebSocketMessage, headerAccessor: SimpMessageHeaderAccessor): WebSocketMessage {
+    fun addUser(
+        @Payload message: WebSocketMessage,
+        headerAccessor: SimpMessageHeaderAccessor
+    ): WebSocketMessage {
         logger.info("User ${message.sender} joined the chat")
         headerAccessor.sessionAttributes?.put("username", message.sender)
         val user = userDao.findByUsername(message.sender)

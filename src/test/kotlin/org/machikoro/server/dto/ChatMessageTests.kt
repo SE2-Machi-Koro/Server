@@ -10,14 +10,8 @@ class ChatMessageTests {
     @Test
     fun messageTypeShouldExposeAllSupportedValues() {
         val expected = setOf(
-            "CHAT",
-            "JOIN",
-            "LEAVE",
-            "GAME_START",
-            "GAME_ACTION",
-            "GAME_END",
-            "PLAYER_LEFT_FINISHED_GAME",
-            "ERROR"
+            "CHAT", "JOIN", "LEAVE", "GAME_START", "GAME_ACTION", "GAME_END",
+            "PLAYER_LEFT_FINISHED_GAME", "ERROR", "ROLL_DICE"
         )
         val actual = MessageType.entries.map { it.name }.toSet()
 
