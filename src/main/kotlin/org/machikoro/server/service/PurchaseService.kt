@@ -1,5 +1,6 @@
 package org.machikoro.server.service
 
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.machikoro.server.dao.CardDao
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.GameMarketplaceDao
@@ -32,14 +33,24 @@ class PurchaseService(
         purchaseType: PurchaseType,
         cardType: CardType?,
         landmarkType: LandmarkType?,
-    ): PurchaseResult {
+    ): PurchaseResult = transaction {
+
+        // TODO(#61): Verify the websocket caller is the active player for this game.
+        // Do not trust gameId from the client payload alone.
+
+        // TODO: Improve race-safety for hasPurchasedThisTurn using row locking
+        // (e.g. SELECT FOR UPDATE) or a conditional update to prevent double-purchase
+        // when two websocket messages arrive at nearly the same time.
+
         val game = gameStateGuard.ensureGameIsRunning(gameId)
+
         if (game.turnPhase != TurnPhase.BUY_OR_BUILD) {
             throw CustomWebSocketException(
                 errorCode = "INVALID_TURN_PHASE",
                 message = "Purchases are only allowed during BUY_OR_BUILD",
             )
         }
+
         if (game.hasPurchasedThisTurn) {
             throw CustomWebSocketException(
                 errorCode = "PURCHASE_ALREADY_MADE",
@@ -47,15 +58,30 @@ class PurchaseService(
             )
         }
 
-        val activePlayer = playerDao.getPlayers(gameId).getOrNull(game.currentTurnIndex)
+        val activePlayer = playerDao
+            .getPlayers(gameId)
+            .getOrNull(game.currentTurnIndex)
             ?: throw CustomWebSocketException(
                 errorCode = "ACTIVE_PLAYER_NOT_FOUND",
                 message = "Could not resolve the active player for game $gameId",
             )
 
-        return when (purchaseType) {
-            PurchaseType.ESTABLISHMENT -> purchaseEstablishment(gameId, activePlayer, cardType, landmarkType)
-            PurchaseType.LANDMARK -> purchaseLandmark(gameId, activePlayer, cardType, landmarkType)
+        when (purchaseType) {
+            PurchaseType.ESTABLISHMENT ->
+                purchaseEstablishment(
+                    gameId,
+                    activePlayer,
+                    cardType,
+                    landmarkType,
+                )
+
+            PurchaseType.LANDMARK ->
+                purchaseLandmark(
+                    gameId,
+                    activePlayer,
+                    cardType,
+                    landmarkType,
+                )
         }
     }
 
@@ -66,31 +92,61 @@ class PurchaseService(
         landmarkType: LandmarkType?,
     ): PurchaseResult {
         if (cardType == null || landmarkType != null) {
-            // Future rule hardening can widen malformed-request coverage here.
-            throw invalidPurchaseRequest("Establishment purchase requires cardType only")
+            throw invalidPurchaseRequest(
+                "Establishment purchase requires cardType only"
+            )
         }
 
         val card = cardDao.findByCardType(cardType)
-            ?: throw CustomWebSocketException("CARD_NOT_FOUND", "Card $cardType does not exist")
+            ?: throw CustomWebSocketException(
+                "CARD_NOT_FOUND",
+                "Card $cardType does not exist"
+            )
+
         if (activePlayer.coins < card.cost) {
-            throw CustomWebSocketException("INSUFFICIENT_COINS", "Player does not have enough coins")
+            throw CustomWebSocketException(
+                "INSUFFICIENT_COINS",
+                "Player does not have enough coins"
+            )
         }
 
         gameMarketplaceDao.initForGame(gameId)
+
         val entry = gameMarketplaceDao.findByGameIdAndType(gameId, cardType)
+
         if (entry == null || entry.quantityAvailable <= 0) {
-            throw CustomWebSocketException("CARD_UNAVAILABLE", "Card $cardType is not available in supply")
+            throw CustomWebSocketException(
+                "CARD_UNAVAILABLE",
+                "Card $cardType is not available in supply"
+            )
         }
 
-        val currentQuantity = playerCardDao.findByPlayerId(activePlayer.id)
+        val currentQuantity = playerCardDao
+            .findByPlayerId(activePlayer.id)
             .firstOrNull { it.cardType == cardType }
             ?.quantity
             ?: 0
 
-        playerDao.updateCoins(activePlayer.id, activePlayer.coins - card.cost)
-        playerCardDao.upsert(activePlayer.id, cardType, currentQuantity + 1)
-        gameMarketplaceDao.decrementQuantity(gameId, cardType)
-        gameDao.updateHasPurchasedThisTurn(gameId, true)
+        playerDao.updateCoins(
+            activePlayer.id,
+            activePlayer.coins - card.cost
+        )
+
+        playerCardDao.upsert(
+            activePlayer.id,
+            cardType,
+            currentQuantity + 1
+        )
+
+        gameMarketplaceDao.decrementQuantity(
+            gameId,
+            cardType
+        )
+
+        gameDao.updateHasPurchasedThisTurn(
+            gameId,
+            true
+        )
 
         return PurchaseResult(
             turnPhase = TurnPhase.BUY_OR_BUILD,
@@ -106,33 +162,55 @@ class PurchaseService(
         landmarkType: LandmarkType?,
     ): PurchaseResult {
         if (landmarkType == null || cardType != null) {
-            throw invalidPurchaseRequest("Landmark purchase requires landmarkType only")
+            throw invalidPurchaseRequest(
+                "Landmark purchase requires landmarkType only"
+            )
         }
 
         val landmark = landmarkDao.findByLandmarkType(landmarkType)
-            ?: throw CustomWebSocketException("LANDMARK_NOT_FOUND", "Landmark $landmarkType does not exist")
+            ?: throw CustomWebSocketException(
+                "LANDMARK_NOT_FOUND",
+                "Landmark $landmarkType does not exist"
+            )
+
         if (activePlayer.coins < landmark.cost) {
-            throw CustomWebSocketException("INSUFFICIENT_COINS", "Player does not have enough coins")
+            throw CustomWebSocketException(
+                "INSUFFICIENT_COINS",
+                "Player does not have enough coins"
+            )
         }
 
         playerLandmarkDao.initForPlayer(activePlayer.id)
-        val playerLandmark = playerLandmarkDao.findByPlayerIdAndType(activePlayer.id, landmarkType)
+
+        val playerLandmark = playerLandmarkDao
+            .findByPlayerIdAndType(activePlayer.id, landmarkType)
             ?: throw CustomWebSocketException(
                 "LANDMARK_NOT_FOUND",
-                "Landmark state for $landmarkType could not be initialized",
+                "Landmark state for $landmarkType could not be initialized"
             )
+
         if (playerLandmark.isBuilt) {
             throw CustomWebSocketException(
                 "LANDMARK_ALREADY_BUILT",
-                "Landmark $landmarkType has already been built",
+                "Landmark $landmarkType has already been built"
             )
         }
 
-        playerDao.updateCoins(activePlayer.id, activePlayer.coins - landmark.cost)
-        playerLandmarkDao.markBuilt(activePlayer.id, landmarkType)
-        gameDao.updateHasPurchasedThisTurn(gameId, true)
+        playerDao.updateCoins(
+            activePlayer.id,
+            activePlayer.coins - landmark.cost
+        )
 
-        // Future landmark effects or win-condition hooks can be added here.
+        playerLandmarkDao.markBuilt(
+            activePlayer.id,
+            landmarkType
+        )
+
+        gameDao.updateHasPurchasedThisTurn(
+            gameId,
+            true
+        )
+
         return PurchaseResult(
             turnPhase = TurnPhase.BUY_OR_BUILD,
             purchaseType = PurchaseType.LANDMARK,
@@ -141,7 +219,10 @@ class PurchaseService(
     }
 
     private fun invalidPurchaseRequest(message: String) =
-        CustomWebSocketException("INVALID_PURCHASE_REQUEST", message)
+        CustomWebSocketException(
+            "INVALID_PURCHASE_REQUEST",
+            message
+        )
 }
 
 data class PurchaseResult(
