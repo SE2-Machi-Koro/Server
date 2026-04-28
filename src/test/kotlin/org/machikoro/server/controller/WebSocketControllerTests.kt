@@ -5,21 +5,16 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import org.machikoro.server.dao.UserDao
 import org.machikoro.server.dto.MessageType
-import org.machikoro.server.dto.RollDiceRequest
-import org.machikoro.server.dto.RollDiceResponse
 import org.machikoro.server.dto.WebSocketMessage
-import org.machikoro.server.service.DiceService
 import org.machikoro.server.service.LobbyService
-import org.mockito.Mockito.`when`
 import org.mockito.kotlin.mock
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor
 
 class WebSocketControllerTests {
 
-    private val diceService = mock<DiceService>()
     private val lobbyService = mock<LobbyService>()
     private val userDao = mock<UserDao>()
-    private val controller = WebSocketController(diceService, lobbyService, userDao)
+    private val controller = WebSocketController(lobbyService, userDao)
 
     @Test
     fun sendMessageShouldReturnUnchangedMessage() {
@@ -55,21 +50,5 @@ class WebSocketControllerTests {
 
         assertEquals(message, result)
         assertNull(accessor.sessionAttributes)
-    }
-
-    @Test
-    fun rollDiceShouldReturnWebSocketMessageWithDiceResult() {
-        val request = RollDiceRequest(gameId = 1, playerId = 2)
-        val accessor = SimpMessageHeaderAccessor.create()
-        val rollDiceResponse = RollDiceResponse(dice = listOf(3, 4), total = 7)
-
-        `when`(diceService.rollDice(request)).thenReturn(rollDiceResponse)
-
-        val result = controller.rollDice(request, accessor)
-
-        assertEquals(MessageType.ROLL_DICE, result.type)
-        assertEquals("SERVER", result.sender)
-        assertEquals("Player 2 rolled: 7", result.content)
-        assertEquals(mapOf("dice" to listOf(3, 4), "total" to 7), result.payload)
     }
 }
