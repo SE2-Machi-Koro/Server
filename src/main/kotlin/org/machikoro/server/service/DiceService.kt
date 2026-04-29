@@ -14,11 +14,11 @@ import org.springframework.stereotype.Service
 class DiceService(
     private val gameDao: GameDao,
     private val playerDao: PlayerDao,
-    private val playerLandmarkDao: PlayerLandmarkDao
+    private val playerLandmarkDao: PlayerLandmarkDao,
+    private val gameStateGuard: GameStateGuard,
 ) {
     fun rollDice(request: RollDiceRequest): RollDiceResponse {
-        val game = gameDao.findById(request.gameId)
-            ?: throw CustomWebSocketException("GAME_NOT_FOUND", "Game ${request.gameId} not found")
+        val game = gameStateGuard.ensureGameIsRunning(request.gameId)
 
         if (game.turnPhase != TurnPhase.ROLL_DICE) {
             throw CustomWebSocketException("WRONG_PHASE", "It's not the roll dice phase")
