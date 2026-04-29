@@ -36,7 +36,8 @@ The project follows a standard multi-layer Spring Boot architecture:
 - **Services (`service/`):** Contain the core game logic (`GamePhaseService`, `EarningsService`, `WinConditionService`).
 - **Domain Models (`domain/`):** Pure Kotlin data classes representing the business logic and game state (`GameModel`,
   `PlayerModel`, Enums like `TurnPhase`).
-- **Data Access (`dao/`):** DAOs interact directly with the database using Exposed DSL and map raw results to domain models.
+- **Data Access (`dao/`):** DAOs interact directly with the database using Exposed DSL and map raw results to domain
+  models.
 - **DTOs (`dto/`):** Data Transfer Objects for client-server communication.
 - **Configuration (`config/`):** Setup for WebSockets, Spring Security, and OpenAPI.
 
@@ -150,13 +151,15 @@ internal `GameModel` may hold additional state used purely for server-side logic
 ## Environment Configuration
 
 1. Copy the example environment file and adjust as needed:
+
 ```bash
    cp .env.example .env
 ```
+
 2. Edit the following required variables in `.env`:
 
    | Variable         | Description                     | 
-      |------------------|---------------------------------|
+   |------------------|---------------------------------|
    | DB_USERNAME      | PostgreSQL database username    |
    | DB_PASSWORD      | PostgreSQL database password    |
    | DB_NAME          | Database name                   |

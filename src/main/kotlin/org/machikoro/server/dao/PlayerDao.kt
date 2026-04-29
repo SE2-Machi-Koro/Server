@@ -10,6 +10,7 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
 import org.machikoro.server.database.Players
 import org.machikoro.server.domain.models.PlayerModel
+import org.machikoro.server.exception.PlayerNotFoundException
 import org.springframework.stereotype.Repository
 
 @Repository
@@ -59,21 +60,28 @@ class PlayerDao {
 
     /**
      * Adds a new player to a game.
+     * All steps run in a single transaction to prevent duplicate turnOrder on concurrent joins.
      * @param gameId Game ID
      * @param userId User ID
      * @return The created PlayerModel
      */
-    fun addPlayer(gameId: Int, userId: Int): PlayerModel {
-        val turnOrder = countByGameId(gameId)
-        val playerId = transaction {
-            Players.insertAndGetId {
-                it[Players.gameId] = gameId
-                it[Players.userId] = userId
-                it[Players.turnOrder] = turnOrder
-                it[Players.coins] = 3
-            }.value
-        }
-        return findById(playerId)!!
+    fun addPlayer(gameId: Int, userId: Int): PlayerModel = transaction {
+        val turnOrder = Players.selectAll()
+            .where { Players.gameId eq gameId }
+            .count()
+            .toInt()
+
+        val playerId = Players.insertAndGetId {
+            it[Players.gameId] = gameId
+            it[Players.userId] = userId
+            it[Players.turnOrder] = turnOrder
+            it[Players.coins] = 3
+        }.value
+
+        Players.selectAll()
+            .where { Players.id eq playerId }
+            .single()
+            .toModel()
     }
 
     /**
@@ -82,9 +90,10 @@ class PlayerDao {
      * @param newCoins New coin value
      */
     fun updateCoins(playerId: Int, newCoins: Int): Unit = transaction {
-        Players.update({ Players.id eq playerId }) {
+        val updatedRows = Players.update({ Players.id eq playerId }) {
             it[Players.coins] = newCoins
         }
+        if (updatedRows == 0) throw PlayerNotFoundException("Player $playerId not found")
     }
 
     // --- The following methods are kept for future use and will be reviewed in Sprint 3 ---
@@ -102,7 +111,8 @@ class PlayerDao {
      * @param playerId Player ID
      */
     fun delete(playerId: Int): Unit = transaction {
-        Players.deleteWhere { Players.id eq playerId }
+        val deletedRows = Players.deleteWhere { Players.id eq playerId }
+        if (deletedRows == 0) throw PlayerNotFoundException("Player $playerId not found")
     }
 
     /**
@@ -111,8 +121,9 @@ class PlayerDao {
      * @param newOrder New turn order
      */
     fun updateTurnOrder(playerId: Int, newOrder: Int): Unit = transaction {
-        Players.update({ Players.id eq playerId }) {
+        val updatedRows = Players.update({ Players.id eq playerId }) {
             it[Players.turnOrder] = newOrder
         }
+        if (updatedRows == 0) throw PlayerNotFoundException("Player $playerId not found")
     }
 }

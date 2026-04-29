@@ -10,6 +10,7 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
 import org.machikoro.server.database.Users
 import org.machikoro.server.domain.models.UserModel
+import org.machikoro.server.exception.UserNotFoundException
 import org.springframework.stereotype.Repository
 
 @Repository
@@ -74,27 +75,30 @@ class UserDao {
      * pass 'null' to invalidate the session when the user logs out
      */
     fun updateSessionToken(id: Int, token: String?): Unit = transaction {
-        Users.update({ Users.id eq id }) {
+        val updatedRows = Users.update({ Users.id eq id }) {
             it[Users.sessionToken] = token
         }
+        if (updatedRows == 0) throw UserNotFoundException("User $id not found")
     }
 
     /**
      * Increments user's total win count by 1
      */
     fun incrementWins(id: Int): Unit = transaction {
-        Users.update({ Users.id eq id }) {
+        val updatedRows = Users.update({ Users.id eq id }) {
             it[totalWins] = totalWins + 1
         }
+        if (updatedRows == 0) throw UserNotFoundException("User $id not found")
     }
 
     /**
      * Increments user's total games played count by 1
      */
     fun incrementGamesPlayed(id: Int): Unit = transaction {
-        Users.update({ Users.id eq id }) {
+        val updatedRows = Users.update({ Users.id eq id }) {
             it[totalGamesPlayed] = totalGamesPlayed + 1
         }
+        if (updatedRows == 0) throw UserNotFoundException("User $id not found")
     }
 
     /**
@@ -108,6 +112,7 @@ class UserDao {
      * Deletes a user by their ID
      */
     fun delete(id: Int): Unit = transaction {
-        Users.deleteWhere { Users.id eq id }
+        val deletedRows = Users.deleteWhere { Users.id eq id }
+        if (deletedRows == 0) throw UserNotFoundException("User $id not found")
     }
 }

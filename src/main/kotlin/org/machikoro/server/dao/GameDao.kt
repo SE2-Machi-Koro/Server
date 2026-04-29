@@ -52,6 +52,10 @@ class GameDao {
 
     /**
      * Creates a new game with the given host user
+     * Initializes default game state:
+     * - status = WAITING
+     * - turnPhase = ROLL_DICE
+     * - roundNumber = 1
      */
     fun create(hostUserId: Int, lobbyCode: String = generateUniqueLobbyCode(), maxPlayers: Int = 4): Int = transaction {
         Games.insertAndGetId {
@@ -88,9 +92,10 @@ class GameDao {
      * Updates status of the game
      */
     fun updateStatus(id: Int, status: GameStatus): Unit = transaction {
-        Games.update({ Games.id eq id }) {
+        val updatedRows = Games.update({ Games.id eq id }) {
             it[Games.status] = status
         }
+        if (updatedRows == 0) throw GameNotFoundException("Game $id not found")
     }
 
     /**
@@ -118,10 +123,11 @@ class GameDao {
      * Updates game state after a dice roll
      */
     fun updateAfterRoll(id: Int, diceRoll: Int, phase: TurnPhase): Unit = transaction {
-        Games.update({ Games.id eq id }) {
+        val updatedRows = Games.update({ Games.id eq id }) {
             it[Games.lastDiceRoll] = diceRoll
             it[Games.turnPhase] = phase
         }
+        if (updatedRows == 0) throw GameNotFoundException("Game $id not found")
     }
 
     /**
@@ -140,13 +146,14 @@ class GameDao {
      * - Clears last dice roll
      */
     fun advanceTurn(id: Int, nextTurnIndex: Int, roundNumber: Int): Unit = transaction {
-        Games.update({ Games.id eq id }) {
+        val updatedRows = Games.update({ Games.id eq id }) {
             it[Games.currentTurnIndex] = nextTurnIndex
             it[Games.roundNumber] = roundNumber
             it[Games.turnPhase] = TurnPhase.ROLL_DICE
             it[Games.lastDiceRoll] = null
             it[Games.hasPurchasedThisTurn] = false
         }
+        if (updatedRows == 0) throw GameNotFoundException("Game $id not found")
     }
 
     /**
@@ -160,6 +167,7 @@ class GameDao {
      * Deletes a game by ID
      */
     fun delete(id: Int): Unit = transaction {
-        Games.deleteWhere { Games.id eq id }
+        val deletedRows = Games.deleteWhere { Games.id eq id }
+        if (deletedRows == 0) throw GameNotFoundException("Game $id not found")
     }
 }
