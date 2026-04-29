@@ -46,9 +46,8 @@ class GamePhaseService(
     fun endTurn(gameId: Int): EndTurnOutcome {
         val game = gameStateGuard.ensureGameIsRunning(gameId)
         check(game.turnPhase == TurnPhase.BUY_OR_BUILD) { "Game is not in BUY_OR_BUILD phase" }
-
+        gameDao.updateTurnPhase(gameId,TurnPhase.END_TURN)
         winConditionService.detectWinner(gameId)?.let { winner ->
-            gameDao.updateStatus(gameId, GameStatus.FINISHED)
             userDao.incrementWins(winner.id)
             finishGame(gameId)
             return EndTurnOutcome.Won(winner)
@@ -67,7 +66,7 @@ class GamePhaseService(
         val nextTurnIndex = (game.currentTurnIndex + 1) % players.size
         val nextRoundNumber = if (nextTurnIndex == 0) game.roundNumber + 1 else game.roundNumber
         gameDao.advanceTurn(gameId, nextTurnIndex, nextRoundNumber)
-        return game.turnPhase
+        return TurnPhase.ROLL_DICE
     }
 
     private fun finishGame(gameId: Int) {

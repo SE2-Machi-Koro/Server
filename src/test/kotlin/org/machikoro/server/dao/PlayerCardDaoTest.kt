@@ -104,4 +104,42 @@ class PlayerCardDaoTest : AbstractDBSetup() {
             playerCardDao.delete(playerId, CardType.CAFE)
         }
     }
+    @Test
+    fun `deleteAllByPlayerId removes all cards for the player`() {
+        playerCardDao.upsert(playerId, CardType.WHEAT_FIELD, 1)
+        playerCardDao.upsert(playerId, CardType.BAKERY, 2)
+
+        playerCardDao.deleteAllByPlayerId(playerId)
+
+        val remaining = playerCardDao.findByPlayerId(playerId)
+        assertTrue(remaining.isEmpty())
+    }
+
+    @Test
+    fun `deleteAllByPlayerId does not affect other players`() {
+        // current player
+        playerCardDao.upsert(playerId, CardType.WHEAT_FIELD, 1)
+
+        // second player
+        val userId2 = userDao.create("other_user")
+        val gameId2 = gameDao.create(userId2)
+        val otherPlayerId = playerDao.addPlayer(gameId2, userId2).id
+
+        playerCardDao.upsert(otherPlayerId, CardType.CAFE, 3)
+
+        playerCardDao.deleteAllByPlayerId(playerId)
+
+        val remainingOther = playerCardDao.findByPlayerId(otherPlayerId)
+        assertEquals(1, remainingOther.size)
+        assertEquals(CardType.CAFE, remainingOther[0].cardType)
+    }
+
+    @Test
+    fun `deleteAllByPlayerId on player with no cards does nothing`() {
+        assertDoesNotThrow {
+            playerCardDao.deleteAllByPlayerId(playerId)
+        }
+
+        assertTrue(playerCardDao.findByPlayerId(playerId).isEmpty())
+    }
 }
