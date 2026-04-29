@@ -30,30 +30,27 @@ class GamePhaseService(
     fun initialPhase(): TurnPhase = TurnPhase.ROLL_DICE
 
     /** Advances a game to the next phase and persists it. */
-    fun advancePhase(gameId: Int): TurnPhase {
+    private fun advancePhase(gameId: Int): TurnPhase {
         val game = gameStateGuard.ensureGameIsRunning(gameId)
-        val next = nextPhase(game.turnPhase)
-        gameDao.updateTurnPhase(gameId, next)
-        return next
+        val players = playerDao.getPlayers(gameId)
+        check(players.isNotEmpty()) { "Game $gameId has no players" }
+        val nextTurnIndex = (game.currentTurnIndex + 1) % players.size
+        val nextRoundNumber = if (nextTurnIndex == 0) game.roundNumber + 1 else game.roundNumber
+        gameDao.advanceTurn(gameId, nextTurnIndex, nextRoundNumber)
+        return game.turnPhase
     }
 
     /** Ends the active player's buy-or-build window and starts the next turn. */
     fun endTurn(gameId: Int): EndTurnOutcome {
         val game = gameStateGuard.ensureGameIsRunning(gameId)
         check(game.turnPhase == TurnPhase.BUY_OR_BUILD) { "Game is not in BUY_OR_BUILD phase" }
-        val players = playerDao.getPlayers(gameId)
-        check(players.isNotEmpty()) { "Game $gameId has no players" }
 
         winConditionService.detectWinner(gameId)?.let { winner ->
             gameDao.updateStatus(gameId, GameStatus.FINISHED)
             return EndTurnOutcome.Won(winner)
         }
-        gameDao.updateTurnPhase(gameId, TurnPhase.END_TURN)
 
-        val nextTurnIndex = (game.currentTurnIndex + 1) % players.size
-        val nextRoundNumber = if (nextTurnIndex == 0) game.roundNumber + 1 else game.roundNumber
-
-        gameDao.advanceTurn(gameId, nextTurnIndex, nextRoundNumber)
+        val nextPhase = advancePhase(gameId)
         return EndTurnOutcome.Continue(nextPhase)
     }
 
