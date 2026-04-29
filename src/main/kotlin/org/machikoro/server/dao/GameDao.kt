@@ -1,10 +1,13 @@
 package org.machikoro.server.dao
 
+import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import org.jetbrains.exposed.v1.jdbc.insertAndGetId
+import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
-import org.machikoro.server.database.entities.GameEntity
+import org.jetbrains.exposed.v1.jdbc.update
 import org.machikoro.server.database.Games
-import org.machikoro.server.database.entities.UserEntity
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.GameModel
@@ -15,18 +18,35 @@ import org.springframework.stereotype.Repository
 @Repository
 class GameDao {
 
+    private fun ResultRow.toModel() = GameModel(
+        id = this[Games.id].value,
+        status = this[Games.status],
+        hostUserId = this[Games.hostUserId].value,
+        lobbyCode = this[Games.lobbyCode],
+        maxPlayers = this[Games.maxPlayers],
+        currentTurnIndex = this[Games.currentTurnIndex],
+        turnPhase = this[Games.turnPhase],
+        lastDiceRoll = this[Games.lastDiceRoll],
+        roundNumber = this[Games.roundNumber],
+        hasPurchasedThisTurn = this[Games.hasPurchasedThisTurn]
+    )
+
     /**
      * Finds a game by its ID
      */
     fun findById(id: Int): GameModel? = transaction {
-        GameEntity.findById(id)?.toModel()
+        Games.selectAll()
+            .where { Games.id eq id }
+            .singleOrNull()
+            ?.toModel()
     }
 
     /**
      * Finds a game by its status
      */
     fun findAllByStatus(status: GameStatus): List<GameModel> = transaction {
-        GameEntity.find { Games.status eq status }
+        Games.selectAll()
+            .where { Games.status eq status }
             .map { it.toModel() }
     }
 
@@ -38,18 +58,17 @@ class GameDao {
      * - roundNumber = 1
      */
     fun create(hostUserId: Int, lobbyCode: String = generateUniqueLobbyCode(), maxPlayers: Int = 4): Int = transaction {
-        GameEntity.new {
-            hostUser = UserEntity.findById(hostUserId)
-                ?: error("User $hostUserId not found")
-            status = GameStatus.WAITING
-            turnPhase = TurnPhase.ROLL_DICE
-            currentTurnIndex = 0
-            roundNumber = 1
-            lastDiceRoll = null
-            hasPurchasedThisTurn = false
-            this.lobbyCode = lobbyCode
-            this.maxPlayers = maxPlayers
-        }.id.value
+        Games.insertAndGetId {
+            it[Games.hostUserId] = hostUserId
+            it[Games.status] = GameStatus.WAITING
+            it[Games.turnPhase] = TurnPhase.ROLL_DICE
+            it[Games.currentTurnIndex] = 0
+            it[Games.roundNumber] = 1
+            it[Games.lastDiceRoll] = null
+            it[Games.hasPurchasedThisTurn] = false
+            it[Games.lobbyCode] = lobbyCode
+            it[Games.maxPlayers] = maxPlayers
+        }.value
     }
 
     private fun generateUniqueLobbyCode(): String {
@@ -63,23 +82,30 @@ class GameDao {
     }
 
     fun existsByLobbyCode(code: String): Boolean = transaction {
-        !GameEntity.find { Games.lobbyCode eq code }.empty()
+        Games.selectAll()
+            .where { Games.lobbyCode eq code }
+            .empty()
+            .not()
     }
 
     /**
      * Updates status of the game
      */
     fun updateStatus(id: Int, status: GameStatus): Unit = transaction {
-        GameEntity.findById(id)?.apply {
-            this.status = status
+        val updatedRows = Games.update({ Games.id eq id }) {
+            it[Games.status] = status
         }
+        if (updatedRows == 0) throw GameNotFoundException("Game $id not found")
     }
 
     /**
      * Gets the current turn phase of a game otherwise throws if game does not exist
      */
     fun getPhase(id: Int): TurnPhase = transaction {
-        GameEntity.findById(id)?.turnPhase
+        Games.selectAll()
+            .where { Games.id eq id }
+            .singleOrNull()
+            ?.get(Games.turnPhase)
             ?: throw GameNotFoundException("Game $id not found")
     }
 
@@ -87,28 +113,31 @@ class GameDao {
      * Updates current turn phase
      */
     fun updateTurnPhase(id: Int, phase: TurnPhase): Unit = transaction {
-        val game = GameEntity.findById(id)
-            ?: throw GameNotFoundException("Game $id not found")
-        game.turnPhase = phase
+        val updatedRows = Games.update({ Games.id eq id }) {
+            it[Games.turnPhase] = phase
+        }
+        if (updatedRows == 0) throw GameNotFoundException("Game $id not found")
     }
 
     /**
      * Updates game state after a dice roll
      */
     fun updateAfterRoll(id: Int, diceRoll: Int, phase: TurnPhase): Unit = transaction {
-        GameEntity.findById(id)?.apply {
-            lastDiceRoll = diceRoll
-            turnPhase = phase
+        val updatedRows = Games.update({ Games.id eq id }) {
+            it[Games.lastDiceRoll] = diceRoll
+            it[Games.turnPhase] = phase
         }
+        if (updatedRows == 0) throw GameNotFoundException("Game $id not found")
     }
 
     /**
      * Updates whether the active turn has already used its purchase.
      */
     fun updateHasPurchasedThisTurn(id: Int, hasPurchasedThisTurn: Boolean): Unit = transaction {
-        val game = GameEntity.findById(id)
-            ?: throw GameNotFoundException("Game $id not found")
-        game.hasPurchasedThisTurn = hasPurchasedThisTurn
+        val updatedRows = Games.update({ Games.id eq id }) {
+            it[Games.hasPurchasedThisTurn] = hasPurchasedThisTurn
+        }
+        if (updatedRows == 0) throw GameNotFoundException("Game $id not found")
     }
 
     /**
@@ -117,26 +146,28 @@ class GameDao {
      * - Clears last dice roll
      */
     fun advanceTurn(id: Int, nextTurnIndex: Int, roundNumber: Int): Unit = transaction {
-        GameEntity.findById(id)?.apply {
-            currentTurnIndex = nextTurnIndex
-            this.roundNumber = roundNumber
-            turnPhase = TurnPhase.ROLL_DICE
-            lastDiceRoll = null
-            hasPurchasedThisTurn = false
+        val updatedRows = Games.update({ Games.id eq id }) {
+            it[Games.currentTurnIndex] = nextTurnIndex
+            it[Games.roundNumber] = roundNumber
+            it[Games.turnPhase] = TurnPhase.ROLL_DICE
+            it[Games.lastDiceRoll] = null
+            it[Games.hasPurchasedThisTurn] = false
         }
+        if (updatedRows == 0) throw GameNotFoundException("Game $id not found")
     }
 
     /**
      * Finds all games
      */
     fun findAll(): List<GameModel> = transaction {
-        GameEntity.all().map { it.toModel() }
+        Games.selectAll().map { it.toModel() }
     }
 
     /**
      * Deletes a game by ID
      */
     fun delete(id: Int): Unit = transaction {
-        GameEntity.findById(id)?.delete()
+        val deletedRows = Games.deleteWhere { Games.id eq id }
+        if (deletedRows == 0) throw GameNotFoundException("Game $id not found")
     }
 }

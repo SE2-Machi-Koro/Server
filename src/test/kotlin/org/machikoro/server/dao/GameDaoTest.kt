@@ -54,6 +54,13 @@ class GameDaoTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `findAll returns all games`() {
+        gameDao.create(hostId)
+        gameDao.create(hostId)
+        assertEquals(2, gameDao.findAll().size)
+    }
+
+    @Test
     fun `findAllByStatus filters correctly`() {
         gameDao.create(hostId)
         val id2 = gameDao.create(hostId)
@@ -68,6 +75,13 @@ class GameDaoTest : AbstractDBSetup() {
         val id = gameDao.create(hostId)
         gameDao.updateStatus(id, GameStatus.IN_PROGRESS)
         assertEquals(GameStatus.IN_PROGRESS, gameDao.findById(id)!!.status)
+    }
+
+    @Test
+    fun `updateStatus throws when game does not exist`() {
+        assertThrows<GameNotFoundException> {
+            gameDao.updateStatus(999999, GameStatus.IN_PROGRESS)
+        }
     }
 
     @Test
@@ -110,11 +124,24 @@ class GameDaoTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `updateAfterRoll throws when game does not exist`() {
+        assertThrows<GameNotFoundException> {
+            gameDao.updateAfterRoll(999999, diceRoll = 6, phase = TurnPhase.RESOLVE_EFFECTS)
+        }
+    }
+
+    @Test
     fun `updateHasPurchasedThisTurn changes purchase state`() {
         val id = gameDao.create(hostId)
         gameDao.updateHasPurchasedThisTurn(id, true)
-
         assertTrue(gameDao.findById(id)!!.hasPurchasedThisTurn)
+    }
+
+    @Test
+    fun `updateHasPurchasedThisTurn throws when game does not exist`() {
+        assertThrows<GameNotFoundException> {
+            gameDao.updateHasPurchasedThisTurn(999999, true)
+        }
     }
 
     @Test
@@ -129,5 +156,38 @@ class GameDaoTest : AbstractDBSetup() {
         assertEquals(TurnPhase.ROLL_DICE, game.turnPhase)
         assertNull(game.lastDiceRoll)
         assertFalse(game.hasPurchasedThisTurn)
+    }
+
+    @Test
+    fun `advanceTurn throws when game does not exist`() {
+        assertThrows<GameNotFoundException> {
+            gameDao.advanceTurn(999999, nextTurnIndex = 1, roundNumber = 2)
+        }
+    }
+
+    @Test
+    fun `existsByLobbyCode returns true for existing code`() {
+        val id = gameDao.create(hostId)
+        val code = gameDao.findById(id)!!.lobbyCode
+        assertTrue(gameDao.existsByLobbyCode(code))
+    }
+
+    @Test
+    fun `existsByLobbyCode returns false for unknown code`() {
+        assertFalse(gameDao.existsByLobbyCode("XXXXXXX"))
+    }
+
+    @Test
+    fun `delete removes game from db`() {
+        val id = gameDao.create(hostId)
+        gameDao.delete(id)
+        assertNull(gameDao.findById(id))
+    }
+
+    @Test
+    fun `delete throws when game does not exist`() {
+        assertThrows<GameNotFoundException> {
+            gameDao.delete(999999)
+        }
     }
 }

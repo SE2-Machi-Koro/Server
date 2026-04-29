@@ -1,8 +1,9 @@
 package org.machikoro.server.dao
 
+import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
-import org.machikoro.server.database.entities.LandmarkEntity
 import org.machikoro.server.database.Landmarks
 import org.machikoro.server.domain.enums.LandmarkType
 import org.machikoro.server.domain.models.LandmarkModel
@@ -11,11 +12,18 @@ import org.springframework.stereotype.Repository
 @Repository
 class LandmarkDao {
 
+    private fun ResultRow.toModel() = LandmarkModel(
+        id = this[Landmarks.id].value,
+        landmarkType = this[Landmarks.landmarkType],
+        name = this[Landmarks.name],
+        cost = this[Landmarks.cost]
+    )
+
     /**
      * Finds all available card definitions from database
      */
     fun findAll(): List<LandmarkModel> = transaction {
-        LandmarkEntity.all().map { it.toModel() }
+        Landmarks.selectAll().map { it.toModel() }
     }
 
     /**
@@ -23,7 +31,8 @@ class LandmarkDao {
      * Returns null if no matching landmark exists
      */
     fun findByLandmarkType(landmarkType: LandmarkType): LandmarkModel? = transaction {
-        LandmarkEntity.find { Landmarks.landmarkType eq landmarkType }
+        Landmarks.selectAll()
+            .where { Landmarks.landmarkType eq landmarkType }
             .singleOrNull()
             ?.toModel()
     }
