@@ -14,15 +14,20 @@ import org.machikoro.server.domain.models.PlayerLandmarkModel
 import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.dto.RollDiceRequest
 import org.machikoro.server.exception.CustomWebSocketException
+import org.machikoro.server.exception.GameNotFoundException
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
+import org.mockito.kotlin.any
+import org.mockito.kotlin.never
+import org.mockito.kotlin.verify
 
 class DiceServiceTests {
 
     private val gameDao: GameDao = mock(GameDao::class.java)
     private val playerDao: PlayerDao = mock(PlayerDao::class.java)
     private val playerLandmarkDao: PlayerLandmarkDao = mock(PlayerLandmarkDao::class.java)
-    private val diceService = DiceService(gameDao, playerDao, playerLandmarkDao)
+    private val gameStateGuard: GameStateGuard = mock(GameStateGuard::class.java)
+    private val diceService = DiceService(gameDao, playerDao, playerLandmarkDao, gameStateGuard)
 
     private val defaultGame = GameModel(
         id = 1,
@@ -47,7 +52,7 @@ class DiceServiceTests {
 
     @Test
     fun rollDiceShouldReturnSingleDieValueBetween1And6() {
-        `when`(gameDao.findById(1)).thenReturn(defaultGame)
+        `when`(gameStateGuard.ensureGameIsRunning(1)).thenReturn(defaultGame)
         `when`(playerDao.getPlayers(1)).thenReturn(listOf(activePlayer))
 
         val request = RollDiceRequest(gameId = 1, playerId = 2)
@@ -60,18 +65,35 @@ class DiceServiceTests {
 
     @Test
     fun rollDiceShouldThrowWhenGameNotFound() {
-        `when`(gameDao.findById(1)).thenReturn(null)
+        `when`(gameStateGuard.ensureGameIsRunning(1))
+            .thenThrow(GameNotFoundException("Game 1 not found"))
 
         val request = RollDiceRequest(gameId = 1, playerId = 2)
 
-        assertThrows(CustomWebSocketException::class.java) {
+        assertThrows(GameNotFoundException::class.java) {
             diceService.rollDice(request)
         }
+        verify(gameDao, never()).updateAfterRoll(any(), any(), any())
+    }
+
+    @Test
+    fun rollDiceShouldThrowGameFinishedWhenGameIsFinished() {
+        `when`(gameStateGuard.ensureGameIsRunning(1))
+            .thenThrow(CustomWebSocketException("GAME_FINISHED", "Game 1 has already ended"))
+
+        val request = RollDiceRequest(gameId = 1, playerId = 2)
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            diceService.rollDice(request)
+        }
+        assertEquals("GAME_FINISHED", ex.errorCode)
+        verify(gameDao, never()).updateAfterRoll(any(), any(), any())
     }
 
     @Test
     fun rollDiceShouldThrowWhenWrongPhase() {
-        `when`(gameDao.findById(1)).thenReturn(defaultGame.copy(turnPhase = TurnPhase.BUY_OR_BUILD))
+        `when`(gameStateGuard.ensureGameIsRunning(1))
+            .thenReturn(defaultGame.copy(turnPhase = TurnPhase.BUY_OR_BUILD))
 
         val request = RollDiceRequest(gameId = 1, playerId = 2)
 
@@ -82,7 +104,7 @@ class DiceServiceTests {
 
     @Test
     fun rollDiceShouldThrowWhenNotActivePlayer() {
-        `when`(gameDao.findById(1)).thenReturn(defaultGame)
+        `when`(gameStateGuard.ensureGameIsRunning(1)).thenReturn(defaultGame)
         `when`(playerDao.getPlayers(1)).thenReturn(listOf(activePlayer))
 
         val request = RollDiceRequest(gameId = 1, playerId = 99)
@@ -94,7 +116,7 @@ class DiceServiceTests {
 
     @Test
     fun rollDiceShouldThrowWhenRollTwoDiceWithoutTrainStation() {
-        `when`(gameDao.findById(1)).thenReturn(defaultGame)
+        `when`(gameStateGuard.ensureGameIsRunning(1)).thenReturn(defaultGame)
         `when`(playerDao.getPlayers(1)).thenReturn(listOf(activePlayer))
         `when`(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.TRAIN_STATION))
             .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.TRAIN_STATION, isBuilt = false))
@@ -108,7 +130,7 @@ class DiceServiceTests {
 
     @Test
     fun rollTwoDiceShouldReturnTwoDiceValuesBetween2And12WhenTrainStationOwned() {
-        `when`(gameDao.findById(1)).thenReturn(defaultGame)
+        `when`(gameStateGuard.ensureGameIsRunning(1)).thenReturn(defaultGame)
         `when`(playerDao.getPlayers(1)).thenReturn(listOf(activePlayer))
         `when`(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.TRAIN_STATION))
             .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.TRAIN_STATION, isBuilt = true))
