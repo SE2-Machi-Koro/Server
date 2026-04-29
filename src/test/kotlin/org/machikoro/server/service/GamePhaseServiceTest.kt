@@ -125,12 +125,15 @@ class GamePhaseServiceTest {
     fun `advancePhase wraps END_TURN back to ROLL_DICE`() {
         val gameId = 7
         whenever(gameStateGuard.ensureGameIsRunning(gameId))
-            .thenReturn(gameInPhase(gameId, TurnPhase.END_TURN))
+            .thenReturn(gameInPhase(gameId, TurnPhase.BUY_OR_BUILD))
+        whenever(playerDao.getPlayers(gameId))
+            .thenReturn(listOf(mock<PlayerModel>()))
+        whenever(winConditionService.detectWinner(gameId))
+            .thenReturn(null)
 
-        val result = service.advancePhase(gameId)
-
-        assertEquals(TurnPhase.ROLL_DICE, result)
-        verify(gameDao).updateTurnPhase(gameId, TurnPhase.ROLL_DICE)
+        val result = service.endTurn(gameId)
+        assertTrue(result is EndTurnOutcome.Continue)
+        assertEquals(TurnPhase.ROLL_DICE, result.nextPhase)
     }
 
     @Test
