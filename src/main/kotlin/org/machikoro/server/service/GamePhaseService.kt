@@ -46,6 +46,7 @@ class GamePhaseService(
 
         winConditionService.detectWinner(gameId)?.let { winner ->
             gameDao.updateStatus(gameId, GameStatus.FINISHED)
+            finishGame(gameId)
             return EndTurnOutcome.Won(winner)
         }
 
