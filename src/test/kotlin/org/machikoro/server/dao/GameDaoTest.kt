@@ -118,6 +118,15 @@ class GameDaoTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `tryMarkPurchasedThisTurn succeeds once and then rejects repeats`() {
+        val id = gameDao.create(hostId)
+
+        assertTrue(gameDao.tryMarkPurchasedThisTurn(id))
+        assertFalse(gameDao.tryMarkPurchasedThisTurn(id))
+        assertTrue(gameDao.findById(id)!!.hasPurchasedThisTurn)
+    }
+
+    @Test
     fun `advanceTurn resets to ROLL_DICE clears dice roll and purchase state`() {
         val id = gameDao.create(hostId)
         gameDao.updateAfterRoll(id, diceRoll = 4, phase = TurnPhase.RESOLVE_EFFECTS)
