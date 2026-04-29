@@ -2,6 +2,7 @@ package org.machikoro.server.service
 
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.PlayerDao
+import org.machikoro.server.dao.UserDao
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.PlayerModel
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Service
 class GamePhaseService(
     private val gameDao: GameDao,
     private val playerDao: PlayerDao,
+    private val userDao: UserDao,
     private val gameStateGuard: GameStateGuard,
     private val winConditionService: WinConditionService
     ) {
@@ -46,6 +48,7 @@ class GamePhaseService(
 
         winConditionService.detectWinner(gameId)?.let { winner ->
             gameDao.updateStatus(gameId, GameStatus.FINISHED)
+            userDao.incrementWins(winner.id)
             finishGame(gameId)
             return EndTurnOutcome.Won(winner)
         }
@@ -56,6 +59,8 @@ class GamePhaseService(
 
     fun finishGame(gameId: Int) {
         gameDao.updateStatus(gameId, GameStatus.FINISHED)
+        val players = playerDao.getPlayers(gameId)
+        players.forEach { userDao.incrementGamesPlayed(it.id) }
     }
 
     sealed interface EndTurnOutcome {
