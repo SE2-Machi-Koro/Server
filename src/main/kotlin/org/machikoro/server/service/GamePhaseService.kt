@@ -2,7 +2,9 @@ package org.machikoro.server.service
 
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.GameMarketplaceDao
+import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
+import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.dao.UserDao
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
@@ -14,6 +16,8 @@ class GamePhaseService(
     private val gameDao: GameDao,
     private val playerDao: PlayerDao,
     private val userDao: UserDao,
+    private val playerCardDao: PlayerCardDao,
+    private val playerLandmarkDao: PlayerLandmarkDao,
     private val gameMarketplaceDao: GameMarketplaceDao,
     private val gameStateGuard: GameStateGuard,
     private val winConditionService: WinConditionService
@@ -67,6 +71,10 @@ class GamePhaseService(
 
     private fun clearDBAfterGame(gameId: Int) {
         gameMarketplaceDao.deleteAllForGame(gameId)
+        playerDao.getPlayers(gameId).forEach {
+            playerCardDao.deleteAllByPlayerId(it.id)
+            playerLandmarkDao.deleteAllByPlayerId(it.id)
+        }
     }
     sealed interface EndTurnOutcome {
         data class Continue(
