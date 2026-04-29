@@ -5,8 +5,10 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.database.AbstractDBSetup
 import org.machikoro.server.database.Users
+import org.machikoro.server.exception.UserNotFoundException
 
 class UserDaoTest : AbstractDBSetup() {
 
@@ -62,6 +64,13 @@ class UserDaoTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `updateSessionToken throws when user does not exist`() {
+        assertThrows<UserNotFoundException> {
+            dao.updateSessionToken(999999, "some-token")
+        }
+    }
+
+    @Test
     fun `findBySessionToken returns null for unknown token`() {
         assertNull(dao.findBySessionToken("no-token"))
     }
@@ -75,9 +84,37 @@ class UserDaoTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `incrementWins throws when user does not exist`() {
+        assertThrows<UserNotFoundException> {
+            dao.incrementWins(999999)
+        }
+    }
+
+    @Test
     fun `incrementGamesPlayed increases games played count`() {
         val id = dao.create("nami")
         dao.incrementGamesPlayed(id)
         assertEquals(1, dao.findById(id)!!.totalGamesPlayed)
+    }
+
+    @Test
+    fun `incrementGamesPlayed throws when user does not exist`() {
+        assertThrows<UserNotFoundException> {
+            dao.incrementGamesPlayed(999999)
+        }
+    }
+
+    @Test
+    fun `delete removes user from db`() {
+        val id = dao.create("zoro")
+        dao.delete(id)
+        assertNull(dao.findById(id))
+    }
+
+    @Test
+    fun `delete throws when user does not exist`() {
+        assertThrows<UserNotFoundException> {
+            dao.delete(999999)
+        }
     }
 }

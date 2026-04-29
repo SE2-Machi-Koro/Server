@@ -6,10 +6,12 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.database.AbstractDBSetup
 import org.machikoro.server.database.Games
 import org.machikoro.server.database.Players
 import org.machikoro.server.database.Users
+import org.machikoro.server.exception.PlayerNotFoundException
 
 class PlayerDaoTest : AbstractDBSetup() {
 
@@ -73,6 +75,13 @@ class PlayerDaoTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `updateCoins throws when player does not exist`() {
+        assertThrows<PlayerNotFoundException> {
+            playerDao.updateCoins(999999, 10)
+        }
+    }
+
+    @Test
     fun `findAll returns all players in db`() {
         val player1 = playerDao.addPlayer(gameId, userId)
         val userId2 = userDao.create("player_user_2")
@@ -90,6 +99,13 @@ class PlayerDaoTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `delete throws when player does not exist`() {
+        assertThrows<PlayerNotFoundException> {
+            playerDao.delete(999999)
+        }
+    }
+
+    @Test
     fun `updateTurnOrder changes player turn order`() {
         val player = playerDao.addPlayer(gameId, userId)
         playerDao.updateTurnOrder(player.id, 5)
@@ -98,20 +114,32 @@ class PlayerDaoTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `updateTurnOrder throws when player does not exist`() {
+        assertThrows<PlayerNotFoundException> {
+            playerDao.updateTurnOrder(999999, 5)
+        }
+    }
+
+    @Test
     fun `countByGameId returns 0 when no players exist`() {
         val count = playerDao.countByGameId(gameId)
-
         assertEquals(0, count)
     }
 
     @Test
     fun `countByGameId decreases after player deletion`() {
         val player = playerDao.addPlayer(gameId, userId)
-
         assertEquals(1, playerDao.countByGameId(gameId))
-
         playerDao.delete(player.id)
-
         assertEquals(0, playerDao.countByGameId(gameId))
+    }
+
+    @Test
+    fun `addPlayer assigns incrementing turn order`() {
+        val userId2 = userDao.create("player_user_2")
+        val player1 = playerDao.addPlayer(gameId, userId)
+        val player2 = playerDao.addPlayer(gameId, userId2)
+        assertEquals(0, player1.turnOrder)
+        assertEquals(1, player2.turnOrder)
     }
 }
