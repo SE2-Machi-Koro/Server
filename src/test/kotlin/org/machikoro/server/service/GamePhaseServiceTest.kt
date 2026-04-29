@@ -4,39 +4,59 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.dao.GameDao
+import org.machikoro.server.dao.GameMarketplaceDao
+import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
+import org.machikoro.server.dao.PlayerLandmarkDao
+import org.machikoro.server.dao.UserDao
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.exception.CustomWebSocketException
-import org.mockito.kotlin.any
-import org.mockito.kotlin.inOrder
-import org.mockito.kotlin.mock
-import org.mockito.kotlin.never
-import org.mockito.kotlin.verify
-import org.mockito.kotlin.verifyNoMoreInteractions
-import org.mockito.kotlin.whenever
+import org.machikoro.server.service.GamePhaseService.EndTurnOutcome
+import org.mockito.kotlin.*
+import kotlin.test.assertTrue
 
 class GamePhaseServiceTest {
 
     private val gameDao = mock<GameDao>()
+    private val userDao = mock<UserDao>()
     private val playerDao = mock<PlayerDao>()
+    private val playerCardDao = mock<PlayerCardDao>()
+    private val playerLandmarkDao = mock<PlayerLandmarkDao>()
+    private val gameMarketplaceDao = mock<GameMarketplaceDao>()
     private val gameStateGuard = mock<GameStateGuard>()
-    private val service = GamePhaseService(gameDao, playerDao, gameStateGuard)
+    private val winConditionService = mock<WinConditionService>()
 
-    private fun gameInPhase(id: Int, phase: TurnPhase, currentTurnIndex: Int = 0, roundNumber: Int = 1) =
-        GameModel(
-            id = id,
-            status = GameStatus.IN_PROGRESS,
-            hostUserId = 1,
-            lobbyCode = "ABC1234",
-            maxPlayers = 4,
-            currentTurnIndex = currentTurnIndex,
-            turnPhase = phase,
-            lastDiceRoll = null,
-            hasPurchasedThisTurn = false,
-            roundNumber = roundNumber,)
+    private val service = GamePhaseService(
+        gameDao,
+        playerDao,
+        userDao,
+        playerCardDao,
+        playerLandmarkDao,
+        gameMarketplaceDao,
+        gameStateGuard,
+        winConditionService
+    )
+
+    private fun gameInPhase(
+        id: Int,
+        phase: TurnPhase,
+        currentTurnIndex: Int = 0,
+        roundNumber: Int = 1
+    ) = GameModel(
+        id = id,
+        status = GameStatus.IN_PROGRESS,
+        hostUserId = 1,
+        lobbyCode = "ABC1234",
+        maxPlayers = 4,
+        currentTurnIndex = currentTurnIndex,
+        turnPhase = phase,
+        lastDiceRoll = null,
+        hasPurchasedThisTurn = false,
+        roundNumber = roundNumber,
+    )
 
     @Test
     fun `initial phase is ROLL_DICE`() {
@@ -140,7 +160,12 @@ class GamePhaseServiceTest {
 
         val result = service.endTurn(gameId)
 
-        assertEquals(TurnPhase.ROLL_DICE, result)
+        assertTrue(result is EndTurnOutcome.Continue)
+        assertEquals(
+            TurnPhase.ROLL_DICE,
+            (result).nextPhase
+        )
+
         val ordered = inOrder(gameStateGuard, gameDao)
         ordered.verify(gameStateGuard).ensureGameIsRunning(gameId)
         ordered.verify(gameDao).updateTurnPhase(gameId, TurnPhase.END_TURN)
@@ -161,16 +186,46 @@ class GamePhaseServiceTest {
 
         val result = service.endTurn(gameId)
 
-        assertEquals(TurnPhase.ROLL_DICE, result)
+        assertTrue(result is EndTurnOutcome.Continue)
+        assertEquals(
+            TurnPhase.ROLL_DICE,
+            (result).nextPhase
+        )
+
         verify(gameDao).updateTurnPhase(gameId, TurnPhase.END_TURN)
         verify(gameDao).advanceTurn(gameId, 0, 4)
+    }
+
+    @Test
+    fun `endTurn detects winner and finishes game`() {
+        val gameId = 30
+        val winner = PlayerModel(1, gameId, 10, 0, 3)
+
+        whenever(gameStateGuard.ensureGameIsRunning(gameId))
+            .thenReturn(gameInPhase(gameId, TurnPhase.BUY_OR_BUILD))
+        whenever(winConditionService.detectWinner(gameId))
+            .thenReturn(winner)
+        whenever(playerDao.getPlayers(gameId))
+            .thenReturn(listOf(winner))
+
+        val result = service.endTurn(gameId)
+
+        assertTrue(result is EndTurnOutcome.Won)
+        assertEquals(
+            winner,
+            (result).winner
+        )
+
+        verify(gameDao).updateTurnPhase(gameId, TurnPhase.END_TURN)
+        verify(userDao).incrementWins(winner.id)
+        verify(gameDao).updateStatus(gameId, GameStatus.FINISHED)
     }
 
     @Test
     fun `endTurn rejects games outside buy or build phase`() {
         val gameId = 23
         whenever(gameStateGuard.ensureGameIsRunning(gameId))
-            .thenReturn(gameInPhase(gameId, TurnPhase.RESOLVE_EFFECTS, currentTurnIndex = 0, roundNumber = 2))
+            .thenReturn(gameInPhase(gameId, TurnPhase.RESOLVE_EFFECTS))
 
         assertThrows<IllegalStateException> {
             service.endTurn(gameId)
@@ -191,16 +246,9 @@ class GamePhaseServiceTest {
             service.endTurn(gameId)
         }
         assertEquals("GAME_FINISHED", ex.errorCode)
+
         verify(gameDao, never()).updateTurnPhase(any(), any())
         verify(gameDao, never()).advanceTurn(any(), any(), any())
         verifyNoMoreInteractions(playerDao)
-    }
-    @Test
-    fun `finishGame updates game status to FINISHED`() {
-        val gameId = 123
-
-        service.finishGame(gameId)
-
-        verify(gameDao).updateStatus(gameId, GameStatus.FINISHED)
     }
 }

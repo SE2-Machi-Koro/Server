@@ -6,7 +6,6 @@ import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.LandmarkType
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.PlayerModel
-import org.machikoro.server.dto.AdvancePhaseRequest
 import org.machikoro.server.dto.EndTurnRequest
 import org.machikoro.server.dto.LeaveFinishedGameRequest
 import org.machikoro.server.dto.MessageType
@@ -17,10 +16,10 @@ import org.machikoro.server.dto.RollDiceResponse
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.service.DiceService
 import org.machikoro.server.service.GamePhaseService
+import org.machikoro.server.service.GamePhaseService.EndTurnOutcome
 import org.machikoro.server.service.LeaveFinishedGameService
 import org.machikoro.server.service.PurchaseResult
 import org.machikoro.server.service.PurchaseService
-import org.machikoro.server.service.WinConditionService
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
@@ -37,41 +36,15 @@ class GameControllerTest {
     private val gamePhaseService = mock<GamePhaseService>()
     private val messagingTemplate = mock<SimpMessagingTemplate>()
     private val leaveFinishedGameService = mock<LeaveFinishedGameService>()
-    private val winConditionService = mock<WinConditionService>()
     private val purchaseService = mock<PurchaseService>()
     private val diceService = mock<DiceService>()
-    private val controller = GameController(gamePhaseService, messagingTemplate, leaveFinishedGameService, winConditionService, purchaseService, diceService)
-
-    @Test
-    fun `advancePhase delegates to service with the requested game id`() {
-        val gameId = 42
-        whenever(gamePhaseService.advancePhase(gameId)).thenReturn(TurnPhase.RESOLVE_EFFECTS)
-
-        controller.advancePhase(AdvancePhaseRequest(gameId))
-
-        verify(gamePhaseService).advancePhase(gameId)
-    }
-
-    @Test
-    fun `advancePhase broadcasts new phase as GAME_ACTION on game topic`() {
-        val gameId = 42
-        whenever(gamePhaseService.advancePhase(gameId)).thenReturn(TurnPhase.RESOLVE_EFFECTS)
-
-        controller.advancePhase(AdvancePhaseRequest(gameId))
-
-        val captor = argumentCaptor<WebSocketMessage>()
-        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
-
-        val message = captor.firstValue
-        assertEquals(MessageType.GAME_ACTION, message.type)
-        assertEquals("server", message.sender)
-        assertEquals(mapOf("turnPhase" to "RESOLVE_EFFECTS"), message.payload)
-    }
+    private val controller = GameController(gamePhaseService, messagingTemplate, leaveFinishedGameService, purchaseService, diceService)
 
     @Test
     fun `endTurn delegates to service with the requested game id`() {
         val gameId = 42
-        whenever(gamePhaseService.endTurn(gameId)).thenReturn(TurnPhase.ROLL_DICE)
+        whenever(gamePhaseService.endTurn(gameId))
+            .thenReturn(EndTurnOutcome.Continue(TurnPhase.ROLL_DICE))
 
         controller.endTurn(EndTurnRequest(gameId))
 
@@ -81,8 +54,8 @@ class GameControllerTest {
     @Test
     fun `endTurn broadcasts resulting phase as GAME_ACTION on game topic`() {
         val gameId = 42
-        whenever(winConditionService.detectWinner(gameId)).thenReturn(null)
-        whenever(gamePhaseService.endTurn(gameId)).thenReturn(TurnPhase.ROLL_DICE)
+        whenever(gamePhaseService.endTurn(gameId))
+            .thenReturn(EndTurnOutcome.Continue(TurnPhase.ROLL_DICE))
 
         controller.endTurn(EndTurnRequest(gameId))
 
@@ -93,6 +66,25 @@ class GameControllerTest {
         assertEquals(MessageType.GAME_ACTION, message.type)
         assertEquals("server", message.sender)
         assertEquals(mapOf("turnPhase" to "ROLL_DICE"), message.payload)
+    }
+
+    @Test
+    fun `endTurn broadcasts GAME_END on game topic when winner exists`() {
+        val gameId = 42
+        val winner = mock<PlayerModel>()
+        whenever(winner.id).thenReturn(1)
+        whenever(gamePhaseService.endTurn(gameId))
+            .thenReturn(EndTurnOutcome.Won(winner))
+
+        controller.endTurn(EndTurnRequest(gameId))
+
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+
+        val message = captor.firstValue
+        assertEquals(MessageType.GAME_END, message.type)
+        assertEquals("server", message.sender)
+        assertEquals(mapOf("winnerId" to 1), message.payload)
     }
 
     @Test
@@ -108,7 +100,9 @@ class GameControllerTest {
             )
         )
 
-        controller.purchase(PurchaseRequest(gameId, PurchaseType.ESTABLISHMENT, cardType = CardType.BAKERY))
+        controller.purchase(
+            PurchaseRequest(gameId, PurchaseType.ESTABLISHMENT, cardType = CardType.BAKERY)
+        )
 
         verify(purchaseService).purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.BAKERY, null)
     }
@@ -127,7 +121,9 @@ class GameControllerTest {
         )
         whenever(winConditionService.detectWinner(gameId)).thenReturn(null)
 
-        controller.purchase(PurchaseRequest(gameId, PurchaseType.LANDMARK, landmarkType = LandmarkType.TRAIN_STATION))
+        controller.purchase(
+            PurchaseRequest(gameId, PurchaseType.LANDMARK, landmarkType = LandmarkType.TRAIN_STATION)
+        )
 
         val captor = argumentCaptor<WebSocketMessage>()
         verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
@@ -229,7 +225,7 @@ class GameControllerTest {
     }
 
     @Test
-    fun `leaveFinishedGame payload contains correct playerId`() {
+    fun `leaveFinishedGame payload contains correct playerId and type`() {
         val gameId = 3
         val playerId = 99
 
@@ -239,25 +235,8 @@ class GameControllerTest {
         verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
 
         val message = captor.firstValue
+        assertEquals(MessageType.PLAYER_LEFT_FINISHED_GAME, message.type)
         assertEquals(mapOf("playerId" to playerId), message.payload)
-    }
-
-    @Test
-    fun `endTurn broadcasts GAME_END on game topic when winner exists`() {
-        val gameId = 42
-        val winner = mock<PlayerModel>()
-        whenever(winner.id).thenReturn(1)
-        whenever(winConditionService.detectWinner(gameId)).thenReturn(winner)
-
-        controller.endTurn(EndTurnRequest(gameId))
-
-        val captor = argumentCaptor<WebSocketMessage>()
-        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
-
-        val message = captor.firstValue
-        assertEquals(MessageType.GAME_END, message.type)
-        assertEquals("server", message.sender)
-        assertEquals(mapOf("winnerId" to 1), message.payload)
     }
 
     @Test
@@ -265,8 +244,9 @@ class GameControllerTest {
         val gameId = 1
         val playerId = 2
         val request = RollDiceRequest(gameId = gameId, playerId = playerId)
-        val rollDiceResponse = RollDiceResponse(dice = listOf(3, 4), total = 7)
-        whenever(diceService.rollDice(request)).thenReturn(rollDiceResponse)
+        val response = RollDiceResponse(dice = listOf(3, 4), total = 7)
+
+        whenever(diceService.rollDice(request)).thenReturn(response)
 
         controller.rollDice(request)
 
@@ -285,6 +265,7 @@ class GameControllerTest {
         val gameId = 1
         val playerId = 2
         val request = RollDiceRequest(gameId = gameId, playerId = playerId)
+
         whenever(diceService.rollDice(request)).thenThrow(RuntimeException("dice exploded"))
 
         controller.rollDice(request)
@@ -295,6 +276,9 @@ class GameControllerTest {
         val message = captor.firstValue
         assertEquals(MessageType.ERROR, message.type)
         assertEquals("SERVER", message.sender)
-        assertEquals(mapOf("event" to "ROLL_FAILED", "message" to "dice exploded"), message.payload)
+        assertEquals(
+            mapOf("event" to "ROLL_FAILED", "message" to "dice exploded"),
+            message.payload
+        )
     }
 }
