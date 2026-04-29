@@ -110,4 +110,13 @@ class PlayerLandmarkDao {
                     (PlayerLandmarks.landmarkType eq landmarkType)
         }
     }
+
+    /**
+     * Deletes all card entry for a player
+     */
+    fun deleteAllByPlayerId(playerId: Int) = transaction {
+        PlayerLandmarks.deleteWhere {
+            PlayerLandmarks.playerId eq playerId
+        }
+    }
 }
