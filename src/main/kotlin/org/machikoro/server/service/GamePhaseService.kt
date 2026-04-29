@@ -1,6 +1,7 @@
 package org.machikoro.server.service
 
 import org.machikoro.server.dao.GameDao
+import org.machikoro.server.dao.GameMarketplaceDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.UserDao
 import org.machikoro.server.domain.enums.GameStatus
@@ -13,6 +14,7 @@ class GamePhaseService(
     private val gameDao: GameDao,
     private val playerDao: PlayerDao,
     private val userDao: UserDao,
+    private val gameMarketplaceDao: GameMarketplaceDao,
     private val gameStateGuard: GameStateGuard,
     private val winConditionService: WinConditionService
     ) {
@@ -27,19 +29,6 @@ class GamePhaseService(
 
     /** Returns the phase that begins every new turn. */
     fun initialPhase(): TurnPhase = TurnPhase.ROLL_DICE
-
-    /** Advances a game to the next phase and persists it.
-     * Sets new values such as next PLayer index, updated round
-     * number and initial phase */
-    private fun advancePhase(gameId: Int): TurnPhase {
-        val game = gameStateGuard.ensureGameIsRunning(gameId)
-        val players = playerDao.getPlayers(gameId)
-        check(players.isNotEmpty()) { "Game $gameId has no players" }
-        val nextTurnIndex = (game.currentTurnIndex + 1) % players.size
-        val nextRoundNumber = if (nextTurnIndex == 0) game.roundNumber + 1 else game.roundNumber
-        gameDao.advanceTurn(gameId, nextTurnIndex, nextRoundNumber)
-        return game.turnPhase
-    }
 
     /** Ends the active player's buy-or-build window and starts the next turn. */
     fun endTurn(gameId: Int): EndTurnOutcome {
@@ -57,12 +46,28 @@ class GamePhaseService(
         return EndTurnOutcome.Continue(nextPhase)
     }
 
-    fun finishGame(gameId: Int) {
-        gameDao.updateStatus(gameId, GameStatus.FINISHED)
+    /** Advances a game to the next phase and persists it.
+     * Sets new values such as next PLayer index, updated round
+     * number and initial phase */
+    private fun advancePhase(gameId: Int): TurnPhase {
+        val game = gameStateGuard.ensureGameIsRunning(gameId)
         val players = playerDao.getPlayers(gameId)
-        players.forEach { userDao.incrementGamesPlayed(it.id) }
+        check(players.isNotEmpty()) { "Game $gameId has no players" }
+        val nextTurnIndex = (game.currentTurnIndex + 1) % players.size
+        val nextRoundNumber = if (nextTurnIndex == 0) game.roundNumber + 1 else game.roundNumber
+        gameDao.advanceTurn(gameId, nextTurnIndex, nextRoundNumber)
+        return game.turnPhase
     }
 
+    private fun finishGame(gameId: Int) {
+        gameDao.updateStatus(gameId, GameStatus.FINISHED)
+        playerDao.getPlayers(gameId).forEach { userDao.incrementGamesPlayed(it.id) }
+        clearDBAfterGame(gameId)
+    }
+
+    private fun clearDBAfterGame(gameId: Int) {
+        gameMarketplaceDao.deleteAllForGame(gameId)
+    }
     sealed interface EndTurnOutcome {
         data class Continue(
             val nextPhase: TurnPhase,
