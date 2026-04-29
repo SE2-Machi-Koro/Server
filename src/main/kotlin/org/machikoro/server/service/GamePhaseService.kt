@@ -31,9 +31,17 @@ class GamePhaseService(
         TurnPhase.END_TURN -> TurnPhase.ROLL_DICE
     }
 
+    // TODO() Prove if needed since advanceTurn always sets ROLL_DICE as current phase
     /** Returns the phase that begins every new turn. */
     fun initialPhase(): TurnPhase = TurnPhase.ROLL_DICE
 
+    /** Advances a game to the next phase and persists it. */
+    fun advancePhase(gameId: Int): TurnPhase {
+        val game = gameStateGuard.ensureGameIsRunning(gameId)
+        val next = nextPhase(game.turnPhase)
+        gameDao.updateTurnPhase(gameId, next)
+        return next
+    }
     /** Ends the active player's buy-or-build window and starts the next turn. */
     fun endTurn(gameId: Int): EndTurnOutcome {
         val game = gameStateGuard.ensureGameIsRunning(gameId)
@@ -45,15 +53,14 @@ class GamePhaseService(
             finishGame(gameId)
             return EndTurnOutcome.Won(winner)
         }
-
-        val nextPhase = advancePhase(gameId)
+        val nextPhase = advanceTurn(gameId)
         return EndTurnOutcome.Continue(nextPhase)
     }
 
-    /** Advances a game to the next phase and persists it.
+    /** Advances a game to the next player's turn and persists it.
      * Sets new values such as next PLayer index, updated round
      * number and initial phase */
-    private fun advancePhase(gameId: Int): TurnPhase {
+    private fun advanceTurn(gameId: Int): TurnPhase {
         val game = gameStateGuard.ensureGameIsRunning(gameId)
         val players = playerDao.getPlayers(gameId)
         check(players.isNotEmpty()) { "Game $gameId has no players" }
