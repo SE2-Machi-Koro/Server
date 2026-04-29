@@ -2,12 +2,9 @@ package org.machikoro.server.service
 
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.PlayerDao
-import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.GameStatus
-import org.machikoro.server.domain.enums.LandmarkType
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.PlayerModel
-import org.machikoro.server.dto.PurchaseType
 import org.springframework.stereotype.Service
 
 @Service
