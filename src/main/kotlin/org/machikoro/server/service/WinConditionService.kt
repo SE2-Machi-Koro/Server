@@ -24,7 +24,7 @@ class WinConditionService(
         if (game.turnPhase != TurnPhase.END_TURN) {
             throw CustomWebSocketException(
                 errorCode = "NOT_END_TURN_PHASE",
-                message = "Only one purchase is allowed per turn",
+                message = "Game $gameId must be in END_TURN State to determine a winner",
             )
         }
         return playerDao.getPlayers(gameId)
