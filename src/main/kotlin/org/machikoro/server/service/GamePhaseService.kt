@@ -29,7 +29,9 @@ class GamePhaseService(
     /** Returns the phase that begins every new turn. */
     fun initialPhase(): TurnPhase = TurnPhase.ROLL_DICE
 
-    /** Advances a game to the next phase and persists it. */
+    /** Advances a game to the next phase and persists it.
+     * Sets new values such as next PLayer index, updated round
+     * number and initial phase */
     private fun advancePhase(gameId: Int): TurnPhase {
         val game = gameStateGuard.ensureGameIsRunning(gameId)
         val players = playerDao.getPlayers(gameId)
