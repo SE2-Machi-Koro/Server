@@ -5,7 +5,9 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.dao.GameDao
+import org.machikoro.server.dao.GameMarketplaceDao
 import org.machikoro.server.dao.PlayerDao
+import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
@@ -21,7 +23,9 @@ class LobbyServiceTest {
 
     private val gameDao = mock<GameDao>()
     private val playerDao = mock<PlayerDao>()
-    private val lobbyService = LobbyService(gameDao, playerDao)
+    private val gameMarketplaceDao = mock<GameMarketplaceDao>()
+    private val playerLandmarkDao = mock<PlayerLandmarkDao>()
+    private val lobbyService = LobbyService(gameDao, playerDao, gameMarketplaceDao, playerLandmarkDao)
 
     private fun game(id: Int, status: GameStatus) =
         GameModel(
@@ -90,11 +94,15 @@ class LobbyServiceTest {
     fun `startGame sets status to in progress`() {
         val gameId = 4
         whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING))
+        whenever(playerDao.getPlayers(gameId)).thenReturn(listOf(player(1), player(2)))
 
         val result = lobbyService.startGame(gameId)
 
         assertEquals(GameStatus.IN_PROGRESS, result.status)
         verify(gameDao).updateStatus(gameId, GameStatus.IN_PROGRESS)
+        verify(gameMarketplaceDao).initForGame(gameId)
+        verify(playerLandmarkDao).initForPlayer(1)
+        verify(playerLandmarkDao).initForPlayer(2)
     }
 
     @Test
