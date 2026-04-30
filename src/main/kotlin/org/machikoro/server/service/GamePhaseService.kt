@@ -71,9 +71,9 @@ class GamePhaseService(
     }
 
     private fun finishGame(gameId: Int) {
-        gameDao.updateStatus(gameId, GameStatus.FINISHED)
-        playerDao.getPlayers(gameId).forEach { userDao.incrementGamesPlayed(it.id) }
         cleanupFinishedGameData(gameId)
+        playerDao.getPlayers(gameId).forEach { userDao.incrementGamesPlayed(it.id) }
+        gameDao.updateStatus(gameId, GameStatus.FINISHED)
     }
 
     private fun cleanupFinishedGameData(gameId: Int) {
