@@ -49,7 +49,7 @@ class GamePhaseService(
         check(game.turnPhase == TurnPhase.BUY_OR_BUILD) { "Game is not in BUY_OR_BUILD phase" }
         gameDao.updateTurnPhase(gameId,TurnPhase.END_TURN)
         winConditionService.detectWinner(gameId)?.let { winner ->
-            userDao.incrementWins(winner.id)
+            userDao.incrementWins(winner.userId)
             finishGame(gameId)
             return EndTurnOutcome.Won(winner)
         }
@@ -72,7 +72,7 @@ class GamePhaseService(
 
     private fun finishGame(gameId: Int) {
         cleanupFinishedGameData(gameId)
-        playerDao.getPlayers(gameId).forEach { userDao.incrementGamesPlayed(it.id) }
+        playerDao.getPlayers(gameId).forEach { userDao.incrementGamesPlayed(it.userId) }
         gameDao.updateStatus(gameId, GameStatus.FINISHED)
     }
 
