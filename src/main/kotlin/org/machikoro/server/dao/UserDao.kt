@@ -19,6 +19,7 @@ class UserDao {
     private fun ResultRow.toModel() = UserModel(
         id = this[Users.id].value,
         username = this[Users.username],
+        passwordHash = this[Users.passwordHash],
         sessionToken = this[Users.sessionToken],
         totalWins = this[Users.totalWins],
         totalGamesPlayed = this[Users.totalGamesPlayed]
@@ -59,10 +60,13 @@ class UserDao {
     /**
      * Creates a new user profile
      * Initializes gameplay statistics
+     * passwordHash is optional so existing fixtures keep working;
+     * once registration is in place every real user will have one.
      */
-    fun create(username: String): Int = transaction {
+    fun create(username: String, passwordHash: String? = null): Int = transaction {
         Users.insertAndGetId {
             it[Users.username] = username
+            it[Users.passwordHash] = passwordHash
             it[Users.sessionToken] = null
             it[Users.totalWins] = 0
             it[Users.totalGamesPlayed] = 0

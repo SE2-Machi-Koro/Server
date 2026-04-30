@@ -28,6 +28,16 @@ class UserDaoTest : AbstractDBSetup() {
         assertEquals(0, user.totalWins)
         assertEquals(0, user.totalGamesPlayed)
         assertNull(user.sessionToken)
+        assertNull(user.passwordHash)
+    }
+
+    @Test
+    fun `create with passwordHash persists the hash and findById round-trips it`() {
+        val hash = "\$2a\$10\$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy"
+        val id = dao.create("luffy", passwordHash = hash)
+        val user = dao.findById(id)
+        assertNotNull(user)
+        assertEquals(hash, user!!.passwordHash)
     }
 
     @Test
