@@ -112,7 +112,7 @@ class PlayerLandmarkDao {
     }
 
     /**
-     * Deletes all card entry for a player
+     * Deletes all landmark entries for a player
      */
     fun deleteAllByPlayerId(playerId: Int) = transaction {
         PlayerLandmarks.deleteWhere {
