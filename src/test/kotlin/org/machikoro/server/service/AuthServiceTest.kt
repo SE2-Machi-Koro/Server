@@ -7,7 +7,6 @@ import org.machikoro.server.dao.UserDao
 import org.machikoro.server.domain.models.UserModel
 import org.machikoro.server.exception.DuplicateUserException
 import org.mockito.kotlin.any
-import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -56,7 +55,34 @@ class AuthServiceTest {
         }
 
         verify(passwordEncoder, never()).encode(any())
-        verify(userDao, never()).create(eq(username), any())
+        verify(userDao, never()).create(any(), any())
+    }
+
+    @Test
+    fun `register trims surrounding whitespace and lower-cases the username`() {
+        val rawPassword = "hunter2"
+        val hash = "\$2a\$10\$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy"
+        whenever(userDao.findByUsername("alice")).thenReturn(null)
+        whenever(passwordEncoder.encode(rawPassword)).thenReturn(hash)
+        whenever(userDao.create("alice", hash)).thenReturn(7)
+
+        val response = service.register("  Alice  ", rawPassword)
+
+        assertEquals("alice", response.username)
+        verify(userDao).findByUsername("alice")
+        verify(userDao).create("alice", hash)
+    }
+
+    @Test
+    fun `register rejects passwords longer than 72 characters`() {
+        val tooLong = "x".repeat(73)
+
+        assertThrows<IllegalArgumentException> {
+            service.register("alice", tooLong)
+        }
+
+        verify(userDao, never()).findByUsername(any())
+        verify(userDao, never()).create(any(), any())
     }
 
     @Test
