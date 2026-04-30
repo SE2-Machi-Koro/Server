@@ -1,10 +1,13 @@
 package org.machikoro.server.config
 
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.machikoro.server.SpringBootTestWithoutDataSource
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
@@ -21,9 +24,33 @@ class SecurityConfigTests {
     @Autowired
     private lateinit var securityFilterChain: SecurityFilterChain
 
+    @Autowired
+    private lateinit var passwordEncoder: PasswordEncoder
+
     @Test
     fun securityFilterChainBeanShouldBeCreated() {
         assertNotNull(securityFilterChain)
+    }
+
+    @Test
+    fun passwordEncoderBeanShouldBeCreated() {
+        assertNotNull(passwordEncoder)
+    }
+
+    @Test
+    fun passwordEncoderProducesDifferentHashesForSamePassword() {
+        val raw = "correct-horse-battery-staple"
+        val first = passwordEncoder.encode(raw)
+        val second = passwordEncoder.encode(raw)
+        assertNotEquals(first, second)
+    }
+
+    @Test
+    fun passwordEncoderMatchesEncodedPasswordsAndRejectsWrongOnes() {
+        val raw = "correct-horse-battery-staple"
+        val hash = passwordEncoder.encode(raw)
+        assertTrue(passwordEncoder.matches(raw, hash))
+        assertTrue(!passwordEncoder.matches("wrong-password", hash))
     }
 
     @Test
