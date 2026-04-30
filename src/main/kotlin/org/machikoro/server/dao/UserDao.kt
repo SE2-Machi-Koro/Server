@@ -86,6 +86,18 @@ class UserDao {
     }
 
     /**
+     * Replaces the stored password hash for a user
+     * Caller is responsible for hashing the raw password via PasswordEncoder
+     * before passing it in
+     */
+    fun updatePasswordHash(id: Int, hash: String): Unit = transaction {
+        val updatedRows = Users.update({ Users.id eq id }) {
+            it[Users.passwordHash] = hash
+        }
+        if (updatedRows == 0) throw UserNotFoundException("User $id not found")
+    }
+
+    /**
      * Increments user's total win count by 1
      */
     fun incrementWins(id: Int): Unit = transaction {

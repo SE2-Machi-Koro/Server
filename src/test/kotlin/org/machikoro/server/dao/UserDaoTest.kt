@@ -81,6 +81,22 @@ class UserDaoTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `updatePasswordHash replaces the stored hash`() {
+        val firstHash = "\$2a\$10\$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy"
+        val secondHash = "\$2a\$10\$abcdefghijklmnopqrstuvCi6PrIz4nIqwBwVYyzQjQ7yVtJ7Yp.Ie"
+        val id = dao.create("zoro", passwordHash = firstHash)
+        dao.updatePasswordHash(id, secondHash)
+        assertEquals(secondHash, dao.findById(id)!!.passwordHash)
+    }
+
+    @Test
+    fun `updatePasswordHash throws when user does not exist`() {
+        assertThrows<UserNotFoundException> {
+            dao.updatePasswordHash(999999, "some-hash")
+        }
+    }
+
+    @Test
     fun `findBySessionToken returns null for unknown token`() {
         assertNull(dao.findBySessionToken("no-token"))
     }
