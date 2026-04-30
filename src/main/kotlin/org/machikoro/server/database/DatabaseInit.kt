@@ -44,13 +44,7 @@ fun initDatabase(dataSource: DataSource) {
      * - If something fails -> Rollback
      */
     transaction {
-        // createMissingTablesAndColumns is deprecated in Exposed v1 in favour of
-        // a real migration tool (see exposed-migration-jdbc / Flyway / Liquibase).
-        // Accepted for SE2 scope so adding a column to an existing table picks up
-        // automatically on next startup. Track the move to a proper migration
-        // tool as a follow-up to #157.
-        @Suppress("DEPRECATION")
-        SchemaUtils.createMissingTablesAndColumns(
+        SchemaUtils.create(
             Cards,
             Landmarks,
             Users,
