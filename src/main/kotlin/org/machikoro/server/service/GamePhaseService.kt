@@ -1,5 +1,6 @@
 package org.machikoro.server.service
 
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.GameMarketplaceDao
 import org.machikoro.server.dao.PlayerCardDao
@@ -72,14 +73,16 @@ class GamePhaseService(
     private fun finishGame(gameId: Int) {
         gameDao.updateStatus(gameId, GameStatus.FINISHED)
         playerDao.getPlayers(gameId).forEach { userDao.incrementGamesPlayed(it.id) }
-        clearDBAfterGame(gameId)
+        cleanupFinishedGameData(gameId)
     }
 
-    private fun clearDBAfterGame(gameId: Int) {
-        gameMarketplaceDao.deleteAllForGame(gameId)
-        playerDao.getPlayers(gameId).forEach {
-            playerCardDao.deleteAllByPlayerId(it.id)
-            playerLandmarkDao.deleteAllByPlayerId(it.id)
+    private fun cleanupFinishedGameData(gameId: Int) {
+        transaction {
+            gameMarketplaceDao.deleteAllForGame(gameId)
+            playerDao.getPlayers(gameId).forEach {
+                playerCardDao.deleteAllByPlayerId(it.id)
+                playerLandmarkDao.deleteAllByPlayerId(it.id)
+            }
         }
     }
     sealed interface EndTurnOutcome {
