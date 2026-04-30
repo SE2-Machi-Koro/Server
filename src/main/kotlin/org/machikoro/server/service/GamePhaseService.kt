@@ -32,10 +32,6 @@ class GamePhaseService(
         TurnPhase.END_TURN -> TurnPhase.ROLL_DICE
     }
 
-    // TODO() Prove if needed since advanceTurn always sets ROLL_DICE as current phase
-    /** Returns the phase that begins every new turn. */
-    fun initialPhase(): TurnPhase = TurnPhase.ROLL_DICE
-
     /** Advances a game to the next phase and persists it. */
     fun advancePhase(gameId: Int): TurnPhase {
         val game = gameStateGuard.ensureGameIsRunning(gameId)
@@ -43,7 +39,10 @@ class GamePhaseService(
         gameDao.updateTurnPhase(gameId, next)
         return next
     }
-    /** Ends the active player's buy-or-build window and starts the next turn. */
+    /** Ends the active player's turn after card purchase
+     * Checks for a winner - in this case stops game,
+     * otherwise starts turn for next player.
+     **/
     fun endTurn(gameId: Int): EndTurnOutcome {
         val game = gameStateGuard.ensureGameIsRunning(gameId)
         check(game.turnPhase == TurnPhase.BUY_OR_BUILD) { "Game is not in BUY_OR_BUILD phase" }
