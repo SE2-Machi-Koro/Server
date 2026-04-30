@@ -41,16 +41,6 @@ class GameController(
         )
         logger.info("Processed {} purchase for game {}", result.purchaseType, request.gameId)
 
-        if (result.purchaseType == PurchaseType.LANDMARK) {
-            val winner = winConditionService.detectWinner(request.gameId)
-            if (winner != null) {
-                logger.info("Game ${request.gameId} has ended. Winner: ${winner.id}")
-                gamePhaseService.finishGame(request.gameId)
-                broadcastWinner(request.gameId, winner)
-                return
-            }
-        }
-
         broadcastPurchase(request.gameId, result)
     }
 
