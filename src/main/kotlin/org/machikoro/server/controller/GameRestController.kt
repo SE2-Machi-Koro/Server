@@ -8,11 +8,9 @@ import org.machikoro.server.dto.LeaveFinishedGameRequest
 import org.machikoro.server.dto.PurchaseRequest
 import org.machikoro.server.dto.ResolveEffectsRequest
 import org.machikoro.server.dto.RollDiceRequest
-import org.machikoro.server.dto.RollDiceResponse
 import org.machikoro.server.service.DiceService
 import org.machikoro.server.service.GamePhaseService
 import org.machikoro.server.service.LeaveFinishedGameService
-import org.machikoro.server.service.PurchaseResult
 import org.machikoro.server.service.PurchaseService
 import org.machikoro.server.service.WinConditionService
 import org.machikoro.server.service.interfaces.EarningsService
@@ -33,8 +31,10 @@ import org.springframework.web.bind.annotation.RestController
  * Intended for Swagger UI / curl / Postman exercising during development.
  * Disabled in the `prod` profile.
  *
- * If you add a new `@MessageMapping` to [GameController] or [EarningsController],
- * mirror it here so the dev surface stays in sync.
+ * `/app/game.advancePhase` is intentionally not mirrored: PR #153 removes that
+ * STOMP mapping in favour of phase advancement happening internally inside
+ * `endTurn`. If you add a new `@MessageMapping` to [GameController] or
+ * [EarningsController], mirror it here so the dev surface stays in sync.
  */
 @RestController
 @RequestMapping("/api/dev/game")
@@ -54,60 +54,69 @@ class GameRestController(
 
     @PostMapping("/purchase")
     @Operation(summary = "Mirror of /app/game.purchase")
-    fun purchase(@RequestBody request: PurchaseRequest): ResponseEntity<Any> = runCatching {
-        purchaseService.purchase(
-            gameId = request.gameId,
-            purchaseType = request.purchaseType,
-            cardType = request.cardType,
-            landmarkType = request.landmarkType,
-        )
-    }.fold(
-        onSuccess = { ResponseEntity.ok<Any>(it) },
-        onFailure = { ResponseEntity.badRequest().body(it.message) },
-    )
+    fun purchase(@RequestBody request: PurchaseRequest): ResponseEntity<Any> {
+        return try {
+            val result = purchaseService.purchase(
+                gameId = request.gameId,
+                purchaseType = request.purchaseType,
+                cardType = request.cardType,
+                landmarkType = request.landmarkType,
+            )
+            ResponseEntity.ok(result)
+        } catch (e: Exception) {
+            ResponseEntity.badRequest().body(e.message)
+        }
+    }
 
     @PostMapping("/endTurn")
     @Operation(summary = "Mirror of /app/game.endTurn")
-    fun endTurn(@RequestBody request: EndTurnRequest): ResponseEntity<Any> = runCatching {
-        val winner = winConditionService.detectWinner(request.gameId)
-        if (winner != null) {
-            gamePhaseService.finishGame(request.gameId)
-            EndTurnResponse(turnPhase = null, winnerId = winner.id)
-        } else {
-            val newPhase = gamePhaseService.endTurn(request.gameId)
-            EndTurnResponse(turnPhase = newPhase, winnerId = null)
+    fun endTurn(@RequestBody request: EndTurnRequest): ResponseEntity<Any> {
+        return try {
+            val winner = winConditionService.detectWinner(request.gameId)
+            val response = if (winner != null) {
+                gamePhaseService.finishGame(request.gameId)
+                EndTurnResponse(turnPhase = null, winnerId = winner.id)
+            } else {
+                val newPhase = gamePhaseService.endTurn(request.gameId)
+                EndTurnResponse(turnPhase = newPhase, winnerId = null)
+            }
+            ResponseEntity.ok(response)
+        } catch (e: Exception) {
+            ResponseEntity.badRequest().body(e.message)
         }
-    }.fold(
-        onSuccess = { ResponseEntity.ok<Any>(it) },
-        onFailure = { ResponseEntity.badRequest().body(it.message) },
-    )
+    }
 
     @PostMapping("/leave")
     @Operation(summary = "Mirror of /app/game.leave")
-    fun leave(@RequestBody request: LeaveFinishedGameRequest): ResponseEntity<Any> = runCatching {
-        leaveFinishedGameService.leaveFinishedGame(request.gameId, request.playerId)
-    }.fold(
-        onSuccess = { ResponseEntity.ok().build<Any>() },
-        onFailure = { ResponseEntity.badRequest().body(it.message) },
-    )
+    fun leave(@RequestBody request: LeaveFinishedGameRequest): ResponseEntity<Any> {
+        return try {
+            leaveFinishedGameService.leaveFinishedGame(request.gameId, request.playerId)
+            ResponseEntity.ok().build()
+        } catch (e: Exception) {
+            ResponseEntity.badRequest().body(e.message)
+        }
+    }
 
     @PostMapping("/rollDice")
     @Operation(summary = "Mirror of /app/game.rollDice")
-    fun rollDice(@RequestBody request: RollDiceRequest): ResponseEntity<Any> = runCatching {
-        diceService.rollDice(request)
-    }.fold(
-        onSuccess = { ResponseEntity.ok<Any>(it) },
-        onFailure = { ResponseEntity.badRequest().body(it.message) },
-    )
+    fun rollDice(@RequestBody request: RollDiceRequest): ResponseEntity<Any> {
+        return try {
+            ResponseEntity.ok(diceService.rollDice(request))
+        } catch (e: Exception) {
+            ResponseEntity.badRequest().body(e.message)
+        }
+    }
 
     @PostMapping("/resolveEffects")
     @Operation(summary = "Mirror of /app/game.resolveEffects")
-    fun resolveEffects(@RequestBody request: ResolveEffectsRequest): ResponseEntity<Any> = runCatching {
-        earningsService.resolveEffects(request.gameId)
-    }.fold(
-        onSuccess = { ResponseEntity.ok().build<Any>() },
-        onFailure = { ResponseEntity.badRequest().body(it.message) },
-    )
+    fun resolveEffects(@RequestBody request: ResolveEffectsRequest): ResponseEntity<Any> {
+        return try {
+            earningsService.resolveEffects(request.gameId)
+            ResponseEntity.ok().build()
+        } catch (e: Exception) {
+            ResponseEntity.badRequest().body(e.message)
+        }
+    }
 }
 
 data class EndTurnResponse(
