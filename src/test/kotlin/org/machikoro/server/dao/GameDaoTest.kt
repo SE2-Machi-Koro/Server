@@ -138,7 +138,7 @@ class GameDaoTest : AbstractDBSetup() {
     }
 
     @Test
-    fun `tryMarkPurchasedThisTurn`() { // succeeds once and then rejects repeats
+    fun `tryMarkPurchasedThisTurnSucceedsOnceAndThenRejectsRepeats`() {
         val id = gameDao.create(hostId)
 
         assertTrue(gameDao.tryMarkPurchasedThisTurn(id))
