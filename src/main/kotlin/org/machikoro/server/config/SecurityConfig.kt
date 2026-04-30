@@ -17,14 +17,19 @@ class SecurityConfig {
      * Permits unauthenticated access to WebSocket endpoints, static resources, the root/index page,
      * and the `/actuator/health` endpoint so Docker, CI, and monitoring can poll it without credentials.
      * Requires authentication for API endpoints.
-     * CSRF is disabled for WebSocket endpoints to allow SockJS fallback HTTP POST requests.
+     * CSRF is disabled for WebSocket endpoints to allow SockJS fallback HTTP POST requests
+     * and for the public auth endpoints since clients (e.g. the Android app) post JSON
+     * without a session-bound CSRF token.
      * CSRF remains enabled for all other endpoints including API routes.
      */
     @Bean
     fun securityFilterChain(http: HttpSecurity): SecurityFilterChain {
         http
             .csrf { csrf ->
-                csrf.ignoringRequestMatchers("/ws", "/ws/**", "/ws-sockjs", "/ws-sockjs/**")
+                csrf.ignoringRequestMatchers(
+                    "/ws", "/ws/**", "/ws-sockjs", "/ws-sockjs/**",
+                    "/auth/**",
+                )
             }
             .authorizeHttpRequests { auth ->
                 auth.requestMatchers("/", "/index.html", "/css/**", "/js/**", "/webjars/**").permitAll()
@@ -38,6 +43,7 @@ class SecurityConfig {
                     "/v3/api-docs",
                     "/v3/api-docs/**"
                 ).permitAll()
+                auth.requestMatchers("/auth/**").permitAll()
                 auth.requestMatchers("/api/**").authenticated()
                 auth.anyRequest().authenticated()
             }
