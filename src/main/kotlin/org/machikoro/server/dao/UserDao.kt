@@ -90,9 +90,9 @@ class UserDao {
      * Caller is responsible for hashing the raw password via PasswordEncoder
      * before passing it in
      */
-    fun updatePasswordHash(id: Int, hash: String): Unit = transaction {
+    fun updatePasswordHash(id: Int, passwordHash: String): Unit = transaction {
         val updatedRows = Users.update({ Users.id eq id }) {
-            it[Users.passwordHash] = hash
+            it[Users.passwordHash] = passwordHash
         }
         if (updatedRows == 0) throw UserNotFoundException("User $id not found")
     }

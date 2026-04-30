@@ -1,5 +1,6 @@
 package org.machikoro.server.config
 
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -50,7 +51,7 @@ class SecurityConfigTests {
         val raw = "correct-horse-battery-staple"
         val hash = passwordEncoder.encode(raw)
         assertTrue(passwordEncoder.matches(raw, hash))
-        assertTrue(!passwordEncoder.matches("wrong-password", hash))
+        assertFalse(passwordEncoder.matches("wrong-password", hash))
     }
 
     @Test
