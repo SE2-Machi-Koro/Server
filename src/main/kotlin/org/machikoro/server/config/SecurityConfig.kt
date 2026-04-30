@@ -36,6 +36,7 @@ class SecurityConfig {
                     "/v3/api-docs",
                     "/v3/api-docs/**"
                 ).permitAll()
+                auth.requestMatchers("/api/dev/**").permitAll()
                 auth.requestMatchers("/api/**").authenticated()
                 auth.anyRequest().authenticated()
             }
