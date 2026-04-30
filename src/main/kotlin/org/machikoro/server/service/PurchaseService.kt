@@ -28,6 +28,13 @@ class PurchaseService(
     private val gameStateGuard: GameStateGuard,
 ) {
 
+    /**
+     * Executes the single allowed purchase during the active player's
+     * BUY_OR_BUILD phase.
+     *
+     * The full flow runs in one transaction so coin changes, ownership changes,
+     * supply updates, and purchase-state enforcement succeed or fail together.
+     */
     fun purchase(
         gameId: Int,
         purchaseType: PurchaseType,
@@ -79,6 +86,10 @@ class PurchaseService(
         }
     }
 
+    /**
+     * Normalizes the WebSocket request into one concrete internal target before
+     * the purchase-specific helpers run.
+     */
     private fun resolvePurchaseTarget(
         purchaseType: PurchaseType,
         cardType: CardType?,
@@ -104,6 +115,10 @@ class PurchaseService(
             }
         }
 
+    /**
+     * Buys one establishment card for the active player and removes that card
+     * from the current game's marketplace supply.
+     */
     private fun purchaseEstablishment(
         gameId: Int,
         activePlayer: PlayerModel,
@@ -162,6 +177,10 @@ class PurchaseService(
         )
     }
 
+    /**
+     * Builds one landmark for the active player. Landmark rows are expected to
+     * exist already from game start initialization.
+     */
     private fun purchaseLandmark(
         activePlayer: PlayerModel,
         landmarkType: LandmarkType,
@@ -222,6 +241,7 @@ class PurchaseService(
     }
 }
 
+/** Minimal result payload broadcast back to clients after a successful purchase. */
 data class PurchaseResult(
     val turnPhase: TurnPhase,
     val purchaseType: PurchaseType,

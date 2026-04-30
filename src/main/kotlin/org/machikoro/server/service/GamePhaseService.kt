@@ -24,7 +24,13 @@ class GamePhaseService(
     /** Returns the phase that begins every new turn. */
     fun initialPhase(): TurnPhase = TurnPhase.ROLL_DICE
 
-    /** Advances a game to the next phase and persists it. */
+    /**
+     * Advances a running game to the next phase in the turn cycle.
+     *
+     * This is used for the regular phase progression after rolling dice and
+     * resolving card effects. Ending the buy/build window is handled separately
+     * by [endTurn].
+     */
     fun advancePhase(gameId: Int): TurnPhase {
         val game = gameStateGuard.ensureGameIsRunning(gameId)
         val next = nextPhase(game.turnPhase)
@@ -32,7 +38,13 @@ class GamePhaseService(
         return next
     }
 
-    /** Ends the active player's buy-or-build window and starts the next turn. */
+    /**
+     * Closes the current player's BUY_OR_BUILD phase and rotates the game to the
+     * next player's turn.
+     *
+     * The service briefly records [TurnPhase.END_TURN] and then resets the next
+     * turn back to [TurnPhase.ROLL_DICE] through [GameDao.advanceTurn].
+     */
     fun endTurn(gameId: Int): TurnPhase {
         val game = gameStateGuard.ensureGameIsRunning(gameId)
         check(game.turnPhase == TurnPhase.BUY_OR_BUILD) { "Game is not in BUY_OR_BUILD phase" }

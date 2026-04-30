@@ -144,6 +144,9 @@ class GameDao {
     /**
      * Atomically marks the current turn as having purchased only if it has not
      * already been marked by another request.
+     *
+     * This is used by the buying-phase purchase flow to enforce the
+     * "only one purchase per turn" rule without a separate read-then-write race.
      */
     fun tryMarkPurchasedThisTurn(id: Int): Boolean = transaction {
         Games.update({

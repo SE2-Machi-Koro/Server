@@ -33,6 +33,11 @@ class GameController(
 ) {
     private val logger = LoggerFactory.getLogger(GameController::class.java)
 
+    /**
+     * Handles one buy/build action from the active player during BUY_OR_BUILD
+     * and broadcasts either the purchase result or the win event after a
+     * landmark completes the game.
+     */
     @MessageMapping("/game.purchase")
     fun purchase(@Payload request: PurchaseRequest) {
         val result = purchaseService.purchase(
@@ -63,6 +68,10 @@ class GameController(
         broadcastPhase(request.gameId, newPhase)
     }
 
+    /**
+     * Handles the explicit "End Turn" action from the client after the
+     * buy/build window is finished.
+     */
     @MessageMapping("/game.endTurn")
     fun endTurn(@Payload request: EndTurnRequest) {
         val winner = winConditionService.detectWinner(request.gameId)

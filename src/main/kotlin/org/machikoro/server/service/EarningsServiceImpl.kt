@@ -80,7 +80,10 @@ class EarningsServiceImpl(
 
     /**
      * Advances the game state by resolving the effects of the dice roll
-     * Ensures the game is in the correct phase before triggering the economics
+     * and then moves the active player into the buy/build window.
+     *
+     * This is the handoff point introduced for the buying-phase flow: earnings
+     * are resolved first, and only then does the turn enter BUY_OR_BUILD.
      */
     override fun resolveEffects(gameId: Int) {
         val game = gameDao.findById(gameId)

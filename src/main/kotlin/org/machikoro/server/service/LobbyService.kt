@@ -46,8 +46,10 @@ class LobbyService(
 
         gameDao.updateStatus(gameId, GameStatus.IN_PROGRESS)
 
+        // Buying-phase setup lives on game start so purchases can read existing rows.
         gameMarketplaceDao.initForGame(gameId)
         players.forEach { player ->
+            // Landmark state is created once per player and then updated over the game.
             playerLandmarkDao.initForPlayer(player.id)
         }
 
