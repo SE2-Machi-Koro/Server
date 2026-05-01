@@ -8,6 +8,7 @@ import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.GameMarketplaceDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
+import org.machikoro.server.database.AbstractDBSetup
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
@@ -19,7 +20,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 
-class LobbyServiceTest {
+class LobbyServiceTest : AbstractDBSetup() {
 
     private val gameDao = mock<GameDao>()
     private val playerDao = mock<PlayerDao>()
@@ -113,4 +114,5 @@ class LobbyServiceTest {
             lobbyService.startGame(1)
         }
     }
+
 }
