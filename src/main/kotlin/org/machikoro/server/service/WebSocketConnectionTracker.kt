@@ -35,6 +35,16 @@ class WebSocketConnectionTracker {
     }
 
     /**
+     * Returns the [userId] associated with [sessionId], or `null` if the session
+     * is not registered. Used by the WebSocket controller to authorise actions
+     * without trusting a client-supplied user ID.
+     *
+     * @param sessionId STOMP session identifier
+     * @return the registered user ID, or `null` if unknown
+     */
+    fun getUserId(sessionId: String): Int? = sessions[sessionId]?.first
+
+    /**
      * Returns the set of user IDs that are currently connected to a specific game.
      * Used for roster sanitization before game start.
      *
@@ -42,9 +52,8 @@ class WebSocketConnectionTracker {
      * @return set of connected user IDs
      */
     fun getConnectedUserIds(gameId: Int): Set<Int> =
-        sessions.values
-            .filter { (_, gId) -> gId == gameId }
-            .map { (uId, _) -> uId }
-            .toSet()
+        sessions.values.mapNotNullTo(mutableSetOf()) { (uId, gId) ->
+            uId.takeIf { gId == gameId }
+        }
 }
 
