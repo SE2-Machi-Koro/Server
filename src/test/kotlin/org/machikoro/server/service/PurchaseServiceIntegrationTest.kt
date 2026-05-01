@@ -32,6 +32,13 @@ import org.machikoro.server.service.interfaces.EarningsService
 import org.springframework.beans.factory.annotation.Autowired
 import kotlin.test.Test
 
+/**
+ * DB-backed regression coverage for the buying-phase purchase flow.
+ *
+ * These tests focus on the hardening added after the first purchase
+ * implementation: one purchase per turn, no-mutation failures, and purchased
+ * establishments working in later turns.
+ */
 class PurchaseServiceIntegrationTest : AbstractDBSetup() {
 
     @Autowired

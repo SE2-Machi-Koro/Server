@@ -41,6 +41,13 @@ class LobbyService(
         }
     }
 
+    /**
+     * Moves a lobby into IN_PROGRESS and performs the setup needed for the
+     * buy/build flow in one transaction.
+     *
+     * This avoids leaving a game half-started if marketplace or landmark setup
+     * fails after the status update.
+     */
     fun startGame(gameId: Int): GameModel {
         return transaction {
             val game = gameDao.findById(gameId) ?: throw GameNotFoundException("Game with id $gameId not found")

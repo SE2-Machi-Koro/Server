@@ -20,6 +20,12 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 
+/**
+ * Fast behavior-level checks for lobby service branching.
+ *
+ * startGame also has DB-backed coverage in LobbyServiceIntegrationTest for the
+ * transactional setup path.
+ */
 class LobbyServiceTest : AbstractDBSetup() {
 
     private val gameDao = mock<GameDao>()

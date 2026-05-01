@@ -20,6 +20,12 @@ import org.machikoro.server.exception.GameNotFoundException
 import org.springframework.beans.factory.annotation.Autowired
 import kotlin.test.Test
 
+/**
+ * DB-backed coverage for the transactional startGame setup path.
+ *
+ * This proves the game status flip and the buy/build setup rows are created
+ * together against the real persistence layer.
+ */
 class LobbyServiceIntegrationTest : AbstractDBSetup() {
 
     @Autowired
