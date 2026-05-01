@@ -7,18 +7,17 @@ import org.machikoro.server.dto.EndTurnRequest
 import org.machikoro.server.dto.LeaveFinishedGameRequest
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.PurchaseRequest
-import org.machikoro.server.dto.PurchaseType
 import org.machikoro.server.dto.RollDiceRequest
 import org.machikoro.server.dto.StartGameRequest
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.service.DiceService
 import org.machikoro.server.service.GamePhaseService
+import org.machikoro.server.service.GamePhaseService.EndTurnOutcome
 import org.machikoro.server.service.LeaveFinishedGameService
 import org.machikoro.server.service.LobbyService
 import org.machikoro.server.service.PurchaseResult
 import org.machikoro.server.service.PurchaseService
 import org.machikoro.server.service.WebSocketConnectionTracker
-import org.machikoro.server.service.WinConditionService
 import org.slf4j.LoggerFactory
 import org.springframework.messaging.handler.annotation.MessageMapping
 import org.springframework.messaging.handler.annotation.Payload
@@ -31,7 +30,6 @@ class GameController(
     private val gamePhaseService: GamePhaseService,
     private val messagingTemplate: SimpMessagingTemplate,
     private val leaveFinishedGameService: LeaveFinishedGameService,
-    private val winConditionService: WinConditionService,
     private val purchaseService: PurchaseService,
     private val diceService: DiceService,
     private val lobbyService: LobbyService,
@@ -117,16 +115,6 @@ class GameController(
         )
         logger.info("Processed {} purchase for game {}", result.purchaseType, request.gameId)
 
-        if (result.purchaseType == PurchaseType.LANDMARK) {
-            val winner = winConditionService.detectWinner(request.gameId)
-            if (winner != null) {
-                logger.info("Game ${request.gameId} has ended. Winner: ${winner.id}")
-                gamePhaseService.finishGame(request.gameId)
-                broadcastWinner(request.gameId, winner)
-                return
-            }
-        }
-
         broadcastPurchase(request.gameId, result)
     }
 
@@ -139,18 +127,16 @@ class GameController(
 
     @MessageMapping("/game.endTurn")
     fun endTurn(@Payload request: EndTurnRequest) {
-        val winner = winConditionService.detectWinner(request.gameId)
-
-        if (winner != null) {
-            logger.info("Game ${request.gameId} has ended. Winner: ${winner.id}")
-            gamePhaseService.finishGame(request.gameId)
-            broadcastWinner(request.gameId, winner)
-            return
+        when (val result = gamePhaseService.endTurn(request.gameId)) {
+            is EndTurnOutcome.Continue -> {
+                logger.info("Ended turn for game ${request.gameId}, new phase ${result.nextPhase}")
+                broadcastPhase(request.gameId, result.nextPhase)
+            }
+            is EndTurnOutcome.Won -> {
+                logger.info("Game ${request.gameId} finished, winner=${result.winner.id}")
+                broadcastWinner(request.gameId, result.winner)
+            }
         }
-
-        val newPhase = gamePhaseService.endTurn(request.gameId)
-        logger.info("Ended turn for game ${request.gameId}, new phase $newPhase")
-        broadcastPhase(request.gameId, newPhase)
     }
 
     @MessageMapping("/game.leave")

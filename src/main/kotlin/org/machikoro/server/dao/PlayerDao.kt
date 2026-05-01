@@ -21,7 +21,8 @@ class PlayerDao {
         gameId = this[Players.gameId].value,
         userId = this[Players.userId].value,
         turnOrder = this[Players.turnOrder],
-        coins = this[Players.coins]
+        coins = this[Players.coins],
+        lastSeenAt = this[Players.lastSeenAt]
     )
 
     /**
@@ -123,6 +124,18 @@ class PlayerDao {
     fun updateTurnOrder(playerId: Int, newOrder: Int): Unit = transaction {
         val updatedRows = Players.update({ Players.id eq playerId }) {
             it[Players.turnOrder] = newOrder
+        }
+        if (updatedRows == 0) throw PlayerNotFoundException("Player $playerId not found")
+    }
+
+    /**
+     * Updates the lastSeenAt timestamp for a player.
+     * Called on every heartbeat/reconnect to track connection status.
+     * @param playerId Player ID
+     */
+    fun updateLastSeen(playerId: Int): Unit = transaction {
+        val updatedRows = Players.update({ Players.id eq playerId }) {
+            it[Players.lastSeenAt] = System.currentTimeMillis()
         }
         if (updatedRows == 0) throw PlayerNotFoundException("Player $playerId not found")
     }

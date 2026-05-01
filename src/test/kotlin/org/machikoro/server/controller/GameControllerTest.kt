@@ -22,19 +22,18 @@ import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.NotHostException
 import org.machikoro.server.service.DiceService
 import org.machikoro.server.service.GamePhaseService
+import org.machikoro.server.service.GamePhaseService.EndTurnOutcome
 import org.machikoro.server.service.LeaveFinishedGameService
 import org.machikoro.server.service.LobbyService
 import org.machikoro.server.service.PurchaseResult
 import org.machikoro.server.service.PurchaseService
 import org.machikoro.server.service.WebSocketConnectionTracker
-import org.machikoro.server.service.WinConditionService
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
-import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor
@@ -45,14 +44,13 @@ class GameControllerTest {
     private val gamePhaseService = mock<GamePhaseService>()
     private val messagingTemplate = mock<SimpMessagingTemplate>()
     private val leaveFinishedGameService = mock<LeaveFinishedGameService>()
-    private val winConditionService = mock<WinConditionService>()
     private val purchaseService = mock<PurchaseService>()
     private val diceService = mock<DiceService>()
     private val lobbyService = mock<LobbyService>()
     private val connectionTracker = mock<WebSocketConnectionTracker>()
     private val controller = GameController(
         gamePhaseService, messagingTemplate, leaveFinishedGameService,
-        winConditionService, purchaseService, diceService, lobbyService, connectionTracker
+        purchaseService, diceService, lobbyService, connectionTracker
     )
 
     // ── startGame ─────────────────────────────────────────────────────────────
@@ -65,8 +63,8 @@ class GameControllerTest {
             hasPurchasedThisTurn = false, roundNumber = 1,
         ),
         players = listOf(
-            PlayerModel(id = 1, gameId = gameId, userId = 1, turnOrder = 0, coins = 3),
-            PlayerModel(id = 2, gameId = gameId, userId = 2, turnOrder = 1, coins = 3),
+            PlayerModel(id = 1, gameId = gameId, userId = 1, turnOrder = 0, coins = 3, lastSeenAt = null),
+            PlayerModel(id = 2, gameId = gameId, userId = 2, turnOrder = 1, coins = 3, lastSeenAt = null),
         ),
         playerCards = emptyMap(),
         turnOrder = listOf(1, 2),
@@ -165,7 +163,8 @@ class GameControllerTest {
     @Test
     fun `endTurn delegates to service with the requested game id`() {
         val gameId = 42
-        whenever(gamePhaseService.endTurn(gameId)).thenReturn(TurnPhase.ROLL_DICE)
+        whenever(gamePhaseService.endTurn(gameId))
+            .thenReturn(EndTurnOutcome.Continue(TurnPhase.ROLL_DICE))
 
         controller.endTurn(EndTurnRequest(gameId))
 
@@ -175,8 +174,8 @@ class GameControllerTest {
     @Test
     fun `endTurn broadcasts resulting phase as GAME_ACTION on game topic`() {
         val gameId = 42
-        whenever(winConditionService.detectWinner(gameId)).thenReturn(null)
-        whenever(gamePhaseService.endTurn(gameId)).thenReturn(TurnPhase.ROLL_DICE)
+        whenever(gamePhaseService.endTurn(gameId))
+            .thenReturn(EndTurnOutcome.Continue(TurnPhase.ROLL_DICE))
 
         controller.endTurn(EndTurnRequest(gameId))
 
@@ -187,6 +186,25 @@ class GameControllerTest {
         assertEquals(MessageType.GAME_ACTION, message.type)
         assertEquals("server", message.sender)
         assertEquals(mapOf("turnPhase" to "ROLL_DICE"), message.payload)
+    }
+
+    @Test
+    fun `endTurn broadcasts GAME_END on game topic when winner exists`() {
+        val gameId = 42
+        val winner = mock<PlayerModel>()
+        whenever(winner.id).thenReturn(1)
+        whenever(gamePhaseService.endTurn(gameId))
+            .thenReturn(EndTurnOutcome.Won(winner))
+
+        controller.endTurn(EndTurnRequest(gameId))
+
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+
+        val message = captor.firstValue
+        assertEquals(MessageType.GAME_END, message.type)
+        assertEquals("server", message.sender)
+        assertEquals(mapOf("winnerId" to 1), message.payload)
     }
 
     @Test
@@ -202,7 +220,9 @@ class GameControllerTest {
             )
         )
 
-        controller.purchase(PurchaseRequest(gameId, PurchaseType.ESTABLISHMENT, cardType = CardType.BAKERY))
+        controller.purchase(
+            PurchaseRequest(gameId, PurchaseType.ESTABLISHMENT, cardType = CardType.BAKERY)
+        )
 
         verify(purchaseService).purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.BAKERY, null)
     }
@@ -210,6 +230,7 @@ class GameControllerTest {
     @Test
     fun `purchase broadcasts resulting purchase payload as GAME_ACTION on game topic`() {
         val gameId = 42
+
         whenever(
             purchaseService.purchase(gameId, PurchaseType.LANDMARK, null, LandmarkType.TRAIN_STATION)
         ).thenReturn(
@@ -219,9 +240,10 @@ class GameControllerTest {
                 landmarkType = LandmarkType.TRAIN_STATION,
             )
         )
-        whenever(winConditionService.detectWinner(gameId)).thenReturn(null)
 
-        controller.purchase(PurchaseRequest(gameId, PurchaseType.LANDMARK, landmarkType = LandmarkType.TRAIN_STATION))
+        controller.purchase(
+            PurchaseRequest(gameId, PurchaseType.LANDMARK, landmarkType = LandmarkType.TRAIN_STATION)
+        )
 
         val captor = argumentCaptor<WebSocketMessage>()
         verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
@@ -237,54 +259,6 @@ class GameControllerTest {
             ),
             message.payload,
         )
-    }
-
-    @Test
-    fun `purchase broadcasts GAME_END and finishes game when landmark purchase wins`() {
-        val gameId = 42
-        whenever(
-            purchaseService.purchase(gameId, PurchaseType.LANDMARK, null, LandmarkType.RADIO_TOWER)
-        ).thenReturn(
-            PurchaseResult(
-                turnPhase = TurnPhase.BUY_OR_BUILD,
-                purchaseType = PurchaseType.LANDMARK,
-                landmarkType = LandmarkType.RADIO_TOWER,
-            )
-        )
-        val winner = mock<PlayerModel>()
-        whenever(winner.id).thenReturn(7)
-        whenever(winConditionService.detectWinner(gameId)).thenReturn(winner)
-
-        controller.purchase(PurchaseRequest(gameId, PurchaseType.LANDMARK, landmarkType = LandmarkType.RADIO_TOWER))
-
-        verify(gamePhaseService).finishGame(gameId)
-
-        val captor = argumentCaptor<WebSocketMessage>()
-        verify(messagingTemplate, times(1)).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
-
-        val message = captor.firstValue
-        assertEquals(MessageType.GAME_END, message.type)
-        assertEquals("server", message.sender)
-        assertEquals(mapOf("winnerId" to 7), message.payload)
-    }
-
-    @Test
-    fun `purchase does not invoke win check for establishment purchases`() {
-        val gameId = 42
-        whenever(
-            purchaseService.purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.BAKERY, null)
-        ).thenReturn(
-            PurchaseResult(
-                turnPhase = TurnPhase.BUY_OR_BUILD,
-                purchaseType = PurchaseType.ESTABLISHMENT,
-                cardType = CardType.BAKERY,
-            )
-        )
-
-        controller.purchase(PurchaseRequest(gameId, PurchaseType.ESTABLISHMENT, cardType = CardType.BAKERY))
-
-        verify(winConditionService, never()).detectWinner(any())
-        verify(gamePhaseService, never()).finishGame(any())
     }
 
     @Test
@@ -323,7 +297,7 @@ class GameControllerTest {
     }
 
     @Test
-    fun `leaveFinishedGame payload contains correct playerId`() {
+    fun `leaveFinishedGame payload contains correct playerId and type`() {
         val gameId = 3
         val playerId = 99
 
@@ -333,25 +307,8 @@ class GameControllerTest {
         verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
 
         val message = captor.firstValue
+        assertEquals(MessageType.PLAYER_LEFT_FINISHED_GAME, message.type)
         assertEquals(mapOf("playerId" to playerId), message.payload)
-    }
-
-    @Test
-    fun `endTurn broadcasts GAME_END on game topic when winner exists`() {
-        val gameId = 42
-        val winner = mock<PlayerModel>()
-        whenever(winner.id).thenReturn(1)
-        whenever(winConditionService.detectWinner(gameId)).thenReturn(winner)
-
-        controller.endTurn(EndTurnRequest(gameId))
-
-        val captor = argumentCaptor<WebSocketMessage>()
-        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
-
-        val message = captor.firstValue
-        assertEquals(MessageType.GAME_END, message.type)
-        assertEquals("server", message.sender)
-        assertEquals(mapOf("winnerId" to 1), message.payload)
     }
 
     @Test
@@ -359,8 +316,9 @@ class GameControllerTest {
         val gameId = 1
         val playerId = 2
         val request = RollDiceRequest(gameId = gameId, playerId = playerId)
-        val rollDiceResponse = RollDiceResponse(dice = listOf(3, 4), total = 7)
-        whenever(diceService.rollDice(request)).thenReturn(rollDiceResponse)
+        val response = RollDiceResponse(dice = listOf(3, 4), total = 7)
+
+        whenever(diceService.rollDice(request)).thenReturn(response)
 
         controller.rollDice(request)
 
@@ -379,6 +337,7 @@ class GameControllerTest {
         val gameId = 1
         val playerId = 2
         val request = RollDiceRequest(gameId = gameId, playerId = playerId)
+
         whenever(diceService.rollDice(request)).thenThrow(RuntimeException("dice exploded"))
 
         controller.rollDice(request)
@@ -389,6 +348,9 @@ class GameControllerTest {
         val message = captor.firstValue
         assertEquals(MessageType.ERROR, message.type)
         assertEquals("SERVER", message.sender)
-        assertEquals(mapOf("event" to "ROLL_FAILED", "message" to "dice exploded"), message.payload)
+        assertEquals(
+            mapOf("event" to "ROLL_FAILED", "message" to "dice exploded"),
+            message.payload
+        )
     }
 }

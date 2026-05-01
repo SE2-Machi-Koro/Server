@@ -48,7 +48,7 @@ class LobbyServiceTest {
     )
 
     private fun player(id: Int, userId: Int = id, gameId: Int = 1) =
-        PlayerModel(id = id, gameId = gameId, userId = userId, turnOrder = 0, coins = 3)
+        PlayerModel(id = id, gameId = gameId, userId = userId, turnOrder = 0, coins = 3, lastSeenAt = null)
 
     // ── addUserToLobby ────────────────────────────────────────────────────────
 
@@ -107,6 +107,41 @@ class LobbyServiceTest {
         whenever(playerDao.getPlayers(gameId)).thenReturn(players)
         whenever(playerCardDao.findByPlayerId(any())).thenReturn(emptyList())
         return players
+    }
+
+    @Test
+    fun `createLobby creates game and adds host as player`() {
+        val hostUserId = 10
+        val gameId = 1
+        val createdGame = game(gameId, GameStatus.WAITING).copy(hostUserId = hostUserId)
+
+        whenever(gameDao.create(any(), any(), any())).thenReturn(gameId)
+        whenever(playerDao.addPlayer(gameId, hostUserId)).thenReturn(player(1))
+        whenever(gameDao.findById(gameId)).thenReturn(createdGame)
+
+        val result = lobbyService.createLobby(hostUserId)
+
+        assertEquals(gameId, result.id)
+        assertEquals(hostUserId, result.hostUserId)
+        assertEquals(GameStatus.WAITING, result.status)
+
+        verify(gameDao).create(eq(hostUserId), any<String>(), eq(4))
+        verify(playerDao).addPlayer(gameId, hostUserId)
+        verify(gameDao).findById(gameId)
+    }
+
+    @Test
+    fun `createLobby throws GameNotFoundException when created game cannot be found`() {
+        val hostUserId = 10
+        val gameId = 1
+
+        whenever(gameDao.create(hostUserId = hostUserId)).thenReturn(gameId)
+        whenever(playerDao.addPlayer(gameId, hostUserId)).thenReturn(player(1))
+        whenever(gameDao.findById(gameId)).thenReturn(null)
+
+        assertThrows<GameNotFoundException> {
+            lobbyService.createLobby(hostUserId)
+        }
     }
 
     @Test
