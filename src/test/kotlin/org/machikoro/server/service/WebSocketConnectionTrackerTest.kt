@@ -1,6 +1,7 @@
 package org.machikoro.server.service
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -64,5 +65,36 @@ class WebSocketConnectionTrackerTest {
         assertTrue(tracker.getConnectedUserIds(gameId = 1).isEmpty())
         assertEquals(setOf(20), tracker.getConnectedUserIds(gameId = 2))
     }
+
+    // ── getUserId ─────────────────────────────────────────────────────────────
+
+    @Test
+    fun `getUserId returns the userId associated with a registered session`() {
+        tracker.register("session-x", userId = 42, gameId = 3)
+
+        assertEquals(42, tracker.getUserId("session-x"))
+    }
+
+    @Test
+    fun `getUserId returns null for an unknown sessionId`() {
+        assertNull(tracker.getUserId("no-such-session"))
+    }
+
+    @Test
+    fun `getUserId returns null after the session is unregistered`() {
+        tracker.register("session-y", userId = 7, gameId = 1)
+        tracker.unregister("session-y")
+
+        assertNull(tracker.getUserId("session-y"))
+    }
+
+    @Test
+    fun `getUserId reflects a re-registration on the same sessionId`() {
+        tracker.register("session-z", userId = 1, gameId = 1)
+        tracker.register("session-z", userId = 99, gameId = 2)
+
+        assertEquals(99, tracker.getUserId("session-z"))
+    }
 }
+
 
