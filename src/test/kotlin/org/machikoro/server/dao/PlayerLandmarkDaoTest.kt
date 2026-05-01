@@ -138,4 +138,39 @@ class PlayerLandmarkDaoTest : AbstractDBSetup() {
             playerLandmarkDao.delete(playerId, LandmarkType.RADIO_TOWER)
         }
     }
+
+    @Test
+    fun `deleteAllByPlayerId removes all landmarks for player`() {
+        playerLandmarkDao.initForPlayer(playerId)
+
+        playerLandmarkDao.deleteAllByPlayerId(playerId)
+
+        val remaining = playerLandmarkDao.findByPlayerId(playerId)
+        assertTrue(remaining.isEmpty())
+    }
+
+    @Test
+    fun `deleteAllByPlayerId does not affect other players`() {
+        // setup second player
+        val userId2 = userDao.create("other_user")
+        val gameId2 = gameDao.create(userId2)
+        val otherPlayerId = playerDao.addPlayer(gameId2, userId2).id
+
+        playerLandmarkDao.initForPlayer(playerId)
+        playerLandmarkDao.initForPlayer(otherPlayerId)
+
+        playerLandmarkDao.deleteAllByPlayerId(playerId)
+
+        val remainingOther = playerLandmarkDao.findByPlayerId(otherPlayerId)
+        assertEquals(LandmarkType.entries.size, remainingOther.size)
+    }
+
+    @Test
+    fun `deleteAllByPlayerId does nothing if player has no landmarks`() {
+        assertDoesNotThrow {
+            playerLandmarkDao.deleteAllByPlayerId(playerId)
+        }
+
+        assertTrue(playerLandmarkDao.findByPlayerId(playerId).isEmpty())
+    }
 }

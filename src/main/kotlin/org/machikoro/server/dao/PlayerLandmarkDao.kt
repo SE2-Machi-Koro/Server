@@ -127,4 +127,13 @@ class PlayerLandmarkDao {
                     (PlayerLandmarks.landmarkId eq landmarkId)
         }
     }
+
+    /**
+     * Deletes all landmark entries for a player
+     */
+    fun deleteAllByPlayerId(playerId: Int) = transaction {
+        PlayerLandmarks.deleteWhere {
+            PlayerLandmarks.playerId eq playerId
+        }
+    }
 }

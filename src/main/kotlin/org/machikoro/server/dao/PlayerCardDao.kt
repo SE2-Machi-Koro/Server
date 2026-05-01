@@ -90,4 +90,13 @@ class PlayerCardDao {
                     (PlayerCards.cardId eq cardId)
         }
     }
+
+    /**
+     * Deletes all card entries for a player
+     */
+    fun deleteAllByPlayerId(playerId: Int) = transaction {
+        PlayerCards.deleteWhere {
+            PlayerCards.playerId eq playerId
+        }
+    }
 }
