@@ -14,6 +14,7 @@ import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.exception.LobbyFullException
 import org.machikoro.server.exception.NotHostException
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 
 @Service
 class LobbyService(
