@@ -24,7 +24,7 @@ class LeaveFinishedGameServiceTest {
         val playerId = 10
 
         whenever(playerDao.getPlayers(gameId))
-            .thenReturn(listOf(PlayerModel(playerId, gameId, 1, 0, 3)))
+            .thenReturn(listOf(PlayerModel(playerId, gameId, 1, 0, 3, lastSeenAt = 30)))
 
         whenever(playerDao.countByGameId(gameId))
             .thenReturn(0)
@@ -40,7 +40,7 @@ class LeaveFinishedGameServiceTest {
         val playerId = 10
 
         whenever(playerDao.getPlayers(gameId))
-            .thenReturn(listOf(PlayerModel(playerId, gameId, 1, 0, 3)))
+            .thenReturn(listOf(PlayerModel(playerId, gameId, 1, 0, 3, lastSeenAt = 30)))
 
         whenever(playerDao.countByGameId(gameId))
             .thenReturn(0)
@@ -58,8 +58,8 @@ class LeaveFinishedGameServiceTest {
         whenever(playerDao.getPlayers(gameId))
             .thenReturn(
                 listOf(
-                    PlayerModel(playerId, gameId, 1, 0, 3),
-                    PlayerModel(2, gameId, 2, 1, 3)
+                    PlayerModel(playerId, gameId, 1, 0, 3, lastSeenAt = 30),
+                    PlayerModel(2, gameId, 2, 1, 3, lastSeenAt = 30)
                 )
             )
 
@@ -93,7 +93,7 @@ class LeaveFinishedGameServiceTest {
         val playerId = 10
 
         whenever(playerDao.getPlayers(gameId))
-            .thenReturn(listOf(PlayerModel(playerId, gameId, 1, 0, 3)))
+            .thenReturn(listOf(PlayerModel(playerId, gameId, 1, 0, 3, lastSeenAt = 30)))
 
         whenever(playerDao.countByGameId(gameId))
             .thenReturn(0)

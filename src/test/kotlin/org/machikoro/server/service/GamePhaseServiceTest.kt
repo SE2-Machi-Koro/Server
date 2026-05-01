@@ -158,8 +158,8 @@ class GamePhaseServiceTest {
             .thenReturn(gameInPhase(gameId, TurnPhase.BUY_OR_BUILD, currentTurnIndex = 0, roundNumber = 1))
         whenever(playerDao.getPlayers(gameId)).thenReturn(
             listOf(
-                PlayerModel(1, gameId, 10, 0, 3),
-                PlayerModel(2, gameId, 11, 1, 3),
+                PlayerModel(1, gameId, 10, 0, 3, lastSeenAt = 30),
+                PlayerModel(2, gameId, 11, 1, 3, lastSeenAt = 30),
             )
         )
 
@@ -184,8 +184,8 @@ class GamePhaseServiceTest {
             .thenReturn(gameInPhase(gameId, TurnPhase.BUY_OR_BUILD, currentTurnIndex = 1, roundNumber = 3))
         whenever(playerDao.getPlayers(gameId)).thenReturn(
             listOf(
-                PlayerModel(1, gameId, 10, 0, 3),
-                PlayerModel(2, gameId, 11, 1, 3),
+                PlayerModel(1, gameId, 10, 0, 3, lastSeenAt = 30),
+                PlayerModel(2, gameId, 11, 1, 3, lastSeenAt = 30),
             )
         )
 

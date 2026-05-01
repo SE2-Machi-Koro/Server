@@ -47,7 +47,8 @@ class DiceServiceTests {
         gameId = 1,
         userId = 1,
         turnOrder = 0,
-        coins = 3
+        coins = 3,
+        lastSeenAt = 60
     )
 
     @Test

@@ -27,7 +27,7 @@ class WinConditionServiceTest {
     private val service = WinConditionService(playerDao, playerLandmarkDao, gameDao)
 
     private fun player(id: Int, gameId: Int = 1) =
-        PlayerModel(id = id, gameId = gameId, userId = id * 10, turnOrder = id, coins = 3)
+        PlayerModel(id = id, gameId = gameId, userId = id * 10, turnOrder = id, coins = 3, lastSeenAt = 30)
 
     private fun gameInPhase(phase: TurnPhase) =
         GameModel(

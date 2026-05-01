@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test
 import org.machikoro.server.database.AbstractDBSetup
 import org.machikoro.server.database.Landmarks
 import org.machikoro.server.domain.enums.LandmarkType
+import org.machikoro.server.domain.utils.displayName
 
 class LandmarkDaoTest : AbstractDBSetup() {
 
@@ -20,12 +21,10 @@ class LandmarkDaoTest : AbstractDBSetup() {
         transaction {
             Landmarks.insert {
                 it[landmarkType] = LandmarkType.TRAIN_STATION
-                it[name] = "Train Station"
                 it[cost] = 4
             }
             Landmarks.insert {
                 it[landmarkType] = LandmarkType.SHOPPING_MALL
-                it[name] = "Shopping Mall"
                 it[cost] = 10
             }
         }
@@ -45,8 +44,8 @@ class LandmarkDaoTest : AbstractDBSetup() {
     fun `findByLandmarkType returns correct landmark`() {
         val landmark = dao.findByLandmarkType(LandmarkType.TRAIN_STATION)
         assertNotNull(landmark)
-        assertEquals("Train Station", landmark!!.name)
-        assertEquals(4, landmark.cost)
+        assertEquals("Train Station", LandmarkType.TRAIN_STATION.displayName())
+        assertEquals(4, landmark!!.cost)
     }
 
     @Test
