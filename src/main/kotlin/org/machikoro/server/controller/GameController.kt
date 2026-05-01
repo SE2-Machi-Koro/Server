@@ -9,10 +9,12 @@ import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.PurchaseRequest
 import org.machikoro.server.dto.PurchaseType
 import org.machikoro.server.dto.RollDiceRequest
+import org.machikoro.server.dto.StartGameRequest
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.service.DiceService
 import org.machikoro.server.service.GamePhaseService
 import org.machikoro.server.service.LeaveFinishedGameService
+import org.machikoro.server.service.LobbyService
 import org.machikoro.server.service.PurchaseResult
 import org.machikoro.server.service.PurchaseService
 import org.machikoro.server.service.WinConditionService
@@ -29,7 +31,8 @@ class GameController(
     private val leaveFinishedGameService: LeaveFinishedGameService,
     private val winConditionService: WinConditionService,
     private val purchaseService: PurchaseService,
-    private val diceService: DiceService
+    private val diceService: DiceService,
+    private val lobbyService: LobbyService,
 ) {
     private val logger = LoggerFactory.getLogger(GameController::class.java)
 
