@@ -6,7 +6,6 @@ import org.machikoro.server.dto.EndTurnRequest
 import org.machikoro.server.dto.LeaveFinishedGameRequest
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.PurchaseRequest
-import org.machikoro.server.dto.PurchaseType
 import org.machikoro.server.dto.RollDiceRequest
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.service.DiceService
