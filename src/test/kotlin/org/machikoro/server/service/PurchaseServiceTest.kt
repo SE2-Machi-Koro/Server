@@ -73,6 +73,7 @@ class PurchaseServiceTest {
         userId = 1,
         turnOrder = 0,
         coins = coins,
+        lastSeenAt = 30,
     )
 
     @Test
@@ -90,7 +91,6 @@ class PurchaseServiceTest {
                 CardModel(
                     1,
                     CardType.BAKERY,
-                    "Bakery",
                     1,
                     2,
                     3,
@@ -143,7 +143,6 @@ class PurchaseServiceTest {
                 LandmarkModel(
                     1,
                     LandmarkType.TRAIN_STATION,
-                    "Train Station",
                     4
                 )
             )
@@ -242,7 +241,6 @@ class PurchaseServiceTest {
                 CardModel(
                     1,
                     CardType.STADIUM,
-                    "Stadium",
                     6,
                     6,
                     6,
@@ -278,7 +276,6 @@ class PurchaseServiceTest {
                 CardModel(
                     1,
                     CardType.BAKERY,
-                    "Bakery",
                     1,
                     2,
                     3,
@@ -323,7 +320,6 @@ class PurchaseServiceTest {
                 LandmarkModel(
                     1,
                     LandmarkType.TRAIN_STATION,
-                    "Train Station",
                     4
                 )
             )

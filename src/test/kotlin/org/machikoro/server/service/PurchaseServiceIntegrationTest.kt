@@ -68,7 +68,6 @@ class PurchaseServiceIntegrationTest : AbstractDBSetup() {
         transaction {
             Cards.insert {
                 it[cardType] = CardType.BAKERY
-                it[name] = "Bakery"
                 it[cost] = 1
                 it[diceMin] = 2
                 it[diceMax] = 3
@@ -77,7 +76,6 @@ class PurchaseServiceIntegrationTest : AbstractDBSetup() {
 
             Landmarks.insert {
                 it[landmarkType] = LandmarkType.TRAIN_STATION
-                it[name] = "Train Station"
                 it[cost] = 4
             }
 

@@ -1,17 +1,21 @@
 package org.machikoro.server.dao
 
 import org.jetbrains.exposed.v1.jdbc.deleteAll
+import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.database.AbstractDBSetup
 import org.machikoro.server.database.Games
+import org.machikoro.server.database.Landmarks
 import org.machikoro.server.database.PlayerLandmarks
 import org.machikoro.server.database.Players
 import org.machikoro.server.database.Users
 import org.machikoro.server.domain.enums.LandmarkType
+import org.machikoro.server.exception.LandmarkNotFoundException
 
 class PlayerLandmarkDaoTest : AbstractDBSetup() {
 
@@ -24,6 +28,12 @@ class PlayerLandmarkDaoTest : AbstractDBSetup() {
 
     @BeforeEach
     fun seed() {
+        transaction {
+            Landmarks.insertIgnore { it[Landmarks.landmarkType] = LandmarkType.TRAIN_STATION; it[Landmarks.cost] = 4 }
+            Landmarks.insertIgnore { it[Landmarks.landmarkType] = LandmarkType.SHOPPING_MALL; it[Landmarks.cost] = 10 }
+            Landmarks.insertIgnore { it[Landmarks.landmarkType] = LandmarkType.AMUSEMENT_PARK; it[Landmarks.cost] = 16 }
+            Landmarks.insertIgnore { it[Landmarks.landmarkType] = LandmarkType.RADIO_TOWER; it[Landmarks.cost] = 22 }
+        }
         val userId = userDao.create("landmark_user")
         val gameId = gameDao.create(userId)
         playerId = playerDao.addPlayer(gameId, userId).id
@@ -36,6 +46,7 @@ class PlayerLandmarkDaoTest : AbstractDBSetup() {
             Players.deleteAll()
             Games.deleteAll()
             Users.deleteAll()
+            Landmarks.deleteAll()
         }
     }
 
@@ -92,6 +103,14 @@ class PlayerLandmarkDaoTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `markBuilt throws LandmarkNotFoundException when landmark type does not exist in database`() {
+        transaction { Landmarks.deleteAll() }
+        assertThrows<LandmarkNotFoundException> {
+            playerLandmarkDao.markBuilt(playerId, LandmarkType.TRAIN_STATION)
+        }
+    }
+
+    @Test
     fun `allBuilt returns false when only some landmarks are built`() {
         playerLandmarkDao.initForPlayer(playerId)
         playerLandmarkDao.markBuilt(playerId, LandmarkType.TRAIN_STATION)
@@ -113,8 +132,9 @@ class PlayerLandmarkDaoTest : AbstractDBSetup() {
     }
 
     @Test
-    fun `delete on non-existent entry does not throw`() {
-        assertDoesNotThrow {
+    fun `delete throws LandmarkNotFoundException when landmark type does not exist in database`() {
+        transaction { Landmarks.deleteAll() }
+        assertThrows<LandmarkNotFoundException> {
             playerLandmarkDao.delete(playerId, LandmarkType.RADIO_TOWER)
         }
     }
