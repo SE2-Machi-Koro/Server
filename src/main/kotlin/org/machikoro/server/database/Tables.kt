@@ -24,13 +24,11 @@ object Cards : IntIdTable("cards") {
 
     // Unique ensures exactly one definition per card type
     val cardType = enumerationByName("card_type", 50, CardType::class).uniqueIndex()
-    val name = varchar("name", 100)
     val cost = integer("cost")
 
     // Activation ranges
     val diceMin = integer("dice_min")
     val diceMax = integer("dice_max")
-
     val income = integer("income")
 }
 
@@ -40,7 +38,6 @@ object Cards : IntIdTable("cards") {
  */
 object Landmarks : IntIdTable("landmarks") {
     val landmarkType = enumerationByName("landmark_type", 50, LandmarkType::class).uniqueIndex()
-    val name = varchar("name", 100)
     val cost = integer("cost")
 }
 
@@ -69,7 +66,7 @@ object Users : IntIdTable("users") {
  */
 object Games : IntIdTable("games") {
     val status = enumerationByName("status", 20, GameStatus::class).default(GameStatus.WAITING)
-    val hostUserId = reference("host_user_id", Users)
+    val hostUserId = reference("host_user_id", Users, onDelete = ReferenceOption.RESTRICT)
     val lobbyCode = varchar("lobby_code", 7).uniqueIndex()
     val maxPlayers = integer("max_players").default(4)
     val currentTurnIndex = integer("current_turn_index").default(0)
@@ -87,12 +84,20 @@ object Games : IntIdTable("games") {
  */
 object Players : IntIdTable("players") {
     val gameId = reference("game_id", Games, onDelete = ReferenceOption.CASCADE)
-    val userId = reference("user_id", Users)
+    val userId = reference("user_id", Users, onDelete = ReferenceOption.CASCADE)
     val turnOrder = integer("turn_order")
     val coins = integer("coins").default(3)
 
+    /*
+    Long instead of a boolean flag, since a flag has the problem that it can go stale.
+    If server crashes or a websocket drops without a clean disconnect,
+    isConnected = true stays in the DB forever - flag is never flipped
+     */
+    val lastSeenAt = long("last_seen_at").nullable()
+
     init {
         uniqueIndex(gameId, userId)
+        uniqueIndex(gameId, turnOrder)
     }
 }
 
@@ -102,10 +107,10 @@ object Players : IntIdTable("players") {
  */
 object PlayerCards : Table("player_cards") {
     val playerId = reference("player_id", Players, onDelete = ReferenceOption.CASCADE)
-    val cardType = enumerationByName("card_type", 50, CardType::class)
+    val cardId = reference("card_id", Cards, onDelete = ReferenceOption.RESTRICT)
     val quantity = integer("quantity").default(1)
 
-    override val primaryKey = PrimaryKey(playerId, cardType)
+    override val primaryKey = PrimaryKey(playerId, cardId)
 }
 
 /**
@@ -113,10 +118,10 @@ object PlayerCards : Table("player_cards") {
  */
 object PlayerLandmarks : Table("player_landmarks") {
     val playerId = reference("player_id", Players, onDelete = ReferenceOption.CASCADE)
-    val landmarkType = enumerationByName("landmark_type", 50, LandmarkType::class)
+    val landmarkId = reference("landmark_id", Landmarks, onDelete = ReferenceOption.RESTRICT)
     val isBuilt = bool("is_built").default(false)
 
-    override val primaryKey = PrimaryKey(playerId, landmarkType)
+    override val primaryKey = PrimaryKey(playerId, landmarkId)
 }
 
 /**
@@ -126,8 +131,8 @@ object PlayerLandmarks : Table("player_landmarks") {
  */
 object GameMarketplace : Table("game_marketplace") {
     val gameId = reference("game_id", Games, onDelete = ReferenceOption.CASCADE)
-    val cardType = enumerationByName("card_type", 50, CardType::class)
+    val cardId = reference("card_id", Cards, onDelete = ReferenceOption.RESTRICT)
     val quantityAvailable = integer("quantity_available")
 
-    override val primaryKey = PrimaryKey(gameId, cardType)
+    override val primaryKey = PrimaryKey(gameId, cardId)
 }
