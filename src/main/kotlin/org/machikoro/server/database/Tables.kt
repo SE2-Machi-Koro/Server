@@ -24,6 +24,7 @@ object Cards : IntIdTable("cards") {
 
     // Unique ensures exactly one definition per card type
     val cardType = enumerationByName("card_type", 50, CardType::class).uniqueIndex()
+    val cost = integer("cost")
 
     // Activation ranges
     val diceMin = integer("dice_min")
@@ -37,6 +38,7 @@ object Cards : IntIdTable("cards") {
  */
 object Landmarks : IntIdTable("landmarks") {
     val landmarkType = enumerationByName("landmark_type", 50, LandmarkType::class).uniqueIndex()
+    val cost = integer("cost")
 }
 
 // DYNAMIC CLASSES -----------------------------

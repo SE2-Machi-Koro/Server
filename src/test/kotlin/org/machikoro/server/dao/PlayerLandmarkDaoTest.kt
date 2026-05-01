@@ -1,6 +1,7 @@
 package org.machikoro.server.dao
 
 import org.jetbrains.exposed.v1.jdbc.deleteAll
+import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
@@ -8,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.machikoro.server.database.AbstractDBSetup
 import org.machikoro.server.database.Games
+import org.machikoro.server.database.Landmarks
 import org.machikoro.server.database.PlayerLandmarks
 import org.machikoro.server.database.Players
 import org.machikoro.server.database.Users
@@ -24,6 +26,12 @@ class PlayerLandmarkDaoTest : AbstractDBSetup() {
 
     @BeforeEach
     fun seed() {
+        transaction {
+            Landmarks.insertIgnore { it[Landmarks.landmarkType] = LandmarkType.TRAIN_STATION; it[Landmarks.cost] = 4 }
+            Landmarks.insertIgnore { it[Landmarks.landmarkType] = LandmarkType.SHOPPING_MALL; it[Landmarks.cost] = 10 }
+            Landmarks.insertIgnore { it[Landmarks.landmarkType] = LandmarkType.AMUSEMENT_PARK; it[Landmarks.cost] = 16 }
+            Landmarks.insertIgnore { it[Landmarks.landmarkType] = LandmarkType.RADIO_TOWER; it[Landmarks.cost] = 22 }
+        }
         val userId = userDao.create("landmark_user")
         val gameId = gameDao.create(userId)
         playerId = playerDao.addPlayer(gameId, userId).id
@@ -36,6 +44,7 @@ class PlayerLandmarkDaoTest : AbstractDBSetup() {
             Players.deleteAll()
             Games.deleteAll()
             Users.deleteAll()
+            Landmarks.deleteAll()
         }
     }
 

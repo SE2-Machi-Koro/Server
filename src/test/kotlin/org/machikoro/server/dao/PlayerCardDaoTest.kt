@@ -1,12 +1,14 @@
 package org.machikoro.server.dao
 
 import org.jetbrains.exposed.v1.jdbc.deleteAll
+import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.machikoro.server.database.AbstractDBSetup
+import org.machikoro.server.database.Cards
 import org.machikoro.server.database.Games
 import org.machikoro.server.database.PlayerCards
 import org.machikoro.server.database.Players
@@ -24,6 +26,68 @@ class PlayerCardDaoTest : AbstractDBSetup() {
 
     @BeforeEach
     fun seed() {
+        transaction {
+            Cards.insertIgnore {
+                it[Cards.cardType] = CardType.WHEAT_FIELD; it[Cards.cost] = 1; it[Cards.diceMin] =
+                1; it[Cards.diceMax] = 1; it[Cards.income] = 1
+            }
+            Cards.insertIgnore {
+                it[Cards.cardType] = CardType.RANCH; it[Cards.cost] = 1; it[Cards.diceMin] = 2; it[Cards.diceMax] =
+                2; it[Cards.income] = 1
+            }
+            Cards.insertIgnore {
+                it[Cards.cardType] = CardType.FOREST; it[Cards.cost] = 3; it[Cards.diceMin] = 5; it[Cards.diceMax] =
+                5; it[Cards.income] = 1
+            }
+            Cards.insertIgnore {
+                it[Cards.cardType] = CardType.MINE; it[Cards.cost] = 6; it[Cards.diceMin] = 9; it[Cards.diceMax] =
+                9; it[Cards.income] = 5
+            }
+            Cards.insertIgnore {
+                it[Cards.cardType] = CardType.APPLE_ORCHARD; it[Cards.cost] = 3; it[Cards.diceMin] =
+                10; it[Cards.diceMax] = 10; it[Cards.income] = 3
+            }
+            Cards.insertIgnore {
+                it[Cards.cardType] = CardType.BAKERY; it[Cards.cost] = 1; it[Cards.diceMin] = 2; it[Cards.diceMax] =
+                3; it[Cards.income] = 1
+            }
+            Cards.insertIgnore {
+                it[Cards.cardType] = CardType.CONVENIENCE_STORE; it[Cards.cost] = 2; it[Cards.diceMin] =
+                4; it[Cards.diceMax] = 4; it[Cards.income] = 3
+            }
+            Cards.insertIgnore {
+                it[Cards.cardType] = CardType.CHEESE_FACTORY; it[Cards.cost] = 5; it[Cards.diceMin] =
+                7; it[Cards.diceMax] = 7; it[Cards.income] = 3
+            }
+            Cards.insertIgnore {
+                it[Cards.cardType] = CardType.FURNITURE_FACTORY; it[Cards.cost] = 3; it[Cards.diceMin] =
+                8; it[Cards.diceMax] = 8; it[Cards.income] = 3
+            }
+            Cards.insertIgnore {
+                it[Cards.cardType] = CardType.FRUIT_AND_VEGETABLE_MARKET; it[Cards.cost] = 2; it[Cards.diceMin] =
+                11; it[Cards.diceMax] = 11; it[Cards.income] = 2
+            }
+            Cards.insertIgnore {
+                it[Cards.cardType] = CardType.CAFE; it[Cards.cost] = 2; it[Cards.diceMin] = 3; it[Cards.diceMax] =
+                3; it[Cards.income] = 1
+            }
+            Cards.insertIgnore {
+                it[Cards.cardType] = CardType.FAMILY_RESTAURANT; it[Cards.cost] = 3; it[Cards.diceMin] =
+                9; it[Cards.diceMax] = 10; it[Cards.income] = 2
+            }
+            Cards.insertIgnore {
+                it[Cards.cardType] = CardType.STADIUM; it[Cards.cost] = 6; it[Cards.diceMin] = 6; it[Cards.diceMax] =
+                6; it[Cards.income] = 2
+            }
+            Cards.insertIgnore {
+                it[Cards.cardType] = CardType.TV_STATION; it[Cards.cost] = 7; it[Cards.diceMin] = 6; it[Cards.diceMax] =
+                6; it[Cards.income] = 0
+            }
+            Cards.insertIgnore {
+                it[Cards.cardType] = CardType.BUSINESS_CENTER; it[Cards.cost] = 8; it[Cards.diceMin] =
+                6; it[Cards.diceMax] = 6; it[Cards.income] = 0
+            }
+        }
         val userId = userDao.create("card_user")
         val gameId = gameDao.create(userId)
         playerId = playerDao.addPlayer(gameId, userId).id
@@ -36,6 +100,7 @@ class PlayerCardDaoTest : AbstractDBSetup() {
             Players.deleteAll()
             Games.deleteAll()
             Users.deleteAll()
+            Cards.deleteAll()
         }
     }
 
