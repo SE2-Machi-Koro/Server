@@ -14,6 +14,7 @@ import org.machikoro.server.database.Cards
 import org.machikoro.server.database.GameMarketplace
 import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.models.GameMarketplaceModel
+import org.machikoro.server.exception.CardNotFoundException
 import org.springframework.stereotype.Repository
 
 @Repository
@@ -138,11 +139,14 @@ class GameMarketplaceDao {
 
     /**
      * Deletes a specific card entry from a game's marketplace
+     *
+     * @throws CardNotFoundException if the card type doesn't exist in the database
      */
     fun delete(gameId: Int, cardType: CardType): Unit = transaction {
         val cardId = Cards.selectAll()
             .where { Cards.cardType eq cardType }
-            .singleOrNull()?.get(Cards.id) ?: return@transaction
+            .singleOrNull()?.get(Cards.id)
+            ?: throw CardNotFoundException("Card type $cardType not found in database")
 
         GameMarketplace.deleteWhere {
             (GameMarketplace.gameId eq gameId) and

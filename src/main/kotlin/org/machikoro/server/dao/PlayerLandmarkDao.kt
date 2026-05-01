@@ -12,6 +12,7 @@ import org.machikoro.server.database.Landmarks
 import org.machikoro.server.database.PlayerLandmarks
 import org.machikoro.server.domain.enums.LandmarkType
 import org.machikoro.server.domain.models.PlayerLandmarkModel
+import org.machikoro.server.exception.LandmarkNotFoundException
 import org.springframework.stereotype.Repository
 
 @Repository
@@ -111,11 +112,14 @@ class PlayerLandmarkDao {
 
     /**
      * Deletes a specific landmark entry for a player
+     *
+     * @throws LandmarkNotFoundException if the landmark type doesn't exist in the database
      */
     fun delete(playerId: Int, landmarkType: LandmarkType): Unit = transaction {
         val landmarkId = Landmarks.selectAll()
             .where { Landmarks.landmarkType eq landmarkType }
-            .singleOrNull()?.get(Landmarks.id) ?: return@transaction
+            .singleOrNull()?.get(Landmarks.id)
+            ?: throw LandmarkNotFoundException("Landmark type $landmarkType not found in database")
 
         PlayerLandmarks.deleteWhere {
             (PlayerLandmarks.playerId eq playerId) and

@@ -11,6 +11,7 @@ import org.machikoro.server.database.Cards
 import org.machikoro.server.database.PlayerCards
 import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.models.PlayerCardModel
+import org.machikoro.server.exception.CardNotFoundException
 import org.springframework.stereotype.Repository
 
 @Repository
@@ -75,11 +76,14 @@ class PlayerCardDao {
 
     /**
      * Deletes a specific card entry for a player
+     *
+     * @throws CardNotFoundException if the card type doesn't exist in the database
      */
     fun delete(playerId: Int, cardType: CardType): Unit = transaction {
         val cardId = Cards.selectAll()
             .where { Cards.cardType eq cardType }
-            .singleOrNull()?.get(Cards.id) ?: return@transaction
+            .singleOrNull()?.get(Cards.id)
+            ?: throw CardNotFoundException("Card type $cardType not found in database")
 
         PlayerCards.deleteWhere {
             (PlayerCards.playerId eq playerId) and
