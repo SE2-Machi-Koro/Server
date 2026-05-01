@@ -212,6 +212,24 @@ class PurchaseServiceIntegrationTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `purchase outside buy or build phase does not mutate state`() {
+        gameDao.updateTurnPhase(gameId, TurnPhase.RESOLVE_EFFECTS)
+        val before = snapshot()
+
+        val ex = assertThrows<CustomWebSocketException> {
+            purchaseService.purchase(
+                gameId,
+                PurchaseType.ESTABLISHMENT,
+                CardType.BAKERY,
+                null
+            )
+        }
+
+        assertEquals("INVALID_TURN_PHASE", ex.errorCode)
+        assertEquals(before, snapshot())
+    }
+
+    @Test
     fun `establishment purchase with insufficient coins does not mutate state`() {
         playerDao.updateCoins(activePlayerId, 0)
         val before = snapshot()
