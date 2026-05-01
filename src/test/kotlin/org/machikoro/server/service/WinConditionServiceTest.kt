@@ -20,7 +20,7 @@ class WinConditionServiceTest {
     private val service = WinConditionService(playerDao, playerLandmarkDao)
 
     private fun player(id: Int, gameId: Int = 1) =
-        PlayerModel(id = id, gameId = gameId, userId = id * 10, turnOrder = id, coins = 3)
+        PlayerModel(id = id, gameId = gameId, userId = id * 10, turnOrder = id, coins = 3, lastSeenAt = 30)
 
     @Test
     fun `hasPlayerWon returns true when all landmarks are built`() {

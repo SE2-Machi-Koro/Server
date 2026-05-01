@@ -15,7 +15,6 @@ class LandmarkDao {
     private fun ResultRow.toModel() = LandmarkModel(
         id = this[Landmarks.id].value,
         landmarkType = this[Landmarks.landmarkType],
-        name = this[Landmarks.name],
         cost = this[Landmarks.cost]
     )
 

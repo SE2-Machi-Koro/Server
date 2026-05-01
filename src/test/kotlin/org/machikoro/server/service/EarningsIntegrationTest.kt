@@ -49,7 +49,6 @@ class EarningsIntegrationTest : AbstractDBSetup() {
         transaction {
             Cards.insert {
                 it[cardType] = CardType.WHEAT_FIELD
-                it[name] = "Wheat Field"
                 it[cost] = 1
                 it[diceMin] = 1
                 it[diceMax] = 1
@@ -57,7 +56,6 @@ class EarningsIntegrationTest : AbstractDBSetup() {
             }
             Cards.insert {
                 it[cardType] = CardType.BAKERY
-                it[name] = "Bakery"
                 it[cost] = 1
                 it[diceMin] = 2
                 it[diceMax] = 3
@@ -65,7 +63,6 @@ class EarningsIntegrationTest : AbstractDBSetup() {
             }
             Cards.insert {
                 it[cardType] = CardType.CAFE
-                it[name] = "Cafe"
                 it[cost] = 2
                 it[diceMin] = 3
                 it[diceMax] = 3
