@@ -180,6 +180,7 @@ class PlayerCardDaoTest : AbstractDBSetup() {
             playerCardDao.delete(playerId, CardType.CAFE)
         }
     }
+
     @Test
     fun `deleteAllByPlayerId removes all cards for the player`() {
         playerCardDao.upsert(playerId, CardType.WHEAT_FIELD, 1)
@@ -218,5 +219,4 @@ class PlayerCardDaoTest : AbstractDBSetup() {
 
         assertTrue(playerCardDao.findByPlayerId(playerId).isEmpty())
     }
-}
 }

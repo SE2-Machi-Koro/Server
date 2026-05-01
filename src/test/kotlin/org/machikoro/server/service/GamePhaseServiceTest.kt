@@ -205,7 +205,7 @@ class GamePhaseServiceTest {
     fun `endTurn detects winner and finishes game`() {
         val gameId = 30
         val userId = 10
-        val winner = PlayerModel(1, gameId, userId, 0, 3)
+        val winner = PlayerModel(1, gameId, userId, 0, 3, 30)
 
         whenever(gameStateGuard.ensureGameIsRunning(gameId))
             .thenReturn(gameInPhase(gameId, TurnPhase.BUY_OR_BUILD))
