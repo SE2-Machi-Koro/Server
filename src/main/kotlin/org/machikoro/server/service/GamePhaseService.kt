@@ -42,11 +42,20 @@ class GamePhaseService(
     /** Ends the active player's turn after card purchase
      * Checks for a winner - in this case stops game,
      * otherwise starts turn for next player.
+     *
+     * Wrapped in @Transactional at the public entry point so the entire end-of-
+     * turn flow — phase update, win check, winner-stat increment, cleanup,
+     * status flip — runs atomically. Spring's proxy intercepts this call;
+     * private helper methods invoked from within (cleanupFinishedGameData,
+     * advanceTurn) participate in the same transaction. A mid-flight failure
+     * rolls back, so the game can never end up half-cleaned with status set
+     * to FINISHED.
      **/
+    @Transactional
     fun endTurn(gameId: Int): EndTurnOutcome {
         val game = gameStateGuard.ensureGameIsRunning(gameId)
         check(game.turnPhase == TurnPhase.BUY_OR_BUILD) { "Game is not in BUY_OR_BUILD phase" }
-        gameDao.updateTurnPhase(gameId,TurnPhase.END_TURN)
+        gameDao.updateTurnPhase(gameId, TurnPhase.END_TURN)
         winConditionService.detectWinner(gameId)?.let { winner ->
             userDao.incrementWins(winner.userId)
             finishGame(gameId)
@@ -74,13 +83,19 @@ class GamePhaseService(
         playerDao.getPlayers(gameId).forEach { userDao.incrementGamesPlayed(it.userId) }
         gameDao.updateStatus(gameId, GameStatus.FINISHED)
     }
-    @Transactional
+    /**
+     * Cleanup runs inside the @Transactional boundary opened by endTurn(),
+     * so all DAO calls share one atomic unit. Note: putting @Transactional on
+     * this private helper directly would have no effect — Spring's CGLIB proxy
+     * can't intercept private functions, and self-invocation from finishGame()
+     * would bypass the proxy regardless of visibility.
+     */
     private fun cleanupFinishedGameData(gameId: Int) {
-            gameMarketplaceDao.deleteAllForGame(gameId)
-            playerDao.getPlayers(gameId).forEach {
-                playerCardDao.deleteAllByPlayerId(it.id)
-                playerLandmarkDao.deleteAllByPlayerId(it.id)
-            }
+        gameMarketplaceDao.deleteAllForGame(gameId)
+        playerDao.getPlayers(gameId).forEach {
+            playerCardDao.deleteAllByPlayerId(it.id)
+            playerLandmarkDao.deleteAllByPlayerId(it.id)
+        }
     }
     sealed interface EndTurnOutcome {
         data class Continue(
