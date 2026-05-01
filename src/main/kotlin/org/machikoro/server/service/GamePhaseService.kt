@@ -11,6 +11,7 @@ import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.PlayerModel
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 
 @Service
 class GamePhaseService(
@@ -74,15 +75,13 @@ class GamePhaseService(
         playerDao.getPlayers(gameId).forEach { userDao.incrementGamesPlayed(it.userId) }
         gameDao.updateStatus(gameId, GameStatus.FINISHED)
     }
-
+    @Transactional
     private fun cleanupFinishedGameData(gameId: Int) {
-        transaction {
             gameMarketplaceDao.deleteAllForGame(gameId)
             playerDao.getPlayers(gameId).forEach {
                 playerCardDao.deleteAllByPlayerId(it.id)
                 playerLandmarkDao.deleteAllByPlayerId(it.id)
             }
-        }
     }
     sealed interface EndTurnOutcome {
         data class Continue(

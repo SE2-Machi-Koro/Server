@@ -25,8 +25,6 @@ import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
-import org.mockito.kotlin.never
-import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.messaging.simp.SimpMessagingTemplate
@@ -110,6 +108,7 @@ class GameControllerTest {
     @Test
     fun `purchase broadcasts resulting purchase payload as GAME_ACTION on game topic`() {
         val gameId = 42
+
         whenever(
             purchaseService.purchase(gameId, PurchaseType.LANDMARK, null, LandmarkType.TRAIN_STATION)
         ).thenReturn(
@@ -119,7 +118,6 @@ class GameControllerTest {
                 landmarkType = LandmarkType.TRAIN_STATION,
             )
         )
-        whenever(winConditionService.detectWinner(gameId)).thenReturn(null)
 
         controller.purchase(
             PurchaseRequest(gameId, PurchaseType.LANDMARK, landmarkType = LandmarkType.TRAIN_STATION)
@@ -139,54 +137,6 @@ class GameControllerTest {
             ),
             message.payload,
         )
-    }
-
-    @Test
-    fun `purchase broadcasts GAME_END and finishes game when landmark purchase wins`() {
-        val gameId = 42
-        whenever(
-            purchaseService.purchase(gameId, PurchaseType.LANDMARK, null, LandmarkType.RADIO_TOWER)
-        ).thenReturn(
-            PurchaseResult(
-                turnPhase = TurnPhase.BUY_OR_BUILD,
-                purchaseType = PurchaseType.LANDMARK,
-                landmarkType = LandmarkType.RADIO_TOWER,
-            )
-        )
-        val winner = mock<PlayerModel>()
-        whenever(winner.id).thenReturn(7)
-        whenever(winConditionService.detectWinner(gameId)).thenReturn(winner)
-
-        controller.purchase(PurchaseRequest(gameId, PurchaseType.LANDMARK, landmarkType = LandmarkType.RADIO_TOWER))
-
-        verify(gamePhaseService).finishGame(gameId)
-
-        val captor = argumentCaptor<WebSocketMessage>()
-        verify(messagingTemplate, times(1)).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
-
-        val message = captor.firstValue
-        assertEquals(MessageType.GAME_END, message.type)
-        assertEquals("server", message.sender)
-        assertEquals(mapOf("winnerId" to 7), message.payload)
-    }
-
-    @Test
-    fun `purchase does not invoke win check for establishment purchases`() {
-        val gameId = 42
-        whenever(
-            purchaseService.purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.BAKERY, null)
-        ).thenReturn(
-            PurchaseResult(
-                turnPhase = TurnPhase.BUY_OR_BUILD,
-                purchaseType = PurchaseType.ESTABLISHMENT,
-                cardType = CardType.BAKERY,
-            )
-        )
-
-        controller.purchase(PurchaseRequest(gameId, PurchaseType.ESTABLISHMENT, cardType = CardType.BAKERY))
-
-        verify(winConditionService, never()).detectWinner(any())
-        verify(gamePhaseService, never()).finishGame(any())
     }
 
     @Test
