@@ -13,6 +13,7 @@ import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.exception.LobbyFullException
 import org.mockito.kotlin.any
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -83,6 +84,41 @@ class LobbyServiceTest {
 
         assertThrows<LobbyFullException> {
             lobbyService.addUserToLobby(gameId, 10)
+        }
+    }
+
+    @Test
+    fun `createLobby creates game and adds host as player`() {
+        val hostUserId = 10
+        val gameId = 1
+        val createdGame = game(gameId, GameStatus.WAITING).copy(hostUserId = hostUserId)
+
+        whenever(gameDao.create(any(), any(), any())).thenReturn(gameId)
+        whenever(playerDao.addPlayer(gameId, hostUserId)).thenReturn(player(1))
+        whenever(gameDao.findById(gameId)).thenReturn(createdGame)
+
+        val result = lobbyService.createLobby(hostUserId)
+
+        assertEquals(gameId, result.id)
+        assertEquals(hostUserId, result.hostUserId)
+        assertEquals(GameStatus.WAITING, result.status)
+
+        verify(gameDao).create(eq(hostUserId), any<String>(), eq(4))
+        verify(playerDao).addPlayer(gameId, hostUserId)
+        verify(gameDao).findById(gameId)
+    }
+
+    @Test
+    fun `createLobby throws GameNotFoundException when created game cannot be found`() {
+        val hostUserId = 10
+        val gameId = 1
+
+        whenever(gameDao.create(hostUserId = hostUserId)).thenReturn(gameId)
+        whenever(playerDao.addPlayer(gameId, hostUserId)).thenReturn(player(1))
+        whenever(gameDao.findById(gameId)).thenReturn(null)
+
+        assertThrows<GameNotFoundException> {
+            lobbyService.createLobby(hostUserId)
         }
     }
 
