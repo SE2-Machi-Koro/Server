@@ -18,6 +18,15 @@ class LobbyService(
 
     private val lobbyLocks = mutableMapOf<Int, Any>()
 
+    fun createLobby(hostUserId: Int): GameModel {
+        val gameId = gameDao.create(hostUserId = hostUserId)
+
+        playerDao.addPlayer(gameId, hostUserId)
+
+        return gameDao.findById(gameId)
+            ?: throw GameNotFoundException("Game with id $gameId not found after creation")
+    }
+
     fun addUserToLobby(gameId: Int, userId: Int): PlayerModel {
         val lock = synchronized(lobbyLocks) {
             lobbyLocks.computeIfAbsent(gameId) { Any() }
