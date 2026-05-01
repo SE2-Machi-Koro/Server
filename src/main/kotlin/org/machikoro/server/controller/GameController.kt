@@ -17,10 +17,12 @@ import org.machikoro.server.service.LeaveFinishedGameService
 import org.machikoro.server.service.LobbyService
 import org.machikoro.server.service.PurchaseResult
 import org.machikoro.server.service.PurchaseService
+import org.machikoro.server.service.WebSocketConnectionTracker
 import org.machikoro.server.service.WinConditionService
 import org.slf4j.LoggerFactory
 import org.springframework.messaging.handler.annotation.MessageMapping
 import org.springframework.messaging.handler.annotation.Payload
+import org.springframework.messaging.simp.SimpMessageHeaderAccessor
 import org.springframework.messaging.simp.SimpMessagingTemplate
 import org.springframework.stereotype.Controller
 
@@ -33,6 +35,7 @@ class GameController(
     private val purchaseService: PurchaseService,
     private val diceService: DiceService,
     private val lobbyService: LobbyService,
+    private val connectionTracker: WebSocketConnectionTracker,
 ) {
     private val logger = LoggerFactory.getLogger(GameController::class.java)
 
