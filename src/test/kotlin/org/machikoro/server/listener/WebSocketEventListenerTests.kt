@@ -59,6 +59,7 @@ class WebSocketEventListenerTests {
 
     private fun disconnectEventWithSessionAttributes(attributes: Map<String, Any>): SessionDisconnectEvent {
         val accessor = SimpMessageHeaderAccessor.create(SimpMessageType.DISCONNECT)
+        accessor.sessionId = "session-1"
         accessor.sessionAttributes = attributes.toMutableMap()
         val message: Message<ByteArray> = MessageBuilder.createMessage(ByteArray(0), accessor.messageHeaders)
 
