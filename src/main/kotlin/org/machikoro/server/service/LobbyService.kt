@@ -1,5 +1,6 @@
 package org.machikoro.server.service
 
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.GameMarketplaceDao
 import org.machikoro.server.dao.PlayerDao
@@ -41,18 +42,20 @@ class LobbyService(
     }
 
     fun startGame(gameId: Int): GameModel {
-        val game = gameDao.findById(gameId) ?: throw GameNotFoundException("Game with id $gameId not found")
-        val players = playerDao.getPlayers(gameId)
+        return transaction {
+            val game = gameDao.findById(gameId) ?: throw GameNotFoundException("Game with id $gameId not found")
+            val players = playerDao.getPlayers(gameId)
 
-        gameDao.updateStatus(gameId, GameStatus.IN_PROGRESS)
+            gameDao.updateStatus(gameId, GameStatus.IN_PROGRESS)
 
-        // Buying-phase setup lives on game start so purchases can read existing rows.
-        gameMarketplaceDao.initForGame(gameId)
-        players.forEach { player ->
-            // Landmark state is created once per player and then updated over the game.
-            playerLandmarkDao.initForPlayer(player.id)
+            // Buying-phase setup lives on game start so purchases can read existing rows.
+            gameMarketplaceDao.initForGame(gameId)
+            players.forEach { player ->
+                // Landmark state is created once per player and then updated over the game.
+                playerLandmarkDao.initForPlayer(player.id)
+            }
+
+            game.copy(status = GameStatus.IN_PROGRESS)
         }
-
-        return game.copy(status = GameStatus.IN_PROGRESS)
     }
 }
