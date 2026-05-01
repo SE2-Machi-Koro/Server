@@ -18,6 +18,7 @@ import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.service.DiceService
 import org.machikoro.server.service.GamePhaseService
 import org.machikoro.server.service.LeaveFinishedGameService
+import org.machikoro.server.service.LobbyService
 import org.machikoro.server.service.PurchaseResult
 import org.machikoro.server.service.PurchaseService
 import org.machikoro.server.service.WinConditionService
@@ -40,7 +41,11 @@ class GameControllerTest {
     private val winConditionService = mock<WinConditionService>()
     private val purchaseService = mock<PurchaseService>()
     private val diceService = mock<DiceService>()
-    private val controller = GameController(gamePhaseService, messagingTemplate, leaveFinishedGameService, winConditionService, purchaseService, diceService)
+    private val lobbyService = mock<LobbyService>()
+    private val controller = GameController(
+        gamePhaseService, messagingTemplate, leaveFinishedGameService,
+        winConditionService, purchaseService, diceService, lobbyService
+    )
 
     @Test
     fun `advancePhase delegates to service with the requested game id`() {
