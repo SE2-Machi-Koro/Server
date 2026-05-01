@@ -15,7 +15,13 @@ import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.service.GamePhaseService.EndTurnOutcome
-import org.mockito.kotlin.*
+import org.mockito.Mockito.mock
+import org.mockito.Mockito.never
+import org.mockito.kotlin.any
+import org.mockito.kotlin.inOrder
+import org.mockito.kotlin.verify
+import org.mockito.kotlin.verifyNoMoreInteractions
+import org.mockito.kotlin.whenever
 import kotlin.test.assertTrue
 
 class GamePhaseServiceTest {
@@ -58,10 +64,6 @@ class GamePhaseServiceTest {
         roundNumber = roundNumber,
     )
 
-    @Test
-    fun `initial phase is ROLL_DICE`() {
-        assertEquals(TurnPhase.ROLL_DICE, service.initialPhase())
-    }
 
     @Test
     fun `ROLL_DICE advances to RESOLVE_EFFECTS`() {
@@ -92,7 +94,7 @@ class GamePhaseServiceTest {
 
     @Test
     fun `full cycle completes correctly`() {
-        var phase = service.initialPhase()
+        var phase = TurnPhase.ROLL_DICE
         assertEquals(TurnPhase.ROLL_DICE, phase)
 
         phase = service.nextPhase(phase)
@@ -122,7 +124,7 @@ class GamePhaseServiceTest {
     }
 
     @Test
-    fun `advancePhase wraps END_TURN back to ROLL_DICE`() {
+    fun `end_turn wraps END_TURN back to ROLL_DICE in EndTurnOutcome`() {
         val gameId = 7
         whenever(gameStateGuard.ensureGameIsRunning(gameId))
             .thenReturn(gameInPhase(gameId, TurnPhase.BUY_OR_BUILD))
@@ -202,7 +204,8 @@ class GamePhaseServiceTest {
     @Test
     fun `endTurn detects winner and finishes game`() {
         val gameId = 30
-        val winner = PlayerModel(1, gameId, 10, 0, 3)
+        val userId = 10
+        val winner = PlayerModel(1, gameId, userId, 0, 3)
 
         whenever(gameStateGuard.ensureGameIsRunning(gameId))
             .thenReturn(gameInPhase(gameId, TurnPhase.BUY_OR_BUILD))
@@ -220,7 +223,7 @@ class GamePhaseServiceTest {
         )
 
         verify(gameDao).updateTurnPhase(gameId, TurnPhase.END_TURN)
-        verify(userDao).incrementWins(winner.id)
+        verify(userDao).incrementWins(userId)
         verify(gameDao).updateStatus(gameId, GameStatus.FINISHED)
     }
 

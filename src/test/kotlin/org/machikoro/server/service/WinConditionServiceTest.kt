@@ -1,11 +1,9 @@
 package org.machikoro.server.service
 
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
-import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.domain.enums.GameStatus
@@ -13,18 +11,20 @@ import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.exception.CustomWebSocketException
+import org.machikoro.server.exception.GameNotFoundException
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import kotlin.test.Test
 
 class WinConditionServiceTest {
 
     private val playerDao = mock<PlayerDao>()
     private val playerLandmarkDao = mock<PlayerLandmarkDao>()
-    private val gameStateGuard = mock<GameStateGuard>()
+    private val gameDao = mock<GameDao>()
 
-    private val service = WinConditionService(playerDao, playerLandmarkDao, gameStateGuard)
+    private val service = WinConditionService(playerDao, playerLandmarkDao, gameDao)
 
     private fun player(id: Int, gameId: Int = 1) =
         PlayerModel(id = id, gameId = gameId, userId = id * 10, turnOrder = id, coins = 3)
@@ -44,43 +44,35 @@ class WinConditionServiceTest {
         )
 
     @Test
-    fun `hasPlayerWon returns true when all landmarks are built`() {
-        val playerId = 42
-        whenever(playerLandmarkDao.allBuilt(playerId)).thenReturn(true)
-
-        assertTrue(service.hasPlayerWon(playerId))
-    }
-
-    @Test
-    fun `hasPlayerWon returns false when not all landmarks are built`() {
-        val playerId = 42
-        whenever(playerLandmarkDao.allBuilt(playerId)).thenReturn(false)
-
-        assertFalse(service.hasPlayerWon(playerId))
-    }
-
-    @Test
     fun `detectWinner returns null for a game with no players`() {
         val gameId = 1
-        whenever(gameStateGuard.ensureGameIsRunning(gameId))
-            .thenReturn(gameInPhase(TurnPhase.END_TURN))
-        whenever(playerDao.getPlayers(gameId)).thenReturn(emptyList())
 
-        assertNull(service.detectWinner(gameId))
-        verify(gameStateGuard).ensureGameIsRunning(gameId)
+        whenever(gameDao.findById(gameId))
+            .thenReturn(gameInPhase(TurnPhase.END_TURN))
+        whenever(playerDao.getPlayers(gameId))
+            .thenReturn(emptyList())
+
+        val result = service.detectWinner(gameId)
+
+        assertNull(result)
+        verify(gameDao).findById(gameId)
+        verify(playerDao).getPlayers(gameId)
     }
 
     @Test
-    fun `detectWinner returns null when no player has built all landmarks`() {
+    fun `detectWinner returns null when no player has won`() {
         val gameId = 1
-        whenever(gameStateGuard.ensureGameIsRunning(gameId))
+
+        whenever(gameDao.findById(gameId))
             .thenReturn(gameInPhase(TurnPhase.END_TURN))
-        whenever(playerDao.getPlayers(gameId)).thenReturn(listOf(player(1), player(2)))
+        whenever(playerDao.getPlayers(gameId))
+            .thenReturn(listOf(player(1), player(2)))
         whenever(playerLandmarkDao.allBuilt(1)).thenReturn(false)
         whenever(playerLandmarkDao.allBuilt(2)).thenReturn(false)
 
-        assertNull(service.detectWinner(gameId))
-        verify(gameStateGuard).ensureGameIsRunning(gameId)
+        val result = service.detectWinner(gameId)
+
+        assertNull(result)
     }
 
     @Test
@@ -88,22 +80,23 @@ class WinConditionServiceTest {
         val gameId = 1
         val winner = player(2)
 
-        whenever(gameStateGuard.ensureGameIsRunning(gameId))
+        whenever(gameDao.findById(gameId))
             .thenReturn(gameInPhase(TurnPhase.END_TURN))
         whenever(playerDao.getPlayers(gameId))
             .thenReturn(listOf(player(1), winner, player(3)))
         whenever(playerLandmarkDao.allBuilt(1)).thenReturn(false)
         whenever(playerLandmarkDao.allBuilt(2)).thenReturn(true)
 
-        assertEquals(winner, service.detectWinner(gameId))
-        verify(gameStateGuard).ensureGameIsRunning(gameId)
+        val result = service.detectWinner(gameId)
+
+        assertEquals(winner, result)
     }
 
     @Test
-    fun `detectWinner short-circuits and does not check players after the first winner`() {
+    fun `detectWinner short-circuits after first winner`() {
         val gameId = 1
 
-        whenever(gameStateGuard.ensureGameIsRunning(gameId))
+        whenever(gameDao.findById(gameId))
             .thenReturn(gameInPhase(TurnPhase.END_TURN))
         whenever(playerDao.getPlayers(gameId))
             .thenReturn(listOf(player(1), player(2), player(3)))
@@ -114,14 +107,13 @@ class WinConditionServiceTest {
 
         assertEquals(2, result?.id)
         verify(playerLandmarkDao, never()).allBuilt(3)
-        verify(gameStateGuard).ensureGameIsRunning(gameId)
     }
 
     @Test
     fun `detectWinner throws if not in END_TURN phase`() {
         val gameId = 1
 
-        whenever(gameStateGuard.ensureGameIsRunning(gameId))
+        whenever(gameDao.findById(gameId))
             .thenReturn(gameInPhase(TurnPhase.BUY_OR_BUILD))
 
         val ex = assertThrows<CustomWebSocketException> {
@@ -129,7 +121,19 @@ class WinConditionServiceTest {
         }
 
         assertEquals("NOT_END_TURN_PHASE", ex.errorCode)
-        verify(gameStateGuard).ensureGameIsRunning(gameId)
+        verify(gameDao).findById(gameId)
+    }
+
+    @Test
+    fun `detectWinner throws if game is missing`() {
+        val gameId = 1
+
+        whenever(gameDao.findById(gameId)).thenReturn(null)
+
+        val ex = assertThrows<GameNotFoundException> {
+            service.detectWinner(gameId)
+        }
+
+        assertEquals("Game $gameId not found", ex.message)
     }
 }
-

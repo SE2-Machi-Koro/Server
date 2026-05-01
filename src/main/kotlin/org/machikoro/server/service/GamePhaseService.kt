@@ -10,6 +10,7 @@ import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.PlayerModel
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 
 @Service
 class GamePhaseService(
@@ -31,10 +32,6 @@ class GamePhaseService(
         TurnPhase.END_TURN -> TurnPhase.ROLL_DICE
     }
 
-    // TODO() Prove if needed since advanceTurn always sets ROLL_DICE as current phase
-    /** Returns the phase that begins every new turn. */
-    fun initialPhase(): TurnPhase = TurnPhase.ROLL_DICE
-
     /** Advances a game to the next phase and persists it. */
     fun advancePhase(gameId: Int): TurnPhase {
         val game = gameStateGuard.ensureGameIsRunning(gameId)
@@ -42,13 +39,16 @@ class GamePhaseService(
         gameDao.updateTurnPhase(gameId, next)
         return next
     }
-    /** Ends the active player's buy-or-build window and starts the next turn. */
+    /** Ends the active player's turn after card purchase
+     * Checks for a winner - in this case stops game,
+     * otherwise starts turn for next player.
+     **/
     fun endTurn(gameId: Int): EndTurnOutcome {
         val game = gameStateGuard.ensureGameIsRunning(gameId)
         check(game.turnPhase == TurnPhase.BUY_OR_BUILD) { "Game is not in BUY_OR_BUILD phase" }
         gameDao.updateTurnPhase(gameId,TurnPhase.END_TURN)
         winConditionService.detectWinner(gameId)?.let { winner ->
-            userDao.incrementWins(winner.id)
+            userDao.incrementWins(winner.userId)
             finishGame(gameId)
             return EndTurnOutcome.Won(winner)
         }
@@ -70,17 +70,17 @@ class GamePhaseService(
     }
 
     private fun finishGame(gameId: Int) {
+        cleanupFinishedGameData(gameId)
+        playerDao.getPlayers(gameId).forEach { userDao.incrementGamesPlayed(it.userId) }
         gameDao.updateStatus(gameId, GameStatus.FINISHED)
-        playerDao.getPlayers(gameId).forEach { userDao.incrementGamesPlayed(it.id) }
-        clearDBAfterGame(gameId)
     }
-
-    private fun clearDBAfterGame(gameId: Int) {
-        gameMarketplaceDao.deleteAllForGame(gameId)
-        playerDao.getPlayers(gameId).forEach {
-            playerCardDao.deleteAllByPlayerId(it.id)
-            playerLandmarkDao.deleteAllByPlayerId(it.id)
-        }
+    @Transactional
+    private fun cleanupFinishedGameData(gameId: Int) {
+            gameMarketplaceDao.deleteAllForGame(gameId)
+            playerDao.getPlayers(gameId).forEach {
+                playerCardDao.deleteAllByPlayerId(it.id)
+                playerLandmarkDao.deleteAllByPlayerId(it.id)
+            }
     }
     sealed interface EndTurnOutcome {
         data class Continue(

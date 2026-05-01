@@ -7,6 +7,7 @@ data class UserModel(
     val username: String,
     @field:JsonIgnore
     val passwordHash: String?,
+    @field:JsonIgnore
     val sessionToken: String?,
     val totalWins: Int,
     val totalGamesPlayed: Int

@@ -6,7 +6,6 @@ import org.machikoro.server.dto.EndTurnRequest
 import org.machikoro.server.dto.LeaveFinishedGameRequest
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.PurchaseRequest
-import org.machikoro.server.dto.PurchaseType
 import org.machikoro.server.dto.RollDiceRequest
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.service.DiceService
@@ -40,16 +39,6 @@ class GameController(
             landmarkType = request.landmarkType,
         )
         logger.info("Processed {} purchase for game {}", result.purchaseType, request.gameId)
-
-        if (result.purchaseType == PurchaseType.LANDMARK) {
-            val winner = winConditionService.detectWinner(request.gameId)
-            if (winner != null) {
-                logger.info("Game ${request.gameId} has ended. Winner: ${winner.id}")
-                gamePhaseService.finishGame(request.gameId)
-                broadcastWinner(request.gameId, winner)
-                return
-            }
-        }
 
         broadcastPurchase(request.gameId, result)
     }
