@@ -3,24 +3,30 @@ package org.machikoro.server.controller
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.machikoro.server.domain.enums.CardType
+import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.LandmarkType
 import org.machikoro.server.domain.enums.TurnPhase
+import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.dto.AdvancePhaseRequest
 import org.machikoro.server.dto.EndTurnRequest
+import org.machikoro.server.dto.GameStateDto
 import org.machikoro.server.dto.LeaveFinishedGameRequest
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.PurchaseRequest
 import org.machikoro.server.dto.PurchaseType
 import org.machikoro.server.dto.RollDiceRequest
 import org.machikoro.server.dto.RollDiceResponse
+import org.machikoro.server.dto.StartGameRequest
 import org.machikoro.server.dto.WebSocketMessage
+import org.machikoro.server.exception.NotHostException
 import org.machikoro.server.service.DiceService
 import org.machikoro.server.service.GamePhaseService
 import org.machikoro.server.service.LeaveFinishedGameService
 import org.machikoro.server.service.LobbyService
 import org.machikoro.server.service.PurchaseResult
 import org.machikoro.server.service.PurchaseService
+import org.machikoro.server.service.WebSocketConnectionTracker
 import org.machikoro.server.service.WinConditionService
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
@@ -31,6 +37,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.springframework.messaging.simp.SimpMessageHeaderAccessor
 import org.springframework.messaging.simp.SimpMessagingTemplate
 
 class GameControllerTest {
