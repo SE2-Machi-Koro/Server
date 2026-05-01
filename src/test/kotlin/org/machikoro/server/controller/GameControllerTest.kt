@@ -49,10 +49,92 @@ class GameControllerTest {
     private val purchaseService = mock<PurchaseService>()
     private val diceService = mock<DiceService>()
     private val lobbyService = mock<LobbyService>()
+    private val connectionTracker = mock<WebSocketConnectionTracker>()
     private val controller = GameController(
         gamePhaseService, messagingTemplate, leaveFinishedGameService,
-        winConditionService, purchaseService, diceService, lobbyService
+        winConditionService, purchaseService, diceService, lobbyService, connectionTracker
     )
+
+    // ── startGame ─────────────────────────────────────────────────────────────
+
+    private fun gameStateDto(gameId: Int) = GameStateDto(
+        game = GameModel(
+            id = gameId, status = GameStatus.IN_PROGRESS, hostUserId = 1,
+            lobbyCode = "XYZ", maxPlayers = 4, currentTurnIndex = 0,
+            turnPhase = TurnPhase.ROLL_DICE, lastDiceRoll = null,
+            hasPurchasedThisTurn = false, roundNumber = 1,
+        ),
+        players = listOf(
+            PlayerModel(id = 1, gameId = gameId, userId = 1, turnOrder = 0, coins = 3),
+            PlayerModel(id = 2, gameId = gameId, userId = 2, turnOrder = 1, coins = 3),
+        ),
+        playerCards = emptyMap(),
+        turnOrder = listOf(1, 2),
+    )
+
+    private fun headerWithSession(sessionId: String): SimpMessageHeaderAccessor {
+        val accessor = SimpMessageHeaderAccessor.create()
+        accessor.sessionId = sessionId
+        accessor.sessionAttributes = mutableMapOf()
+        return accessor
+    }
+
+    @Test
+    fun `startGame broadcasts GAME_STARTED on success`() {
+        val gameId = 10
+        val sessionId = "session-host"
+        whenever(connectionTracker.getUserId(sessionId)).thenReturn(1)
+        whenever(lobbyService.startGame(gameId, 1)).thenReturn(gameStateDto(gameId))
+
+        controller.startGame(StartGameRequest(gameId), headerWithSession(sessionId))
+
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+
+        val message = captor.firstValue
+        assertEquals(MessageType.GAME_STARTED, message.type)
+        assertEquals("server", message.sender)
+        assertEquals("Game $gameId has started", message.content)
+        assertEquals(gameId, message.gameId)
+    }
+
+    @Test
+    fun `startGame broadcasts ERROR frame when session is unknown`() {
+        val gameId = 10
+        val sessionId = "unknown-session"
+        whenever(connectionTracker.getUserId(sessionId)).thenReturn(null)
+
+        controller.startGame(StartGameRequest(gameId), headerWithSession(sessionId))
+
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+
+        val message = captor.firstValue
+        assertEquals(MessageType.ERROR, message.type)
+        assertEquals("server", message.sender)
+        @Suppress("UNCHECKED_CAST")
+        assertEquals("START_FAILED", (message.payload as Map<String, Any>)["event"])
+        verify(lobbyService, never()).startGame(any(), any())
+    }
+
+    @Test
+    fun `startGame broadcasts ERROR frame when service throws`() {
+        val gameId = 10
+        val sessionId = "session-non-host"
+        whenever(connectionTracker.getUserId(sessionId)).thenReturn(99)
+        whenever(lobbyService.startGame(gameId, 99))
+            .thenThrow(NotHostException("not host"))
+
+        controller.startGame(StartGameRequest(gameId), headerWithSession(sessionId))
+
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+
+        val message = captor.firstValue
+        assertEquals(MessageType.ERROR, message.type)
+        @Suppress("UNCHECKED_CAST")
+        assertEquals("START_FAILED", (message.payload as Map<String, Any>)["event"])
+    }
 
     @Test
     fun `advancePhase delegates to service with the requested game id`() {
