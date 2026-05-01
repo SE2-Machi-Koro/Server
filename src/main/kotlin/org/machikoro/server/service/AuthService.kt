@@ -1,17 +1,22 @@
 package org.machikoro.server.service
 
 import org.machikoro.server.dao.UserDao
+import org.machikoro.server.dto.LoginResponse
 import org.machikoro.server.dto.RegisterResponse
 import org.machikoro.server.exception.DuplicateUserException
+import org.machikoro.server.exception.InvalidCredentialsException
+import org.slf4j.LoggerFactory
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.util.UUID
 
 @Service
 class AuthService(
     private val userDao: UserDao,
     private val passwordEncoder: PasswordEncoder,
 ) {
+    private val logger = LoggerFactory.getLogger(AuthService::class.java)
 
     /**
      * Validates input, hashes the password via BCrypt, and persists a new user.
@@ -41,5 +46,42 @@ class AuthService(
         val hash = passwordEncoder.encode(rawPassword)
         val id = userDao.create(cleanUsername, hash)
         return RegisterResponse(id = id, username = cleanUsername)
+    }
+
+    /**
+     * Authenticates a user against the stored BCrypt hash and issues a fresh
+     * session token. Unknown users, wrong passwords, and users without a stored
+     * hash all collapse into the same generic InvalidCredentialsException so a
+     * caller cannot distinguish "user does not exist" from "wrong password".
+     */
+    @Transactional
+    fun login(username: String, rawPassword: String): LoginResponse {
+        require(username.isNotBlank()) { "Username must not be blank" }
+        require(rawPassword.isNotBlank()) { "Password must not be blank" }
+
+        val cleanUsername = username.trim().lowercase()
+        val user = userDao.findByUsername(cleanUsername)
+
+        val storedHash = user?.passwordHash
+        val passwordOk = storedHash != null && passwordEncoder.matches(rawPassword, storedHash)
+        if (user == null || !passwordOk) {
+            throw InvalidCredentialsException("Invalid username or password")
+        }
+
+        val token = UUID.randomUUID().toString()
+        userDao.updateSessionToken(user.id, token)
+        return LoginResponse(sessionToken = token, username = user.username)
+    }
+
+    /**
+     * Invalidates the given session token. Idempotent: an unknown token is a
+     * silent no-op so a caller cannot enumerate valid tokens by status code.
+     */
+    @Transactional
+    fun logout(sessionToken: String) {
+        require(sessionToken.isNotBlank()) { "Session token must not be blank" }
+        val user = userDao.findBySessionToken(sessionToken) ?: return
+        userDao.updateSessionToken(user.id, null)
+        logger.info("Cleared session for user '{}'", user.username)
     }
 }
