@@ -2,7 +2,6 @@ package org.machikoro.server.service
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
-import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.PlayerDao
