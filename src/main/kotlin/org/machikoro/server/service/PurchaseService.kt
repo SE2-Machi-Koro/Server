@@ -41,8 +41,9 @@ class PurchaseService(
         cardType: CardType?,
         landmarkType: LandmarkType?,
     ): PurchaseResult = transaction {
-        // TODO(follow-up): Verify the websocket caller is the active player for this game.
+        // TODO(#160): Verify the websocket caller is the active player for this game.
         // Do not trust gameId from the client payload alone.
+
 
         val game = gameStateGuard.ensureGameIsRunning(gameId)
 
