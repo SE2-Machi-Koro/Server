@@ -57,10 +57,15 @@ class LobbyService(
      *    (coins default to 3 and are already set by [PlayerDao.addPlayer]).
      * 7. Flip game status to IN_PROGRESS.
      *
+     * The entire sequence runs inside a single database transaction so that any
+     * mid-sequence failure rolls back completely and the lobby never wedges in
+     * an inconsistent state.
+     *
      * @param gameId           ID of the game to start.
      * @param requestingUserId User ID of the caller — must be the host.
      * @return [GameStateDto] ready to be broadcast via WebSocket.
      */
+    @Transactional
     fun startGame(gameId: Int, requestingUserId: Int): GameStateDto {
         // 1. Load game
         val game = gameDao.findById(gameId)
@@ -90,9 +95,10 @@ class LobbyService(
         }
 
         // 5. Randomize turn order and persist
-        val shuffledPlayerIds = activePlayers.map { it.id }.shuffled()
-        shuffledPlayerIds.forEachIndexed { index, playerId ->
-            playerDao.updateTurnOrder(playerId, index)
+        val shuffledPlayers = activePlayers.shuffled()
+        val shuffledPlayerIds = shuffledPlayers.map { it.id }
+        shuffledPlayers.forEachIndexed { index, player ->
+            playerDao.updateTurnOrder(player.id, index)
         }
 
         // 6. Initialize starting hand for each active player
@@ -105,9 +111,11 @@ class LobbyService(
         gameDao.updateStatus(gameId, GameStatus.IN_PROGRESS)
         val updatedGame: GameModel = game.copy(status = GameStatus.IN_PROGRESS)
 
-        // Re-fetch players to reflect updated turnOrder values
-        val finalPlayers = playerDao.getPlayers(gameId)
-            .filter { it.userId in connectedUserIds }
+        // Build final player list from the already-loaded active list, reflecting
+        // updated turnOrder values assigned in step 5 (avoids a second DB query).
+        val finalPlayers = shuffledPlayers.mapIndexed { index, player ->
+            player.copy(turnOrder = index)
+        }
 
         val playerCards = finalPlayers.associate { player ->
             player.id to playerCardDao.findByPlayerId(player.id)

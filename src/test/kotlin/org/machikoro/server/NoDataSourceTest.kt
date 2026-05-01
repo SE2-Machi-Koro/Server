@@ -1,4 +1,4 @@
- package org.machikoro.server
+package org.machikoro.server
 
 import org.springframework.boot.test.context.SpringBootTest
 
