@@ -2,6 +2,7 @@ package org.machikoro.server.listener
 
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.WebSocketMessage
+import org.machikoro.server.service.WebSocketConnectionTracker
 import org.slf4j.LoggerFactory
 import org.springframework.context.event.EventListener
 import org.springframework.messaging.simp.SimpMessageSendingOperations
@@ -11,18 +12,25 @@ import org.springframework.web.socket.messaging.SessionDisconnectEvent
 
 @Component
 class WebSocketEventListener(
-    private val template: SimpMessageSendingOperations
+    private val template: SimpMessageSendingOperations,
+    private val connectionTracker: WebSocketConnectionTracker
 ) {
     private val logger = LoggerFactory.getLogger(WebSocketEventListener::class.java)
 
     /**
      * Listen for WebSocket disconnect events.
-     * Broadcasts a LEAVE message to all subscribers when a user disconnects.
+     * Unregisters the session from the connection tracker, then broadcasts a
+     * LEAVE message to all subscribers when a user disconnects.
      */
     @EventListener
     fun handleWebSocketDisconnectListener(event: SessionDisconnectEvent) {
         val headerAccessor = StompHeaderAccessor.wrap(event.message)
+        val sessionId = headerAccessor.sessionId
         val username = headerAccessor.sessionAttributes?.get("username") as? String
+
+        if (sessionId != null) {
+            connectionTracker.unregister(sessionId)
+        }
 
         if (username != null) {
             logger.info("User Disconnected: $username")
@@ -36,4 +44,3 @@ class WebSocketEventListener(
         }
     }
 }
-
