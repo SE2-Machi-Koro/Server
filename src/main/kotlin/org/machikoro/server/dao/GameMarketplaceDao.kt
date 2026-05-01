@@ -81,7 +81,7 @@ class GameMarketplaceDao {
     fun decrementQuantity(gameId: Int, cardType: CardType): Boolean = transaction {
         val cardId = Cards.selectAll()
             .where { Cards.cardType eq cardType }
-            .singleOrNull()?.get(Cards.id) ?: return@transaction false
+            .singleOrNull()?.get(Cards.id) ?: throw CardNotFoundException("Card $cardType not found")
 
         val updatedRows = GameMarketplace.update({
             (GameMarketplace.gameId eq gameId) and
@@ -99,7 +99,7 @@ class GameMarketplaceDao {
     fun isAvailable(gameId: Int, cardType: CardType): Boolean = transaction {
         val cardId = Cards.selectAll()
             .where { Cards.cardType eq cardType }
-            .singleOrNull()?.get(Cards.id) ?: return@transaction false
+            .singleOrNull()?.get(Cards.id) ?: throw CardNotFoundException("Card $cardType not found")
 
         (GameMarketplace innerJoin Cards)
             .selectAll()
@@ -127,7 +127,7 @@ class GameMarketplaceDao {
     fun updateQuantity(gameId: Int, cardType: CardType, quantity: Int): Unit = transaction {
         val cardId = Cards.selectAll()
             .where { Cards.cardType eq cardType }
-            .singleOrNull()?.get(Cards.id) ?: return@transaction
+            .singleOrNull()?.get(Cards.id) ?: throw CardNotFoundException("Card $cardType not found")
 
         GameMarketplace.update({
             (GameMarketplace.gameId eq gameId) and
@@ -145,8 +145,7 @@ class GameMarketplaceDao {
     fun delete(gameId: Int, cardType: CardType): Unit = transaction {
         val cardId = Cards.selectAll()
             .where { Cards.cardType eq cardType }
-            .singleOrNull()?.get(Cards.id)
-            ?: throw CardNotFoundException("Card type $cardType not found in database")
+            .singleOrNull()?.get(Cards.id) ?: throw CardNotFoundException("Card $cardType not found")
 
         GameMarketplace.deleteWhere {
             (GameMarketplace.gameId eq gameId) and

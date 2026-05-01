@@ -55,7 +55,7 @@ class PlayerCardDao {
     fun upsert(playerId: Int, cardType: CardType, quantity: Int): Unit = transaction {
         val cardId = Cards.selectAll()
             .where { Cards.cardType eq cardType }
-            .singleOrNull()?.get(Cards.id) ?: return@transaction
+            .singleOrNull()?.get(Cards.id) ?: throw CardNotFoundException("Card type $cardType not found in database")
 
         if (quantity <= 0) {
             PlayerCards.deleteWhere {

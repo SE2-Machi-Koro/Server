@@ -78,7 +78,8 @@ class PlayerLandmarkDao {
     fun markBuilt(playerId: Int, landmarkType: LandmarkType): Unit = transaction {
         val landmarkId = Landmarks.selectAll()
             .where { Landmarks.landmarkType eq landmarkType }
-            .singleOrNull()?.get(Landmarks.id) ?: return@transaction
+            .singleOrNull()?.get(Landmarks.id)
+            ?: throw LandmarkNotFoundException("Landmark type $landmarkType not found in database")
 
         PlayerLandmarks.update({
             (PlayerLandmarks.playerId eq playerId) and
