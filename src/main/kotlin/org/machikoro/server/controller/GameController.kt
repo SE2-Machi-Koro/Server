@@ -96,7 +96,7 @@ class GameController(
         }
     }
 
-    private fun broadcastPhase(gameId: Int, newPhase : TurnPhase) {
+    private fun broadcastPhase(gameId: Int, newPhase: TurnPhase) {
         messagingTemplate.convertAndSend(
             "/topic/game/$gameId",
             WebSocketMessage(

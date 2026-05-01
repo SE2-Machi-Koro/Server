@@ -15,7 +15,13 @@ import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.service.GamePhaseService.EndTurnOutcome
-import org.mockito.kotlin.*
+import org.mockito.Mockito.mock
+import org.mockito.Mockito.never
+import org.mockito.kotlin.any
+import org.mockito.kotlin.inOrder
+import org.mockito.kotlin.verify
+import org.mockito.kotlin.verifyNoMoreInteractions
+import org.mockito.kotlin.whenever
 import kotlin.test.assertTrue
 
 class GamePhaseServiceTest {
@@ -118,7 +124,7 @@ class GamePhaseServiceTest {
     }
 
     @Test
-    fun `advancePhase wraps END_TURN back to ROLL_DICE`() {
+    fun `end_turn wraps END_TURN back to ROLL_DICE in EndTurnOutcome`() {
         val gameId = 7
         whenever(gameStateGuard.ensureGameIsRunning(gameId))
             .thenReturn(gameInPhase(gameId, TurnPhase.BUY_OR_BUILD))
