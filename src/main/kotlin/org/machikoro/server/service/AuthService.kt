@@ -62,9 +62,14 @@ class AuthService(
         val cleanUsername = username.trim().lowercase()
         val user = userDao.findByUsername(cleanUsername)
 
-        val storedHash = user?.passwordHash
-        val passwordOk = storedHash != null && passwordEncoder.matches(rawPassword, storedHash)
-        if (user == null || !passwordOk) {
+        // Always run the BCrypt comparison — even when the user is unknown or
+        // has no stored hash — so an attacker cannot enumerate valid usernames
+        // by measuring response time. BCrypt is intentionally slow (~100ms),
+        // so skipping the comparison on the user-not-found path would leak
+        // existence through latency. See DUMMY_BCRYPT_HASH below.
+        val hashToCompare = user?.passwordHash ?: DUMMY_BCRYPT_HASH
+        val passwordOk = passwordEncoder.matches(rawPassword, hashToCompare)
+        if (user == null || user.passwordHash == null || !passwordOk) {
             throw InvalidCredentialsException("Invalid username or password")
         }
 
@@ -83,5 +88,16 @@ class AuthService(
         val user = userDao.findBySessionToken(sessionToken) ?: return
         userDao.updateSessionToken(user.id, null)
         logger.info("Cleared session for user '{}'", user.username)
+    }
+
+    companion object {
+        // Pre-computed BCrypt hash used as a comparison target when the
+        // looked-up user does not exist (or has no stored hash). The
+        // plaintext is intentionally something no real user would have.
+        // What matters is that the hash is well-formed BCrypt at the same
+        // cost factor as production hashes (10) so PasswordEncoder.matches
+        // takes the same ~100ms whether or not the user exists.
+        private const val DUMMY_BCRYPT_HASH =
+            "\$2a\$10\$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy"
     }
 }

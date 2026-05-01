@@ -163,15 +163,34 @@ class AuthServiceTest {
     }
 
     @Test
-    fun `login rejects user with null passwordHash without invoking the encoder`() {
+    fun `login still runs BCrypt against a dummy hash when user has null passwordHash`() {
         val user = userModel(id = 1, username = "alice", passwordHash = null)
         whenever(userDao.findByUsername("alice")).thenReturn(user)
+        // The encoder is now always called — the result against the dummy hash
+        // is irrelevant (it's false), the point is that it ran for timing parity.
+        whenever(passwordEncoder.matches(eq("hunter2"), any())).thenReturn(false)
 
         assertThrows<InvalidCredentialsException> {
             service.login("alice", "hunter2")
         }
 
-        verify(passwordEncoder, never()).matches(any(), any())
+        verify(passwordEncoder).matches(eq("hunter2"), any())
+        verify(userDao, never()).updateSessionToken(any(), any())
+    }
+
+    @Test
+    fun `login runs BCrypt against a dummy hash when user is unknown for timing parity`() {
+        whenever(userDao.findByUsername("ghost")).thenReturn(null)
+        whenever(passwordEncoder.matches(eq("any-password"), any())).thenReturn(false)
+
+        assertThrows<InvalidCredentialsException> {
+            service.login("ghost", "any-password")
+        }
+
+        // Critical: the encoder MUST run on the unknown-user path so the
+        // response time matches the user-found-but-wrong-password path.
+        // Skipping it would leak username existence via timing.
+        verify(passwordEncoder).matches(eq("any-password"), any())
         verify(userDao, never()).updateSessionToken(any(), any())
     }
 
