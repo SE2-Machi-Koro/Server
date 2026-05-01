@@ -47,34 +47,64 @@ class GameController(
      * broadcast to /topic/game/{gameId} so every subscriber transitions
      * simultaneously to the game board.
      *
-     * Authorization: only the host (requestingUserId == game.hostUserId) may trigger this.
-     * Roster sanitization: disconnected players are removed before the game object is created.
+     * Authorization: the requesting user ID is derived from the STOMP session via
+     * [WebSocketConnectionTracker] — a client cannot bypass the host check by
+     * forging a user ID in the payload.
      */
     @MessageMapping("/game.start")
-    fun startGame(@Payload request: StartGameRequest) {
+    fun startGame(@Payload request: StartGameRequest, headerAccessor: SimpMessageHeaderAccessor) {
         val gameTopic = "/topic/game/${request.gameId}"
-        logger.info("START_GAME requested by userId=${request.requestingUserId} for gameId=${request.gameId}")
 
-        val gameState = lobbyService.startGame(
-            gameId = request.gameId,
-            requestingUserId = request.requestingUserId,
-        )
+        val sessionId = headerAccessor.sessionId
+        val requestingUserId = sessionId?.let { connectionTracker.getUserId(it) }
 
-        logger.info(
-            "Game ${request.gameId} started — players=${gameState.players.size}, " +
-                    "turnOrder=${gameState.turnOrder}"
-        )
-
-        messagingTemplate.convertAndSend(
-            gameTopic,
-            WebSocketMessage(
-                type = MessageType.GAME_STARTED,
-                sender = "server",
-                content = "Game ${request.gameId} has started",
-                payload = gameState,
-                gameId = request.gameId,
+        if (requestingUserId == null) {
+            logger.warn("START_GAME rejected — no registered session (sessionId=$sessionId, gameId=${request.gameId})")
+            messagingTemplate.convertAndSend(
+                gameTopic,
+                WebSocketMessage(
+                    type = MessageType.ERROR,
+                    sender = "server",
+                    payload = mapOf("event" to "START_FAILED", "message" to "Unknown session — please reconnect"),
+                )
             )
-        )
+            return
+        }
+
+        logger.info("START_GAME requested by userId=$requestingUserId for gameId=${request.gameId}")
+
+        try {
+            val gameState = lobbyService.startGame(
+                gameId = request.gameId,
+                requestingUserId = requestingUserId,
+            )
+
+            logger.info(
+                "Game ${request.gameId} started — players=${gameState.players.size}, " +
+                        "turnOrder=${gameState.turnOrder}"
+            )
+
+            messagingTemplate.convertAndSend(
+                gameTopic,
+                WebSocketMessage(
+                    type = MessageType.GAME_STARTED,
+                    sender = "server",
+                    content = "Game ${request.gameId} has started",
+                    payload = gameState,
+                    gameId = request.gameId,
+                )
+            )
+        } catch (e: Exception) {
+            logger.error("START_GAME failed for gameId=${request.gameId}", e)
+            messagingTemplate.convertAndSend(
+                gameTopic,
+                WebSocketMessage(
+                    type = MessageType.ERROR,
+                    sender = "server",
+                    payload = mapOf("event" to "START_FAILED", "message" to (e.message ?: "Unknown error")),
+                )
+            )
+        }
     }
 
     @MessageMapping("/game.purchase")
