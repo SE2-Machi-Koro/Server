@@ -7,6 +7,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.database.AbstractDBSetup
 import org.machikoro.server.database.Games
 import org.machikoro.server.database.Landmarks
@@ -14,6 +15,7 @@ import org.machikoro.server.database.PlayerLandmarks
 import org.machikoro.server.database.Players
 import org.machikoro.server.database.Users
 import org.machikoro.server.domain.enums.LandmarkType
+import org.machikoro.server.exception.LandmarkNotFoundException
 
 class PlayerLandmarkDaoTest : AbstractDBSetup() {
 
@@ -101,6 +103,14 @@ class PlayerLandmarkDaoTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `markBuilt throws LandmarkNotFoundException when landmark type does not exist in database`() {
+        transaction { Landmarks.deleteAll() }
+        assertThrows<LandmarkNotFoundException> {
+            playerLandmarkDao.markBuilt(playerId, LandmarkType.TRAIN_STATION)
+        }
+    }
+
+    @Test
     fun `allBuilt returns false when only some landmarks are built`() {
         playerLandmarkDao.initForPlayer(playerId)
         playerLandmarkDao.markBuilt(playerId, LandmarkType.TRAIN_STATION)
@@ -122,8 +132,9 @@ class PlayerLandmarkDaoTest : AbstractDBSetup() {
     }
 
     @Test
-    fun `delete on non-existent entry does not throw`() {
-        assertDoesNotThrow {
+    fun `delete throws LandmarkNotFoundException when landmark type does not exist in database`() {
+        transaction { Landmarks.deleteAll() }
+        assertThrows<LandmarkNotFoundException> {
             playerLandmarkDao.delete(playerId, LandmarkType.RADIO_TOWER)
         }
     }

@@ -7,6 +7,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.database.AbstractDBSetup
 import org.machikoro.server.database.Cards
 import org.machikoro.server.database.Games
@@ -14,6 +15,7 @@ import org.machikoro.server.database.PlayerCards
 import org.machikoro.server.database.Players
 import org.machikoro.server.database.Users
 import org.machikoro.server.domain.enums.CardType
+import org.machikoro.server.exception.CardNotFoundException
 
 class PlayerCardDaoTest : AbstractDBSetup() {
 
@@ -164,8 +166,17 @@ class PlayerCardDaoTest : AbstractDBSetup() {
     }
 
     @Test
-    fun `delete on non-existent entry does not throw`() {
-        assertDoesNotThrow {
+    fun `upsert throws CardNotFoundException when card type does not exist in database`() {
+        transaction { Cards.deleteAll() }
+        assertThrows<CardNotFoundException> {
+            playerCardDao.upsert(playerId, CardType.WHEAT_FIELD, 1)
+        }
+    }
+
+    @Test
+    fun `delete throws CardNotFoundException when card type does not exist in database`() {
+        transaction { Cards.deleteAll() }
+        assertThrows<CardNotFoundException> {
             playerCardDao.delete(playerId, CardType.CAFE)
         }
     }

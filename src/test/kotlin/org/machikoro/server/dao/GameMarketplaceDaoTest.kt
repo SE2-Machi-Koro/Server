@@ -7,12 +7,14 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.database.AbstractDBSetup
 import org.machikoro.server.database.Cards
 import org.machikoro.server.database.GameMarketplace
 import org.machikoro.server.database.Games
 import org.machikoro.server.database.Users
 import org.machikoro.server.domain.enums.CardType
+import org.machikoro.server.exception.CardNotFoundException
 
 class GameMarketplaceDaoTest : AbstractDBSetup() {
 
@@ -156,10 +158,26 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `isAvailable throws CardNotFoundException when card type does not exist in database`() {
+        transaction { Cards.deleteAll() }
+        assertThrows<CardNotFoundException> {
+            marketplaceDao.isAvailable(gameId, CardType.BAKERY)
+        }
+    }
+
+    @Test
     fun `decrementQuantity reduces available count by one`() {
         marketplaceDao.initForGame(gameId)
         marketplaceDao.decrementQuantity(gameId, CardType.BAKERY)
         assertEquals(5, marketplaceDao.findByGameIdAndType(gameId, CardType.BAKERY)!!.quantityAvailable)
+    }
+
+    @Test
+    fun `decrementQuantity throws CardNotFoundException when card type does not exist in database`() {
+        transaction { Cards.deleteAll() }
+        assertThrows<CardNotFoundException> {
+            marketplaceDao.decrementQuantity(gameId, CardType.BAKERY)
+        }
     }
 
     @Test
@@ -177,6 +195,14 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `updateQuantity throws CardNotFoundException when card type does not exist in database`() {
+        transaction { Cards.deleteAll() }
+        assertThrows<CardNotFoundException> {
+            marketplaceDao.updateQuantity(gameId, CardType.WHEAT_FIELD, 5)
+        }
+    }
+
+    @Test
     fun `delete removes specific card entry from marketplace`() {
         marketplaceDao.initForGame(gameId)
         marketplaceDao.delete(gameId, CardType.WHEAT_FIELD)
@@ -184,8 +210,9 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
     }
 
     @Test
-    fun `delete on non-existent entry does not throw`() {
-        assertDoesNotThrow {
+    fun `delete throws CardNotFoundException when card type does not exist in database`() {
+        transaction { Cards.deleteAll() }
+        assertThrows<CardNotFoundException> {
             marketplaceDao.delete(gameId, CardType.WHEAT_FIELD)
         }
     }
