@@ -18,11 +18,29 @@ class LobbyService(
 
     private val lobbyLocks = mutableMapOf<Int, Any>()
 
+    /**
+     * Creates a new lobby for a given host user.
+     *
+     * A lobby is represented as a Game with status WAITING.
+     * This method:
+     * 1. Creates a new game entry in the database (including a unique lobby code)
+     * 2. Adds the host user as the first player in the lobby
+     * 3. Returns the fully initialized GameModel
+     *
+     * @param hostUserId the ID of the user creating the lobby (host)
+     * @return the created GameModel representing the lobby
+     * @throws GameNotFoundException if the created game cannot be retrieved
+     */
     fun createLobby(hostUserId: Int): GameModel {
+
+        // Step 1: Create a new game (lobby) in the database
+        // This automatically generates a unique lobby code
         val gameId = gameDao.create(hostUserId = hostUserId)
 
+        // Step 2: Add the host as the first player in the lobby
         playerDao.addPlayer(gameId, hostUserId)
 
+        // Step 3: Retrieve and return the created gamegit add .
         return gameDao.findById(gameId)
             ?: throw GameNotFoundException("Game with id $gameId not found after creation")
     }
