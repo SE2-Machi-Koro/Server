@@ -48,7 +48,7 @@ class LobbyService(
         // Step 2: Add the host as the first player in the lobby
         playerDao.addPlayer(gameId, hostUserId)
 
-        // Step 3: Retrieve and return the created gamegit add .
+        // Step 3: Retrieve and return the created game
         return gameDao.findById(gameId)
             ?: throw GameNotFoundException("Game with id $gameId not found after creation")
     }
