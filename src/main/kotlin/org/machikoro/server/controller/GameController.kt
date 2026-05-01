@@ -36,6 +36,44 @@ class GameController(
 ) {
     private val logger = LoggerFactory.getLogger(GameController::class.java)
 
+    /**
+     * Handle the START_GAME signal from the lobby host.
+     *
+     * Message is sent to /app/game.start.
+     * On success, a GAME_STARTED event containing the full [GameStateDto] is
+     * broadcast to /topic/game/{gameId} so every subscriber transitions
+     * simultaneously to the game board.
+     *
+     * Authorization: only the host (requestingUserId == game.hostUserId) may trigger this.
+     * Roster sanitization: disconnected players are removed before the game object is created.
+     */
+    @MessageMapping("/game.start")
+    fun startGame(@Payload request: StartGameRequest) {
+        val gameTopic = "/topic/game/${request.gameId}"
+        logger.info("START_GAME requested by userId=${request.requestingUserId} for gameId=${request.gameId}")
+
+        val gameState = lobbyService.startGame(
+            gameId = request.gameId,
+            requestingUserId = request.requestingUserId,
+        )
+
+        logger.info(
+            "Game ${request.gameId} started — players=${gameState.players.size}, " +
+                    "turnOrder=${gameState.turnOrder}"
+        )
+
+        messagingTemplate.convertAndSend(
+            gameTopic,
+            WebSocketMessage(
+                type = MessageType.GAME_STARTED,
+                sender = "server",
+                content = "Game ${request.gameId} has started",
+                payload = gameState,
+                gameId = request.gameId,
+            )
+        )
+    }
+
     @MessageMapping("/game.purchase")
     fun purchase(@Payload request: PurchaseRequest) {
         val result = purchaseService.purchase(
