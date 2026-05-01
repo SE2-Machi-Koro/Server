@@ -1,19 +1,26 @@
 package org.machikoro.server.service
 
 import org.machikoro.server.dao.GameDao
+import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
+import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
+import org.machikoro.server.dto.GameStateDto
+import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.exception.LobbyFullException
+import org.machikoro.server.exception.NotHostException
 import org.springframework.stereotype.Service
 
 @Service
 class LobbyService(
     private val gameDao: GameDao,
-    private val playerDao: PlayerDao
+    private val playerDao: PlayerDao,
+    private val playerCardDao: PlayerCardDao,
+    private val connectionTracker: WebSocketConnectionTracker,
 ) {
 
     private val lobbyLocks = mutableMapOf<Int, Any>()
@@ -36,10 +43,80 @@ class LobbyService(
         }
     }
 
-    fun startGame(gameId: Int): GameModel {
-        val game = gameDao.findById(gameId) ?: throw GameNotFoundException("Game with id $gameId not found")
+    /**
+     * Transitions a lobby to an active game.
+     *
+     * Steps performed atomically from the caller's perspective:
+     * 1. Load and validate the game (must exist and be in WAITING state).
+     * 2. Assert [requestingUserId] is the host; throw [NotHostException] otherwise.
+     * 3. Sanitize the roster — remove players whose WebSocket session has dropped.
+     * 4. Guard minimum player count (≥ 2).
+     * 5. Shuffle player IDs to produce a random turn order and persist it.
+     * 6. Initialize each player's starting hand: 1× WHEAT_FIELD + 1× BAKERY
+     *    (coins default to 3 and are already set by [PlayerDao.addPlayer]).
+     * 7. Flip game status to IN_PROGRESS.
+     *
+     * @param gameId           ID of the game to start.
+     * @param requestingUserId User ID of the caller — must be the host.
+     * @return [GameStateDto] ready to be broadcast via WebSocket.
+     */
+    fun startGame(gameId: Int, requestingUserId: Int): GameStateDto {
+        // 1. Load game
+        val game = gameDao.findById(gameId)
+            ?: throw GameNotFoundException("Game with id $gameId not found")
+
+        if (game.status == GameStatus.IN_PROGRESS) {
+            throw GameStartedException("Game with id $gameId has already started")
+        }
+
+        // 2. Host authorization
+        if (game.hostUserId != requestingUserId) {
+            throw NotHostException("Only the host can start the game (gameId=$gameId)")
+        }
+
+        // 3. Roster sanitization — keep only players still connected
+        val connectedUserIds = connectionTracker.getConnectedUserIds(gameId)
+        val allPlayers = playerDao.getPlayers(gameId)
+        val activePlayers = allPlayers.filter { it.userId in connectedUserIds }
+
+        // 4. Minimum player check
+        if (activePlayers.size < 2) {
+            throw CustomWebSocketException(
+                errorCode = "NOT_ENOUGH_PLAYERS",
+                message = "At least 2 connected players are required to start (gameId=$gameId, " +
+                        "connected=${activePlayers.size})"
+            )
+        }
+
+        // 5. Randomize turn order and persist
+        val shuffledPlayerIds = activePlayers.map { it.id }.shuffled()
+        shuffledPlayerIds.forEachIndexed { index, playerId ->
+            playerDao.updateTurnOrder(playerId, index)
+        }
+
+        // 6. Initialize starting hand for each active player
+        activePlayers.forEach { player ->
+            playerCardDao.upsert(player.id, CardType.WHEAT_FIELD, 1)
+            playerCardDao.upsert(player.id, CardType.BAKERY, 1)
+        }
+
+        // 7. Flip game to IN_PROGRESS
         gameDao.updateStatus(gameId, GameStatus.IN_PROGRESS)
-        // Here you would initialize the game state, e.g., by creating the initial deck of cards, etc.
-        return game.copy(status = GameStatus.IN_PROGRESS)
+        val updatedGame: GameModel = game.copy(status = GameStatus.IN_PROGRESS)
+
+        // Re-fetch players to reflect updated turnOrder values
+        val finalPlayers = playerDao.getPlayers(gameId)
+            .filter { it.userId in connectedUserIds }
+
+        val playerCards = finalPlayers.associate { player ->
+            player.id to playerCardDao.findByPlayerId(player.id)
+        }
+
+        return GameStateDto(
+            game = updatedGame,
+            players = finalPlayers,
+            playerCards = playerCards,
+            turnOrder = shuffledPlayerIds,
+        )
     }
 }
