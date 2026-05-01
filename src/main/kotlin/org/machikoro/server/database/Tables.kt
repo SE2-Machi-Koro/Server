@@ -57,6 +57,7 @@ object Landmarks : IntIdTable("landmarks") {
  */
 object Users : IntIdTable("users") {
     val username = varchar("username", 50).uniqueIndex()
+    val passwordHash = varchar("password_hash", 60).nullable()
     val sessionToken = varchar("session_token", 255).nullable().uniqueIndex()
     val totalWins = integer("total_wins").default(0)
     val totalGamesPlayed = integer("total_games_played").default(0)

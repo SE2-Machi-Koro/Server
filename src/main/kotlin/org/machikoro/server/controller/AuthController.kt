@@ -1,0 +1,32 @@
+package org.machikoro.server.controller
+
+import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.tags.Tag
+import org.machikoro.server.dto.RegisterRequest
+import org.machikoro.server.service.AuthService
+import org.slf4j.LoggerFactory
+import org.springframework.http.ResponseEntity
+import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RestController
+
+@RestController
+@RequestMapping("/auth")
+@Tag(name = "Authentication", description = "User registration, login, and session management")
+class AuthController(private val authService: AuthService) {
+    private val logger = LoggerFactory.getLogger(AuthController::class.java)
+
+    @PostMapping("/register")
+    @Operation(summary = "Register a new user with username and password")
+    fun register(@RequestBody request: RegisterRequest): ResponseEntity<Any> {
+        return try {
+            val response = authService.register(request.username, request.password)
+            logger.info("Registered user '{}'", response.username)
+            ResponseEntity.ok(response)
+        } catch (e: Exception) {
+            logger.warn("Registration failed for '{}': {}", request.username, e.message)
+            ResponseEntity.badRequest().body(e.message)
+        }
+    }
+}
