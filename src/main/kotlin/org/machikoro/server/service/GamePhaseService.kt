@@ -8,7 +8,7 @@ import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.dao.UserDao
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
-import org.machikoro.server.domain.models.PlayerModel
+import org.machikoro.server.dto.EndTurnOutcome
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -81,14 +81,5 @@ class GamePhaseService(
                 playerCardDao.deleteAllByPlayerId(it.id)
                 playerLandmarkDao.deleteAllByPlayerId(it.id)
             }
-    }
-    sealed interface EndTurnOutcome {
-        data class Continue(
-            val nextPhase: TurnPhase,
-        ) : EndTurnOutcome
-
-        data class Won(
-            val winner: PlayerModel
-        ) : EndTurnOutcome
     }
 }

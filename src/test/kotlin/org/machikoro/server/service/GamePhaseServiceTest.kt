@@ -13,8 +13,8 @@ import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
+import org.machikoro.server.dto.EndTurnOutcome
 import org.machikoro.server.exception.CustomWebSocketException
-import org.machikoro.server.service.GamePhaseService.EndTurnOutcome
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
 import org.mockito.kotlin.any

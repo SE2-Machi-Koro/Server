@@ -2,6 +2,7 @@ package org.machikoro.server.controller
 
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.PlayerModel
+import org.machikoro.server.dto.EndTurnOutcome
 import org.machikoro.server.dto.EndTurnRequest
 import org.machikoro.server.dto.LeaveFinishedGameRequest
 import org.machikoro.server.dto.MessageType
@@ -10,7 +11,6 @@ import org.machikoro.server.dto.RollDiceRequest
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.service.DiceService
 import org.machikoro.server.service.GamePhaseService
-import org.machikoro.server.service.GamePhaseService.EndTurnOutcome
 import org.machikoro.server.service.LeaveFinishedGameService
 import org.machikoro.server.service.PurchaseResult
 import org.machikoro.server.service.PurchaseService
