@@ -13,6 +13,7 @@ import org.springframework.messaging.handler.annotation.Payload
 import org.springframework.messaging.handler.annotation.SendTo
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor
 import org.springframework.messaging.simp.SimpMessagingTemplate
+import org.springframework.messaging.simp.SimpMessageType
 import org.springframework.stereotype.Controller
 import org.slf4j.LoggerFactory
 
@@ -76,8 +77,8 @@ class WebSocketController(
 
                 val syncGameId = gameSyncService.findActiveInProgressGameId(user.id)
 
-                if (syncGameId != null) {
-                    publishSync(user.id, syncGameId)
+                if (syncGameId != null && sessionId != null) {
+                    publishSync(sessionId, user.id, syncGameId)
                 }
             }
         }
@@ -102,13 +103,19 @@ class WebSocketController(
             return
         }
 
-        publishSync(userId, resolvedGameId)
+        publishSync(sessionId, userId, resolvedGameId)
     }
 
-    private fun publishSync(userId: Int, gameId: Int) {
+    private fun publishSync(sessionId: String, userId: Int, gameId: Int) {
         val snapshot = gameSyncService.buildSnapshot(gameId)
-        messagingTemplate.convertAndSend(
-            "/topic/game/$gameId",
+        val headers = SimpMessageHeaderAccessor.create(SimpMessageType.MESSAGE).apply {
+            setSessionId(sessionId)
+            setLeaveMutable(true)
+        }.messageHeaders
+
+        messagingTemplate.convertAndSendToUser(
+            sessionId,
+            "/queue/game-sync",
             WebSocketMessage(
                 type = MessageType.SYNC,
                 sender = "server",
@@ -118,7 +125,8 @@ class WebSocketController(
                     "state" to snapshot,
                 ),
                 gameId = gameId,
-            )
+            ),
+            headers,
         )
     }
 }
