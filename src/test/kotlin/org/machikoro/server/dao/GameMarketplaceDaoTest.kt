@@ -1,16 +1,20 @@
 package org.machikoro.server.dao
 
 import org.jetbrains.exposed.v1.jdbc.deleteAll
+import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.database.AbstractDBSetup
+import org.machikoro.server.database.Cards
 import org.machikoro.server.database.GameMarketplace
 import org.machikoro.server.database.Games
 import org.machikoro.server.database.Users
 import org.machikoro.server.domain.enums.CardType
+import org.machikoro.server.exception.CardNotFoundException
 
 class GameMarketplaceDaoTest : AbstractDBSetup() {
 
@@ -22,6 +26,68 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
 
     @BeforeEach
     fun seed() {
+        transaction {
+            Cards.insertIgnore {
+                it[Cards.cardType] = CardType.WHEAT_FIELD; it[Cards.cost] = 1; it[Cards.diceMin] =
+                1; it[Cards.diceMax] = 1; it[Cards.income] = 1
+            }
+            Cards.insertIgnore {
+                it[Cards.cardType] = CardType.RANCH; it[Cards.cost] = 1; it[Cards.diceMin] = 2; it[Cards.diceMax] =
+                2; it[Cards.income] = 1
+            }
+            Cards.insertIgnore {
+                it[Cards.cardType] = CardType.FOREST; it[Cards.cost] = 3; it[Cards.diceMin] = 5; it[Cards.diceMax] =
+                5; it[Cards.income] = 1
+            }
+            Cards.insertIgnore {
+                it[Cards.cardType] = CardType.MINE; it[Cards.cost] = 6; it[Cards.diceMin] = 9; it[Cards.diceMax] =
+                9; it[Cards.income] = 5
+            }
+            Cards.insertIgnore {
+                it[Cards.cardType] = CardType.APPLE_ORCHARD; it[Cards.cost] = 3; it[Cards.diceMin] =
+                10; it[Cards.diceMax] = 10; it[Cards.income] = 3
+            }
+            Cards.insertIgnore {
+                it[Cards.cardType] = CardType.BAKERY; it[Cards.cost] = 1; it[Cards.diceMin] = 2; it[Cards.diceMax] =
+                3; it[Cards.income] = 1
+            }
+            Cards.insertIgnore {
+                it[Cards.cardType] = CardType.CONVENIENCE_STORE; it[Cards.cost] = 2; it[Cards.diceMin] =
+                4; it[Cards.diceMax] = 4; it[Cards.income] = 3
+            }
+            Cards.insertIgnore {
+                it[Cards.cardType] = CardType.CHEESE_FACTORY; it[Cards.cost] = 5; it[Cards.diceMin] =
+                7; it[Cards.diceMax] = 7; it[Cards.income] = 3
+            }
+            Cards.insertIgnore {
+                it[Cards.cardType] = CardType.FURNITURE_FACTORY; it[Cards.cost] = 3; it[Cards.diceMin] =
+                8; it[Cards.diceMax] = 8; it[Cards.income] = 3
+            }
+            Cards.insertIgnore {
+                it[Cards.cardType] = CardType.FRUIT_AND_VEGETABLE_MARKET; it[Cards.cost] = 2; it[Cards.diceMin] =
+                11; it[Cards.diceMax] = 11; it[Cards.income] = 2
+            }
+            Cards.insertIgnore {
+                it[Cards.cardType] = CardType.CAFE; it[Cards.cost] = 2; it[Cards.diceMin] = 3; it[Cards.diceMax] =
+                3; it[Cards.income] = 1
+            }
+            Cards.insertIgnore {
+                it[Cards.cardType] = CardType.FAMILY_RESTAURANT; it[Cards.cost] = 3; it[Cards.diceMin] =
+                9; it[Cards.diceMax] = 10; it[Cards.income] = 2
+            }
+            Cards.insertIgnore {
+                it[Cards.cardType] = CardType.STADIUM; it[Cards.cost] = 6; it[Cards.diceMin] = 6; it[Cards.diceMax] =
+                6; it[Cards.income] = 2
+            }
+            Cards.insertIgnore {
+                it[Cards.cardType] = CardType.TV_STATION; it[Cards.cost] = 7; it[Cards.diceMin] = 6; it[Cards.diceMax] =
+                6; it[Cards.income] = 0
+            }
+            Cards.insertIgnore {
+                it[Cards.cardType] = CardType.BUSINESS_CENTER; it[Cards.cost] = 8; it[Cards.diceMin] =
+                6; it[Cards.diceMax] = 6; it[Cards.income] = 0
+            }
+        }
         val hostId = userDao.create("market_host")
         gameId = gameDao.create(hostId)
     }
@@ -32,6 +98,7 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
             GameMarketplace.deleteAll()
             Games.deleteAll()
             Users.deleteAll()
+            Cards.deleteAll()
         }
     }
 
@@ -91,10 +158,26 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `isAvailable throws CardNotFoundException when card type does not exist in database`() {
+        transaction { Cards.deleteAll() }
+        assertThrows<CardNotFoundException> {
+            marketplaceDao.isAvailable(gameId, CardType.BAKERY)
+        }
+    }
+
+    @Test
     fun `decrementQuantity reduces available count by one`() {
         marketplaceDao.initForGame(gameId)
         marketplaceDao.decrementQuantity(gameId, CardType.BAKERY)
         assertEquals(5, marketplaceDao.findByGameIdAndType(gameId, CardType.BAKERY)!!.quantityAvailable)
+    }
+
+    @Test
+    fun `decrementQuantity throws CardNotFoundException when card type does not exist in database`() {
+        transaction { Cards.deleteAll() }
+        assertThrows<CardNotFoundException> {
+            marketplaceDao.decrementQuantity(gameId, CardType.BAKERY)
+        }
     }
 
     @Test
@@ -112,6 +195,14 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `updateQuantity throws CardNotFoundException when card type does not exist in database`() {
+        transaction { Cards.deleteAll() }
+        assertThrows<CardNotFoundException> {
+            marketplaceDao.updateQuantity(gameId, CardType.WHEAT_FIELD, 5)
+        }
+    }
+
+    @Test
     fun `delete removes specific card entry from marketplace`() {
         marketplaceDao.initForGame(gameId)
         marketplaceDao.delete(gameId, CardType.WHEAT_FIELD)
@@ -119,8 +210,9 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
     }
 
     @Test
-    fun `delete on non-existent entry does not throw`() {
-        assertDoesNotThrow {
+    fun `delete throws CardNotFoundException when card type does not exist in database`() {
+        transaction { Cards.deleteAll() }
+        assertThrows<CardNotFoundException> {
             marketplaceDao.delete(gameId, CardType.WHEAT_FIELD)
         }
     }

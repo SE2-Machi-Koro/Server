@@ -2,6 +2,7 @@ package org.machikoro.server.service
 
 import org.jetbrains.exposed.v1.jdbc.deleteAll
 import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -12,12 +13,16 @@ import org.machikoro.server.dao.GameMarketplaceDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.database.AbstractDBSetup
+import org.machikoro.server.database.Cards
 import org.machikoro.server.database.GameMarketplace
 import org.machikoro.server.database.Games
+import org.machikoro.server.database.Landmarks
 import org.machikoro.server.database.PlayerLandmarks
 import org.machikoro.server.database.Players
 import org.machikoro.server.database.Users
+import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.GameStatus
+import org.machikoro.server.domain.enums.LandmarkType
 import org.machikoro.server.exception.GameNotFoundException
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doThrow
@@ -63,6 +68,19 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
         }
 
         val userIds = transaction {
+            Cards.insertIgnore {
+                it[cardType] = CardType.BAKERY
+                it[cost] = 1
+                it[diceMin] = 2
+                it[diceMax] = 3
+                it[income] = 1
+            }
+
+            Landmarks.insertIgnore {
+                it[landmarkType] = LandmarkType.TRAIN_STATION
+                it[cost] = 4
+            }
+
             val user1Id = (Users.insert {
                 it[username] = "lobbyHost"
             } get Users.id).value

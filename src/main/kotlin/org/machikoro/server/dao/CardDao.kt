@@ -15,7 +15,6 @@ class CardDao {
     private fun ResultRow.toModel() = CardModel(
         id = this[Cards.id].value,
         cardType = this[Cards.cardType],
-        name = this[Cards.name],
         cost = this[Cards.cost],
         diceMin = this[Cards.diceMin],
         diceMax = this[Cards.diceMax],

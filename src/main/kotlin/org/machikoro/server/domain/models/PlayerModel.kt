@@ -5,5 +5,6 @@ data class PlayerModel(
     val gameId: Int,
     val userId: Int,
     val turnOrder: Int,
-    val coins: Int
+    val coins: Int,
+    val lastSeenAt: Long?
 )

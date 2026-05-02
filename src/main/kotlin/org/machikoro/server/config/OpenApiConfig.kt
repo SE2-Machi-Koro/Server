@@ -29,7 +29,6 @@ class OpenApiConfig {
     | Destination | Payload | Broadcasts to |
     |---|---|---|
     | /app/game.resolveEffects | ResolveEffectsRequest | /topic/public |
-    | /app/game.advancePhase | AdvancePhaseRequest | /topic/public |
     | /app/game.endTurn | EndTurnRequest | /topic/public |
     | /app/chat.send | WebSocketMessage | /topic/public |
     | /app/chat.addUser | WebSocketMessage | /topic/public |

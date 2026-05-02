@@ -47,7 +47,7 @@ class LobbyServiceTest {
         )
 
     private fun player(id: Int) =
-        PlayerModel(id = id, gameId = 1, userId = id, turnOrder = 0, coins = 3)
+        PlayerModel(id = id, gameId = 1, userId = id, turnOrder = 0, coins = 3, lastSeenAt = null)
 
     @Test
     fun `addUserToLobby adds player successfully`() {
