@@ -3,6 +3,7 @@ package org.machikoro.server.controller
 import org.machikoro.server.dao.UserDao
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.WebSocketMessage
+import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.service.GameSyncService
 import org.machikoro.server.service.LobbyService
 import org.machikoro.server.service.WebSocketConnectionTracker
@@ -53,10 +54,24 @@ class WebSocketController(
         if (user != null) {
             // Prefer server-side mapping to an active game when a player reconnects.
             val mappedInProgressGameId = gameSyncService.findActiveInProgressGameId(user.id)
-            val gameIdToJoin = mappedInProgressGameId ?: message.gameId
+            var gameIdToJoin = mappedInProgressGameId ?: message.gameId
 
             if (gameIdToJoin != null) {
-                lobbyService.addUserToLobby(gameIdToJoin, user.id)
+                try {
+                    lobbyService.addUserToLobby(gameIdToJoin, user.id)
+                } catch (e: GameStartedException) {
+                    // Start transition race: game flipped while reconnect was in-flight.
+                    val remappedInProgressGameId = gameSyncService.findActiveInProgressGameId(user.id)
+                    if (remappedInProgressGameId == null) {
+                        throw e
+                    }
+                    gameIdToJoin = remappedInProgressGameId
+                }
+
+                val sessionId = headerAccessor.sessionId
+                if (sessionId != null) {
+                    connectionTracker.register(sessionId, user.id, gameIdToJoin)
+                }
 
                 val syncGameId = gameSyncService.findActiveInProgressGameId(user.id)
 
@@ -76,11 +91,6 @@ class WebSocketController(
                         )
                     )
                 }
-            }
-
-            val sessionId = headerAccessor.sessionId
-            if (sessionId != null && gameIdToJoin != null) {
-                connectionTracker.register(sessionId, user.id, gameIdToJoin)
             }
         }
         return message
