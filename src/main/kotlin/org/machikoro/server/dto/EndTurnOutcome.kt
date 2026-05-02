@@ -9,6 +9,6 @@ sealed interface EndTurnOutcome {
     ) : EndTurnOutcome
 
     data class Won(
-        val winner: PlayerModel
+        val winner: PlayerModel,
     ) : EndTurnOutcome
 }
