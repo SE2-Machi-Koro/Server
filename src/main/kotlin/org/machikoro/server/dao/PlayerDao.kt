@@ -2,13 +2,17 @@ package org.machikoro.server.dao
 
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.innerJoin
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insertAndGetId
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
+import org.machikoro.server.database.Games
 import org.machikoro.server.database.Players
+import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.exception.PlayerNotFoundException
 import org.springframework.stereotype.Repository
@@ -47,6 +51,29 @@ class PlayerDao {
             .where { Players.gameId eq gameId }
             .orderBy(Players.turnOrder to SortOrder.ASC)
             .map { it.toModel() }
+    }
+
+    /**
+     * Finds a player's row by (gameId, userId), if already present.
+     */
+    fun findByGameIdAndUserId(gameId: Int, userId: Int): PlayerModel? = transaction {
+        Players.selectAll()
+            .where { (Players.gameId eq gameId) and (Players.userId eq userId) }
+            .singleOrNull()
+            ?.toModel()
+    }
+
+    /**
+     * Returns the most recent IN_PROGRESS game ID the given user belongs to.
+     */
+    fun findActiveGameIdByUserId(userId: Int): Int? = transaction {
+        (Players innerJoin Games)
+            .selectAll()
+            .where { (Players.userId eq userId) and (Games.status eq GameStatus.IN_PROGRESS) }
+            .orderBy(Games.id to SortOrder.DESC)
+            .firstOrNull()
+            ?.get(Players.gameId)
+            ?.value
     }
 
     /**
