@@ -2,7 +2,7 @@ package org.machikoro.server.controller
 
 import io.micrometer.core.instrument.Metrics
 import io.micrometer.core.instrument.Timer
-import org.machikoro.server.dao.UserDao
+import org.machikoro.server.auth.UserPrincipal
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.SyncGameRequest
 import org.machikoro.server.dto.WebSocketMessage
@@ -12,7 +12,6 @@ import org.machikoro.server.service.LobbyService
 import org.machikoro.server.service.WebSocketConnectionTracker
 import org.springframework.messaging.handler.annotation.MessageMapping
 import org.springframework.messaging.handler.annotation.Payload
-import org.springframework.messaging.handler.annotation.SendTo
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor
 import org.springframework.messaging.simp.SimpMessagingTemplate
 import org.springframework.messaging.simp.SimpMessageType
@@ -23,7 +22,6 @@ import java.util.concurrent.TimeUnit
 @Controller
 class WebSocketController(
     private val lobbyService: LobbyService,
-    private val userDao: UserDao,
     private val connectionTracker: WebSocketConnectionTracker,
     private val gameSyncService: GameSyncService,
     private val messagingTemplate: SimpMessagingTemplate,
@@ -52,51 +50,67 @@ class WebSocketController(
      * Handle user join events and broadcast to all subscribers.
      * Stores username in session for later reference during disconnect.
      * Registers the session in [WebSocketConnectionTracker] when user and gameId are known.
+     *
+     * Identity is read exclusively from the [UserPrincipal] attached by
+     * [org.machikoro.server.auth.StompAuthChannelInterceptor] at CONNECT time —
+     * the client-supplied [WebSocketMessage.sender] field is ignored to prevent
+     * username spoofing / state exfiltration.
      */
     @MessageMapping("/chat.addUser")
-    @SendTo("/topic/public")
+    @org.springframework.messaging.handler.annotation.SendTo("/topic/public")
     fun addUser(
         @Payload message: WebSocketMessage,
-        headerAccessor: SimpMessageHeaderAccessor
+        headerAccessor: SimpMessageHeaderAccessor,
     ): WebSocketMessage {
-        logger.info("User ${message.sender} joined the chat")
-        headerAccessor.sessionAttributes?.put("username", message.sender)
+        val principal = headerAccessor.user as? UserPrincipal
+        if (principal == null) {
+            logger.warn("addUser rejected: no authenticated principal on session ${headerAccessor.sessionId}")
+            return message
+        }
 
-        val user = userDao.findByUsername(message.sender)
-        if (user != null) {
-            // Prefer server-side mapping to an active game when a player reconnects.
-            val mappedInProgressGameId = gameSyncService.findActiveInProgressGameId(user.id)
-            var gameIdToJoin = mappedInProgressGameId ?: message.gameId
+        logger.info("User '{}' joined the chat", principal.username)
+        // Store server-verified username so the disconnect listener can reference it
+        // without trusting whatever the client put in the message payload.
+        headerAccessor.sessionAttributes?.put("username", principal.username)
 
-            if (gameIdToJoin != null) {
-                try {
-                    lobbyService.addUserToLobby(gameIdToJoin, user.id)
-                } catch (e: GameStartedException) {
-                    // Start transition race: game flipped while reconnect was in-flight.
-                    val remappedInProgressGameId = gameSyncService.findActiveInProgressGameId(user.id)
-                    if (remappedInProgressGameId == null) {
-                        throw e
-                    }
-                    gameIdToJoin = remappedInProgressGameId
+        // Prefer server-side mapping to an active game when a player reconnects.
+        val mappedInProgressGameId = gameSyncService.findActiveInProgressGameId(principal.userId)
+        var gameIdToJoin = mappedInProgressGameId ?: message.gameId
+
+        if (gameIdToJoin != null) {
+            try {
+                lobbyService.addUserToLobby(gameIdToJoin, principal.userId)
+            } catch (e: GameStartedException) {
+                // Start-transition race: the game status flipped to IN_PROGRESS between
+                // the client sending JOIN and the server processing it.  The client is not
+                // in an inconsistent state — it simply joined a lobby that just started.
+                // Attempt to re-map to the now-active game so the player receives the
+                // correct state snapshot.  If no active game can be found after the race,
+                // the exception is re-thrown and the client must retry.
+                val remappedInProgressGameId = gameSyncService.findActiveInProgressGameId(principal.userId)
+                if (remappedInProgressGameId == null) {
+                    throw e
                 }
+                gameIdToJoin = remappedInProgressGameId
+            }
 
-                val sessionId = headerAccessor.sessionId
-                if (sessionId != null) {
-                    connectionTracker.register(sessionId, user.id, gameIdToJoin)
-                }
+            val sessionId = headerAccessor.sessionId
+            if (sessionId != null) {
+                connectionTracker.register(sessionId, principal.userId, gameIdToJoin)
+            }
 
-                val syncGameId = gameSyncService.findActiveInProgressGameId(user.id)
-
-                if (syncGameId != null && sessionId != null) {
-                    emitSyncWithTelemetry(
-                        source = "chat.addUser",
-                        sessionId = sessionId,
-                        userId = user.id,
-                        gameId = syncGameId,
-                    )
-                }
+            val syncGameId = gameSyncService.findActiveInProgressGameId(principal.userId)
+            if (syncGameId != null && sessionId != null) {
+                emitSyncWithTelemetry(
+                    source = "chat.addUser",
+                    principalName = principal.name,
+                    sessionId = sessionId,
+                    userId = principal.userId,
+                    gameId = syncGameId,
+                )
             }
         }
+
         return message
     }
 
