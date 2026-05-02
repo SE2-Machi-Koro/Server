@@ -1,9 +1,11 @@
 package org.machikoro.server.config
 
 import org.junit.jupiter.api.Test
+import org.machikoro.server.auth.StompAuthChannelInterceptor
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
+import org.springframework.messaging.simp.config.ChannelRegistration
 import org.springframework.messaging.simp.config.MessageBrokerRegistry
 import org.springframework.web.socket.config.annotation.SockJsServiceRegistration
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry
@@ -11,7 +13,8 @@ import org.springframework.web.socket.config.annotation.StompWebSocketEndpointRe
 
 class WebSocketConfigTests {
 
-    private val config = WebSocketConfig().apply {
+    private val authInterceptor = mock(StompAuthChannelInterceptor::class.java)
+    private val config = WebSocketConfig(authInterceptor).apply {
         allowedOrigins = "http://localhost:8080,http://localhost:3000"
     }
 
@@ -45,5 +48,14 @@ class WebSocketConfigTests {
         verify(nativeEndpointRegistration).setAllowedOrigins("http://localhost:8080", "http://localhost:3000")
         verify(sockJsEndpointRegistration).setAllowedOrigins("http://localhost:8080", "http://localhost:3000")
         verify(sockJsEndpointRegistration).withSockJS()
+    }
+
+    @Test
+    fun configureClientInboundChannelRegistersAuthInterceptor() {
+        val registration = mock(ChannelRegistration::class.java)
+
+        config.configureClientInboundChannel(registration)
+
+        verify(registration).interceptors(authInterceptor)
     }
 }
