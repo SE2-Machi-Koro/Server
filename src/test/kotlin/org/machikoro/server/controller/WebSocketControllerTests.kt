@@ -161,7 +161,12 @@ class WebSocketControllerTests {
         verify(connectionTracker).register("session-rejoin", foundUser.id, 7)
 
         val captor = argumentCaptor<WebSocketMessage>()
-        verify(messagingTemplate).convertAndSend(eq("/topic/game/7"), captor.capture())
+        verify(messagingTemplate).convertAndSendToUser(
+            eq("session-rejoin"),
+            eq("/queue/game-sync"),
+            captor.capture(),
+            any(),
+        )
         assertEquals(MessageType.SYNC, captor.firstValue.type)
         assertEquals(7, captor.firstValue.gameId)
     }
@@ -183,7 +188,12 @@ class WebSocketControllerTests {
 
         verify(connectionTracker).register("session-race", foundUser.id, 3)
         val captor = argumentCaptor<WebSocketMessage>()
-        verify(messagingTemplate).convertAndSend(eq("/topic/game/3"), captor.capture())
+        verify(messagingTemplate).convertAndSendToUser(
+            eq("session-race"),
+            eq("/queue/game-sync"),
+            captor.capture(),
+            any(),
+        )
         assertEquals(MessageType.SYNC, captor.firstValue.type)
     }
 
@@ -200,7 +210,12 @@ class WebSocketControllerTests {
         controller.syncGameState(SyncGameRequest(gameId = null), accessor)
 
         val captor = argumentCaptor<WebSocketMessage>()
-        verify(messagingTemplate).convertAndSend(eq("/topic/game/8"), captor.capture())
+        verify(messagingTemplate).convertAndSendToUser(
+            eq("session-sync"),
+            eq("/queue/game-sync"),
+            captor.capture(),
+            any(),
+        )
         assertEquals(MessageType.SYNC, captor.firstValue.type)
         assertEquals(8, captor.firstValue.gameId)
     }
@@ -214,6 +229,6 @@ class WebSocketControllerTests {
 
         controller.syncGameState(SyncGameRequest(gameId = 1), accessor)
 
-        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+        verify(messagingTemplate, never()).convertAndSendToUser(any<String>(), any<String>(), any<WebSocketMessage>(), any())
     }
 }
