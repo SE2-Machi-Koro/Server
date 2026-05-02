@@ -10,7 +10,10 @@ import org.machikoro.server.domain.models.UserModel
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.service.LobbyService
+import org.junit.jupiter.api.assertThrows
+import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 
@@ -69,5 +72,24 @@ class LobbyWebSocketControllerTest {
 
         verify(userDao).findByUsername(username)
         verify(lobbyService).createLobby(user.id)
+    }
+
+    @Test
+    fun `createLobby throws and does not call lobbyService when sender is unknown`() {
+        val unknownUsername = "ghost"
+        whenever(userDao.findByUsername(unknownUsername)).thenReturn(null)
+
+        assertThrows<RuntimeException> {
+            controller.createLobby(
+                WebSocketMessage(
+                    type = MessageType.JOIN,
+                    sender = unknownUsername,
+                    content = "create lobby",
+                ),
+            )
+        }
+
+        verify(userDao).findByUsername(unknownUsername)
+        verify(lobbyService, never()).createLobby(any())
     }
 }
