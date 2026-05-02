@@ -2,6 +2,7 @@ package org.machikoro.server.controller
 
 import org.machikoro.server.dao.UserDao
 import org.machikoro.server.dto.MessageType
+import org.machikoro.server.dto.SyncGameRequest
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.service.GameSyncService
@@ -76,23 +77,48 @@ class WebSocketController(
                 val syncGameId = gameSyncService.findActiveInProgressGameId(user.id)
 
                 if (syncGameId != null) {
-                    val snapshot = gameSyncService.buildSnapshot(syncGameId)
-                    messagingTemplate.convertAndSend(
-                        "/topic/game/$syncGameId",
-                        WebSocketMessage(
-                            type = MessageType.SYNC,
-                            sender = "server",
-                            content = "State sync for reconnecting player",
-                            payload = mapOf(
-                                "targetUserId" to user.id,
-                                "state" to snapshot,
-                            ),
-                            gameId = syncGameId,
-                        )
-                    )
+                    publishSync(user.id, syncGameId)
                 }
             }
         }
         return message
+    }
+
+    /**
+     * Explicit re-sync endpoint for clients that reconnect mid-transition and miss
+     * the GAME_STARTED broadcast.
+     */
+    @MessageMapping("/game.sync")
+    fun syncGameState(
+        @Payload request: SyncGameRequest,
+        headerAccessor: SimpMessageHeaderAccessor,
+    ) {
+        val sessionId = headerAccessor.sessionId ?: return
+        val userId = connectionTracker.getUserId(sessionId) ?: return
+
+        val resolvedGameId = request.gameId ?: gameSyncService.findActiveInProgressGameId(userId)
+        if (resolvedGameId == null || !gameSyncService.isInProgress(resolvedGameId)) {
+            logger.info("SYNC skipped for userId={} - no active in-progress game", userId)
+            return
+        }
+
+        publishSync(userId, resolvedGameId)
+    }
+
+    private fun publishSync(userId: Int, gameId: Int) {
+        val snapshot = gameSyncService.buildSnapshot(gameId)
+        messagingTemplate.convertAndSend(
+            "/topic/game/$gameId",
+            WebSocketMessage(
+                type = MessageType.SYNC,
+                sender = "server",
+                content = "State sync for reconnecting player",
+                payload = mapOf(
+                    "targetUserId" to userId,
+                    "state" to snapshot,
+                ),
+                gameId = gameId,
+            )
+        )
     }
 }
