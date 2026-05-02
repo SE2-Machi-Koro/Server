@@ -163,12 +163,7 @@ class PurchaseService(
             currentQuantity + 1
         )
 
-        if (gameMarketplaceDao.decrementQuantity(gameId, cardType)) {
-            throw CustomWebSocketException(
-                "CARD_UNAVAILABLE",
-                "Card $cardType is not available in supply"
-            )
-        }
+        gameMarketplaceDao.decrementQuantity(gameId, cardType)
 
         return PurchaseResult(
             turnPhase = TurnPhase.BUY_OR_BUILD,
