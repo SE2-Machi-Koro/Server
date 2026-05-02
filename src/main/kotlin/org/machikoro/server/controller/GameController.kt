@@ -31,9 +31,7 @@ class GameController(
     private val messagingTemplate: SimpMessagingTemplate,
     private val leaveFinishedGameService: LeaveFinishedGameService,
     private val purchaseService: PurchaseService,
-    private val diceService: DiceService,
-    private val lobbyService: LobbyService,
-    private val connectionTracker: WebSocketConnectionTracker,
+    private val diceService: DiceService
 ) {
     private val logger = LoggerFactory.getLogger(GameController::class.java)
 
@@ -123,17 +121,6 @@ class GameController(
         broadcastPurchase(request.gameId, result)
     }
 
-    @MessageMapping("/game.advancePhase")
-    fun advancePhase(@Payload request: AdvancePhaseRequest) {
-        val newPhase = gamePhaseService.advancePhase(request.gameId)
-        logger.info("Advanced game ${request.gameId} to phase $newPhase")
-        broadcastPhase(request.gameId, newPhase)
-    }
-
-    /**
-     * Handles the explicit "End Turn" action from the client after the
-     * buy/build window is finished.
-     */
     @MessageMapping("/game.endTurn")
     fun endTurn(@Payload request: EndTurnRequest) {
         when (val result = gamePhaseService.endTurn(request.gameId)) {
@@ -199,12 +186,12 @@ class GameController(
     }
 
     private fun broadcastPurchase(gameId: Int, result: PurchaseResult) {
-        val payload = buildMap<String, String> {
-            put("turnPhase", result.turnPhase.name)
-            put("purchaseType", result.purchaseType.name)
-            result.cardType?.let { put("cardType", it.name) }
-            result.landmarkType?.let { put("landmarkType", it.name) }
-        }
+        val payload = linkedMapOf<String, String>(
+            "turnPhase" to result.turnPhase.name,
+            "purchaseType" to result.purchaseType.name,
+        )
+        result.cardType?.let { payload["cardType"] = it.name }
+        result.landmarkType?.let { payload["landmarkType"] = it.name }
         messagingTemplate.convertAndSend(
             "/topic/game/$gameId",
             WebSocketMessage(

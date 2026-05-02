@@ -2,11 +2,7 @@ package org.machikoro.server.service
 
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.machikoro.server.dao.GameDao
-import org.machikoro.server.dao.GameMarketplaceDao
-import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
-import org.machikoro.server.dao.PlayerLandmarkDao
-import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
@@ -21,11 +17,7 @@ import org.springframework.stereotype.Service
 @Service
 class LobbyService(
     private val gameDao: GameDao,
-    private val playerDao: PlayerDao,
-    private val playerCardDao: PlayerCardDao,
-    private val gameMarketplaceDao: GameMarketplaceDao,
-    private val playerLandmarkDao: PlayerLandmarkDao,
-    private val connectionTracker: WebSocketConnectionTracker,
+    private val playerDao: PlayerDao
 ) {
 
     private val lobbyLocks = mutableMapOf<Int, Any>()

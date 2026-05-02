@@ -26,9 +26,8 @@ import org.machikoro.server.domain.enums.LandmarkType
 import org.machikoro.server.exception.GameNotFoundException
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doThrow
-import org.mockito.kotlin.reset
+import org.mockito.kotlin.mock
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
 import kotlin.test.Test
 
 /**
@@ -51,22 +50,15 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
     @Autowired
     private lateinit var gameMarketplaceDao: GameMarketplaceDao
 
-    @MockitoSpyBean
+    @Autowired
     private lateinit var playerLandmarkDao: PlayerLandmarkDao
 
-    @Autowired
-    private lateinit var connectionTracker: WebSocketConnectionTracker
-
     private var gameId: Int = 0
-    private var hostUserId: Int = 0
-    private var guestUserId: Int = 0
     private var firstPlayerId: Int = 0
     private var secondPlayerId: Int = 0
 
     @BeforeEach
     fun setup() {
-        reset(playerLandmarkDao)
-
         transaction {
             PlayerLandmarks.deleteAll()
             Players.deleteAll()
@@ -76,14 +68,6 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
         }
 
         val userIds = transaction {
-            Cards.insertIgnore {
-                it[cardType] = CardType.WHEAT_FIELD
-                it[cost] = 0
-                it[diceMin] = 1
-                it[diceMax] = 1
-                it[income] = 1
-            }
-
             Cards.insertIgnore {
                 it[cardType] = CardType.BAKERY
                 it[cost] = 1
@@ -108,22 +92,16 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
             user1Id to user2Id
         }
 
-        hostUserId = userIds.first
-        guestUserId = userIds.second
-        gameId = gameDao.create(hostUserId)
-        firstPlayerId = playerDao.addPlayer(gameId, hostUserId).id
-        secondPlayerId = playerDao.addPlayer(gameId, guestUserId).id
-
-        // Register both players as connected so roster sanitization passes
-        connectionTracker.register("session-host", hostUserId, gameId)
-        connectionTracker.register("session-guest", guestUserId, gameId)
+        gameId = gameDao.create(userIds.first)
+        firstPlayerId = playerDao.addPlayer(gameId, userIds.first).id
+        secondPlayerId = playerDao.addPlayer(gameId, userIds.second).id
     }
 
     @Test
     fun `startGame sets status and initializes marketplace and landmark rows`() {
-        val result = lobbyService.startGame(gameId, hostUserId)
+        val result = lobbyService.startGame(gameId)
 
-        assertEquals(GameStatus.IN_PROGRESS, result.game.status)
+        assertEquals(GameStatus.IN_PROGRESS, result.status)
         assertTrue(gameMarketplaceDao.findByGameId(gameId).isNotEmpty())
         assertTrue(playerLandmarkDao.findByPlayerId(firstPlayerId).isNotEmpty())
         assertTrue(playerLandmarkDao.findByPlayerId(secondPlayerId).isNotEmpty())
@@ -132,17 +110,24 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
     @Test
     fun `startGame throws GameNotFoundException for unknown game`() {
         assertThrows<GameNotFoundException> {
-            lobbyService.startGame(999999, hostUserId)
+            lobbyService.startGame(999999)
         }
     }
 
     @Test
     fun `startGame rolls back setup when landmark initialization fails`() {
-        doThrow(RuntimeException("landmark setup failed"))
-            .`when`(playerLandmarkDao).initForPlayer(any())
+        val failingLandmarkDao = mock<PlayerLandmarkDao> {
+            on { initForPlayer(any()) } doThrow RuntimeException("landmark setup failed")
+        }
+        val service = LobbyService(
+            gameDao,
+            playerDao,
+            gameMarketplaceDao,
+            failingLandmarkDao,
+        )
 
         assertThrows<RuntimeException> {
-            lobbyService.startGame(gameId, hostUserId)
+            service.startGame(gameId)
         }
 
         assertEquals(GameStatus.WAITING, gameDao.findById(gameId)!!.status)
