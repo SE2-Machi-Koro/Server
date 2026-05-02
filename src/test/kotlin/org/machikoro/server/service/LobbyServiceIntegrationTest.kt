@@ -7,7 +7,9 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.assertThrows
+import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.GameMarketplaceDao
+import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.database.AbstractDBSetup
 import org.machikoro.server.database.GameMarketplace
@@ -17,6 +19,9 @@ import org.machikoro.server.database.Players
 import org.machikoro.server.database.Users
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.exception.GameNotFoundException
+import org.mockito.kotlin.any
+import org.mockito.kotlin.doThrow
+import org.mockito.kotlin.mock
 import org.springframework.beans.factory.annotation.Autowired
 import kotlin.test.Test
 
@@ -30,6 +35,12 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
 
     @Autowired
     private lateinit var lobbyService: LobbyService
+
+    @Autowired
+    private lateinit var gameDao: GameDao
+
+    @Autowired
+    private lateinit var playerDao: PlayerDao
 
     @Autowired
     private lateinit var gameMarketplaceDao: GameMarketplaceDao
@@ -51,7 +62,7 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
             Users.deleteAll()
         }
 
-        transaction {
+        val userIds = transaction {
             val user1Id = (Users.insert {
                 it[username] = "lobbyHost"
             } get Users.id).value
@@ -60,32 +71,12 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
                 it[username] = "lobbyGuest"
             } get Users.id).value
 
-            gameId = (Games.insert {
-                it[status] = GameStatus.WAITING
-                it[hostUserId] = user1Id
-                it[lobbyCode] = (1000000..9999999).random().toString()
-                it[maxPlayers] = 4
-                it[currentTurnIndex] = 0
-                it[turnPhase] = org.machikoro.server.domain.enums.TurnPhase.ROLL_DICE
-                it[lastDiceRoll] = null
-                it[roundNumber] = 1
-                it[hasPurchasedThisTurn] = false
-            } get Games.id).value
-
-            firstPlayerId = (Players.insert {
-                it[Players.gameId] = gameId
-                it[Players.userId] = user1Id
-                it[turnOrder] = 0
-                it[coins] = 3
-            } get Players.id).value
-
-            secondPlayerId = (Players.insert {
-                it[Players.gameId] = gameId
-                it[Players.userId] = user2Id
-                it[turnOrder] = 1
-                it[coins] = 3
-            } get Players.id).value
+            user1Id to user2Id
         }
+
+        gameId = gameDao.create(userIds.first)
+        firstPlayerId = playerDao.addPlayer(gameId, userIds.first).id
+        secondPlayerId = playerDao.addPlayer(gameId, userIds.second).id
     }
 
     @Test
@@ -103,5 +94,27 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
         assertThrows<GameNotFoundException> {
             lobbyService.startGame(999999)
         }
+    }
+
+    @Test
+    fun `startGame rolls back setup when landmark initialization fails`() {
+        val failingLandmarkDao = mock<PlayerLandmarkDao> {
+            on { initForPlayer(any()) } doThrow RuntimeException("landmark setup failed")
+        }
+        val service = LobbyService(
+            gameDao,
+            playerDao,
+            gameMarketplaceDao,
+            failingLandmarkDao,
+        )
+
+        assertThrows<RuntimeException> {
+            service.startGame(gameId)
+        }
+
+        assertEquals(GameStatus.WAITING, gameDao.findById(gameId)!!.status)
+        assertTrue(gameMarketplaceDao.findByGameId(gameId).isEmpty())
+        assertTrue(playerLandmarkDao.findByPlayerId(firstPlayerId).isEmpty())
+        assertTrue(playerLandmarkDao.findByPlayerId(secondPlayerId).isEmpty())
     }
 }

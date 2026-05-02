@@ -1,6 +1,5 @@
 package org.machikoro.server.service
 
-import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -8,7 +7,6 @@ import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.GameMarketplaceDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
-import org.machikoro.server.database.AbstractDBSetup
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
@@ -23,10 +21,10 @@ import org.mockito.kotlin.whenever
 /**
  * Fast behavior-level checks for lobby service branching.
  *
- * startGame also has DB-backed coverage in LobbyServiceIntegrationTest for the
+ * startGame has DB-backed coverage in LobbyServiceIntegrationTest for the
  * transactional setup path.
  */
-class LobbyServiceTest : AbstractDBSetup() {
+class LobbyServiceTest {
 
     private val gameDao = mock<GameDao>()
     private val playerDao = mock<PlayerDao>()
@@ -94,30 +92,6 @@ class LobbyServiceTest : AbstractDBSetup() {
 
         assertThrows<LobbyFullException> {
             lobbyService.addUserToLobby(gameId, 10)
-        }
-    }
-
-    @Test
-    fun `startGame sets status to in progress`() {
-        val gameId = 4
-        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING))
-        whenever(playerDao.getPlayers(gameId)).thenReturn(listOf(player(1), player(2)))
-
-        val result = lobbyService.startGame(gameId)
-
-        assertEquals(GameStatus.IN_PROGRESS, result.status)
-        verify(gameDao).updateStatus(gameId, GameStatus.IN_PROGRESS)
-        verify(gameMarketplaceDao).initForGame(gameId)
-        verify(playerLandmarkDao).initForPlayer(1)
-        verify(playerLandmarkDao).initForPlayer(2)
-    }
-
-    @Test
-    fun `startGame throws GameNotFoundException`() {
-        whenever(gameDao.findById(any())).thenReturn(null)
-
-        assertThrows<GameNotFoundException> {
-            lobbyService.startGame(1)
         }
     }
 
