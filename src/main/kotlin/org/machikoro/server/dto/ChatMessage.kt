@@ -12,7 +12,7 @@ enum class MessageType {
     GAME_END,
     PLAYER_LEFT_FINISHED_GAME,
     ERROR,
-    ROLL_DICE
+    ROLL_DICE,
 }
 
 @Schema(description = "Message broadcast to all clients via WebSocket")
