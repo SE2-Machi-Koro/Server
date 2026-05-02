@@ -107,6 +107,19 @@ class GameController(
     }
 
     /**
+     * Advances the current turn phase for a game and broadcasts the resulting
+     * phase to all subscribers of the game topic.
+     *
+     * Message is sent to /app/game.advancePhase and broadcast to /topic/game/{gameId}.
+     */
+    @MessageMapping("/game.advancePhase")
+    fun advancePhase(@Payload request: AdvancePhaseRequest) {
+        val newPhase = gamePhaseService.advancePhase(request.gameId)
+        logger.info("Advanced phase for game ${request.gameId} to $newPhase")
+        broadcastPhase(request.gameId, newPhase)
+    }
+
+    /**
      * Handles one buy/build action from the active player during BUY_OR_BUILD
      * and broadcasts either the purchase result or the win event after a
      * landmark completes the game.
