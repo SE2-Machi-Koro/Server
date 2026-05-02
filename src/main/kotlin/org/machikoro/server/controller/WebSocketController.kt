@@ -12,6 +12,7 @@ import org.machikoro.server.service.LobbyService
 import org.machikoro.server.service.WebSocketConnectionTracker
 import org.springframework.messaging.handler.annotation.MessageMapping
 import org.springframework.messaging.handler.annotation.Payload
+import org.springframework.messaging.handler.annotation.SendTo
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor
 import org.springframework.messaging.simp.SimpMessagingTemplate
 import org.springframework.messaging.simp.SimpMessageType
@@ -57,7 +58,7 @@ class WebSocketController(
      * username spoofing / state exfiltration.
      */
     @MessageMapping("/chat.addUser")
-    @org.springframework.messaging.handler.annotation.SendTo("/topic/public")
+    @SendTo("/topic/public")
     fun addUser(
         @Payload message: WebSocketMessage,
         headerAccessor: SimpMessageHeaderAccessor,
