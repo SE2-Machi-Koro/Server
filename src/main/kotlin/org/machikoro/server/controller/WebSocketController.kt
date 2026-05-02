@@ -117,6 +117,10 @@ class WebSocketController(
     /**
      * Explicit re-sync endpoint for clients that reconnect mid-transition and miss
      * the GAME_STARTED broadcast.
+     *
+     * Identity is read from the [UserPrincipal] attached at CONNECT time —
+     * the [SyncGameRequest.gameId] field may be client-supplied but is validated
+     * against the server-side player membership before the snapshot is emitted.
      */
     @MessageMapping("/game.sync")
     fun syncGameState(
@@ -129,11 +133,16 @@ class WebSocketController(
             return
         }
 
-        val userId = connectionTracker.getUserId(sessionId)
-        if (userId == null) {
-            recordSyncFailure(source = GAME_SYNC_SOURCE, reason = "unknown_session")
+        // Resolve identity from the authenticated principal, not from the tracker,
+        // to prevent a compromised or spoofed session from claiming another user's ID.
+        val principal = headerAccessor.user as? UserPrincipal
+        if (principal == null) {
+            logger.warn("SYNC rejected: no authenticated principal on session {}", sessionId)
+            recordSyncFailure(source = GAME_SYNC_SOURCE, reason = "missing_principal")
             return
         }
+
+        val userId = principal.userId
 
         if (request.gameId != null && !gameSyncService.isUserInGame(userId, request.gameId)) {
             logger.warn("SYNC rejected for userId={} on unrelated gameId={}", userId, request.gameId)
@@ -150,6 +159,7 @@ class WebSocketController(
 
         emitSyncWithTelemetry(
             source = GAME_SYNC_SOURCE,
+            principalName = principal.name,
             sessionId = sessionId,
             userId = userId,
             gameId = resolvedGameId,
@@ -158,12 +168,13 @@ class WebSocketController(
 
     private fun emitSyncWithTelemetry(
         source: String,
+        principalName: String,
         sessionId: String,
         userId: Int,
         gameId: Int,
     ) {
         val startedNs = System.nanoTime()
-        runCatching { publishSync(sessionId, userId, gameId) }
+        runCatching { publishSync(principalName, sessionId, userId, gameId) }
             .onSuccess {
                 val elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNs)
                 Metrics.counter(SYNC_SUCCESS_METRIC, "source", source).increment()
