@@ -145,7 +145,7 @@ class GameController(
             }
             is EndTurnOutcome.Won -> {
                 logger.info("Game ${request.gameId} finished, winner=${result.winnerId}")
-                broadcastWin(request.gameId, result.winnerId)
+                broadcastWin(request.gameId, result.winnerId, result.roundsPlayed)
             }
         }
     }
@@ -228,13 +228,14 @@ class GameController(
         )
     }
 
-    private fun broadcastWin(gameId: Int, winnerId: Int) {
+    private fun broadcastWin(gameId: Int, winnerId: Int, roundsPlayed: Int) {
         messagingTemplate.convertAndSend(
             "/topic/game/$gameId",
             WebSocketMessage(
                 type = MessageType.GAME_END,
                 sender = "server",
-                payload = mapOf("winnerId" to winnerId)
+                payload = mapOf("winnerId" to winnerId,
+                                "roundsPlayed" to roundsPlayed)
             )
         )
     }
