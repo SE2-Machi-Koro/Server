@@ -97,6 +97,11 @@ class WebSocketController(
         val sessionId = headerAccessor.sessionId ?: return
         val userId = connectionTracker.getUserId(sessionId) ?: return
 
+        if (request.gameId != null && !gameSyncService.isUserInGame(userId, request.gameId)) {
+            logger.warn("SYNC rejected for userId={} on unrelated gameId={}", userId, request.gameId)
+            return
+        }
+
         val resolvedGameId = request.gameId ?: gameSyncService.findActiveInProgressGameId(userId)
         if (resolvedGameId == null || !gameSyncService.isInProgress(resolvedGameId)) {
             logger.info("SYNC skipped for userId={} - no active in-progress game", userId)

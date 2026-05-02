@@ -37,5 +37,8 @@ class GameSyncService(
 
     fun isInProgress(gameId: Int): Boolean =
         gameDao.findById(gameId)?.status == GameStatus.IN_PROGRESS
+
+    fun isUserInGame(userId: Int, gameId: Int): Boolean =
+        playerDao.findByGameIdAndUserId(gameId, userId) != null
 }
 

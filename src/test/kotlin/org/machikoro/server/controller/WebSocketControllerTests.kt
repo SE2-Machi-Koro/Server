@@ -236,4 +236,23 @@ class WebSocketControllerTests {
             any<Map<String, Any>>(),
         )
     }
+
+    @Test
+    fun `syncGameState rejects explicit gameId when user is not a member`() {
+        whenever(connectionTracker.getUserId("session-unauthorized")).thenReturn(70)
+        whenever(gameSyncService.isUserInGame(70, 99)).thenReturn(false)
+
+        val accessor = SimpMessageHeaderAccessor.create()
+        accessor.sessionId = "session-unauthorized"
+
+        controller.syncGameState(SyncGameRequest(gameId = 99), accessor)
+
+        verify(messagingTemplate, never()).convertAndSendToUser(
+            any<String>(),
+            any<String>(),
+            any<WebSocketMessage>(),
+            any<Map<String, Any>>(),
+        )
+        verify(gameSyncService, never()).buildSnapshot(any())
+    }
 }
