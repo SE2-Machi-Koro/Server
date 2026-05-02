@@ -6,6 +6,7 @@ import org.machikoro.server.dao.GameMarketplaceDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.domain.enums.GameStatus
+import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.dto.GameStateDto
 import org.machikoro.server.exception.GameNotFoundException
@@ -41,6 +42,20 @@ open class LobbyService(
          * Any value larger than the max players limit works; 10 000 provides headroom.
          */
         private const val TEMP_TURN_ORDER_OFFSET = 10_000
+    }
+
+    /**
+     * Creates a new lobby owned by [hostUserId] and returns the persisted
+     * [GameModel]. The host is registered on the game record but is NOT
+     * automatically added to the player roster — callers go through
+     * [addUserToLobby] for that, the same as any other joining player.
+     *
+     * Wrapped in a single transaction so the create + re-fetch pair is atomic.
+     */
+    fun createLobby(hostUserId: Int): GameModel = runInTransaction {
+        val gameId = gameDao.create(hostUserId)
+        gameDao.findById(gameId)
+            ?: throw GameNotFoundException("Game $gameId not found after creation")
     }
 
     /**
