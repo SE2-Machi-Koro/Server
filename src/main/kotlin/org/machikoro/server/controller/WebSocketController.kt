@@ -34,6 +34,7 @@ class WebSocketController(
         private const val SYNC_SUCCESS_METRIC = "machikoro.reconnect.sync.success.total"
         private const val SYNC_FAILURE_METRIC = "machikoro.reconnect.sync.failure.total"
         private const val SYNC_LATENCY_METRIC = "machikoro.reconnect.sync.latency.ms"
+        private const val GAME_SYNC_SOURCE = "game.sync"
     }
 
     /**
@@ -110,31 +111,31 @@ class WebSocketController(
     ) {
         val sessionId = headerAccessor.sessionId
         if (sessionId == null) {
-            recordSyncFailure(source = "game.sync", reason = "missing_session")
+            recordSyncFailure(source = GAME_SYNC_SOURCE, reason = "missing_session")
             return
         }
 
         val userId = connectionTracker.getUserId(sessionId)
         if (userId == null) {
-            recordSyncFailure(source = "game.sync", reason = "unknown_session")
+            recordSyncFailure(source = GAME_SYNC_SOURCE, reason = "unknown_session")
             return
         }
 
         if (request.gameId != null && !gameSyncService.isUserInGame(userId, request.gameId)) {
             logger.warn("SYNC rejected for userId={} on unrelated gameId={}", userId, request.gameId)
-            recordSyncFailure(source = "game.sync", reason = "unauthorized_game")
+            recordSyncFailure(source = GAME_SYNC_SOURCE, reason = "unauthorized_game")
             return
         }
 
         val resolvedGameId = request.gameId ?: gameSyncService.findActiveInProgressGameId(userId)
         if (resolvedGameId == null || !gameSyncService.isInProgress(resolvedGameId)) {
             logger.info("SYNC skipped for userId={} - no active in-progress game", userId)
-            recordSyncFailure(source = "game.sync", reason = "no_active_game")
+            recordSyncFailure(source = GAME_SYNC_SOURCE, reason = "no_active_game")
             return
         }
 
         emitSyncWithTelemetry(
-            source = "game.sync",
+            source = GAME_SYNC_SOURCE,
             sessionId = sessionId,
             userId = userId,
             gameId = resolvedGameId,
