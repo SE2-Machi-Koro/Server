@@ -11,11 +11,19 @@ import org.springframework.web.bind.annotation.RestController
 @RequestMapping("/lobby")
 class LobbyController(private val lobbyService: LobbyService) {
 
+    /**
+     * HTTP convenience endpoint for starting a game.
+     * The [requestingUserId] must match the game's hostUserId.
+     * The primary start path is the WebSocket handler [GameController.startGame].
+     */
     @PostMapping("/{gameId}/start")
-    fun startGame(@PathVariable gameId: Int): ResponseEntity<Any> {
+    fun startGame(
+        @PathVariable gameId: Int,
+        @org.springframework.web.bind.annotation.RequestParam requestingUserId: Int,
+    ): ResponseEntity<Any> {
         return try {
-            lobbyService.startGame(gameId)
-            ResponseEntity.ok().build()
+            val state = lobbyService.startGame(gameId, requestingUserId)
+            ResponseEntity.ok(state)
         } catch (e: Exception) {
             ResponseEntity.badRequest().body(e.message)
         }

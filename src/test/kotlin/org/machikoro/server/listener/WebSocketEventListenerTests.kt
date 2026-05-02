@@ -3,6 +3,7 @@ package org.machikoro.server.listener
 import org.junit.jupiter.api.Test
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.WebSocketMessage
+import org.machikoro.server.service.WebSocketConnectionTracker
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
@@ -21,7 +22,8 @@ import kotlin.test.assertEquals
 class WebSocketEventListenerTests {
 
     private val template = mock<SimpMessageSendingOperations>()
-    private val listener = WebSocketEventListener(template)
+    private val connectionTracker = mock<WebSocketConnectionTracker>()
+    private val listener = WebSocketEventListener(template, connectionTracker)
 
     @Test
     fun handleWebSocketDisconnectListenerShouldPublishLeaveMessageWhenUsernameExists() {
@@ -45,8 +47,19 @@ class WebSocketEventListenerTests {
         verify(template, never()).convertAndSend(eq("/topic/public"), any<WebSocketMessage>())
     }
 
+    @Test
+    fun handleWebSocketDisconnectListenerShouldUnregisterSession() {
+        val event = disconnectEventWithSessionAttributes(mapOf("username" to "alice"))
+
+        listener.handleWebSocketDisconnectListener(event)
+
+        // session-1 is the id passed to SessionDisconnectEvent in the helper
+        verify(connectionTracker).unregister("session-1")
+    }
+
     private fun disconnectEventWithSessionAttributes(attributes: Map<String, Any>): SessionDisconnectEvent {
         val accessor = SimpMessageHeaderAccessor.create(SimpMessageType.DISCONNECT)
+        accessor.sessionId = "session-1"
         accessor.sessionAttributes = attributes.toMutableMap()
         val message: Message<ByteArray> = MessageBuilder.createMessage(ByteArray(0), accessor.messageHeaders)
 
