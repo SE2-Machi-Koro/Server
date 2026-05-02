@@ -3,6 +3,7 @@ package org.machikoro.server.dao
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -35,6 +36,27 @@ class PlayerCardDao {
             .selectAll()
             .where { PlayerCards.playerId eq playerId }
             .map { it.toPlayerCardModel() }
+    }
+
+    /**
+     * Bulk-fetches cards for multiple players in a single query and groups them
+     * by player ID.  Use this in preference to calling [findByPlayerId] in a loop
+     * (N+1 anti-pattern) when you already have a list of player IDs — e.g. inside
+     * [org.machikoro.server.service.GameSyncService.buildSnapshot].
+     *
+     * @param playerIds the set of player IDs to fetch cards for
+     * @return a map from player ID to that player's card list; players with no
+     *         cards are absent from the map (not mapped to an empty list).
+     */
+    fun findByPlayerIds(playerIds: List<Int>): Map<Int, List<PlayerCardModel>> {
+        if (playerIds.isEmpty()) return emptyMap()
+        return transaction {
+            (PlayerCards innerJoin Cards)
+                .selectAll()
+                .where { PlayerCards.playerId inList playerIds }
+                .map { it.toPlayerCardModel() }
+                .groupBy { it.playerId }
+        }
     }
 
     /**
