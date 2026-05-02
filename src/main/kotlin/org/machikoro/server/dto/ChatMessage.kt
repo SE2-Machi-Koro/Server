@@ -7,6 +7,7 @@ enum class MessageType {
     CHAT,
     JOIN,
     LEAVE,
+    LOBBY_CREATED,
     GAME_START,
     GAME_ACTION,
     GAME_END,
