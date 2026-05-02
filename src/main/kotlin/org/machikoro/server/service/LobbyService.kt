@@ -70,11 +70,17 @@ open class LobbyService(
         val game = gameDao.findById(gameId)
             ?: throw GameNotFoundException("Game $gameId not found")
 
+        // Reconnect path: player already belongs to this game, so do not re-insert.
+        playerDao.findByGameIdAndUserId(gameId, userId)?.let { return it }
+
         if (game.status == GameStatus.IN_PROGRESS) {
             throw GameStartedException("Game $gameId has already started")
         }
 
         synchronized(lobbyLocks.getOrPut(gameId) { Any() }) {
+            // Protect against duplicate inserts on concurrent reconnect/join attempts.
+            playerDao.findByGameIdAndUserId(gameId, userId)?.let { return it }
+
             val players = playerDao.getPlayers(gameId)
             if (players.size >= game.maxPlayers) {
                 throw LobbyFullException("Game $gameId is full (max ${game.maxPlayers} players)")

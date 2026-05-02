@@ -11,6 +11,7 @@ import org.machikoro.server.database.AbstractDBSetup
 import org.machikoro.server.database.Games
 import org.machikoro.server.database.Players
 import org.machikoro.server.database.Users
+import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.exception.PlayerNotFoundException
 
 class PlayerDaoTest : AbstractDBSetup() {
@@ -141,5 +142,61 @@ class PlayerDaoTest : AbstractDBSetup() {
         val player2 = playerDao.addPlayer(gameId, userId2)
         assertEquals(0, player1.turnOrder)
         assertEquals(1, player2.turnOrder)
+    }
+
+    @Test
+    fun `findByGameIdAndUserId returns player when mapping exists`() {
+        val player = playerDao.addPlayer(gameId, userId)
+
+        val found = playerDao.findByGameIdAndUserId(gameId, userId)
+
+        assertNotNull(found)
+        assertEquals(player.id, found!!.id)
+    }
+
+    @Test
+    fun `findByGameIdAndUserId returns null when mapping is missing`() {
+        assertNull(playerDao.findByGameIdAndUserId(gameId, 999999))
+    }
+
+    @Test
+    fun `findActiveGameIdByUserId returns newest in-progress game`() {
+        val olderGameId = gameDao.create(userId)
+        val newerGameId = gameDao.create(userId)
+
+        playerDao.addPlayer(olderGameId, userId)
+        playerDao.addPlayer(newerGameId, userId)
+
+        gameDao.updateStatus(olderGameId, GameStatus.IN_PROGRESS)
+        gameDao.updateStatus(newerGameId, GameStatus.IN_PROGRESS)
+
+        assertEquals(newerGameId, playerDao.findActiveGameIdByUserId(userId))
+    }
+
+    @Test
+    fun `findActiveGameIdByUserId ignores waiting games`() {
+        val waitingGameId = gameDao.create(userId)
+        playerDao.addPlayer(waitingGameId, userId)
+
+        assertNull(playerDao.findActiveGameIdByUserId(userId))
+    }
+
+    @Test
+    fun `updateLastSeen stores a timestamp for player`() {
+        val player = playerDao.addPlayer(gameId, userId)
+        val before = System.currentTimeMillis()
+
+        playerDao.updateLastSeen(player.id)
+
+        val updated = playerDao.findById(player.id)
+        assertNotNull(updated?.lastSeenAt)
+        assertTrue(updated!!.lastSeenAt!! >= before)
+    }
+
+    @Test
+    fun `updateLastSeen throws when player does not exist`() {
+        assertThrows<PlayerNotFoundException> {
+            playerDao.updateLastSeen(999999)
+        }
     }
 }
