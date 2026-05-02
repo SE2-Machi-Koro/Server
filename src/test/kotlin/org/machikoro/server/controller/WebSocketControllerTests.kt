@@ -169,6 +169,10 @@ class WebSocketControllerTests {
         )
         assertEquals(MessageType.SYNC, captor.firstValue.type)
         assertEquals(7, captor.firstValue.gameId)
+        @Suppress("UNCHECKED_CAST")
+        val payload = captor.firstValue.payload as Map<String, Any>
+        assertEquals(foundUser.id, payload["targetUserId"])
+        assertEquals("session-rejoin", payload["targetSessionId"])
     }
 
     @Test
@@ -195,6 +199,10 @@ class WebSocketControllerTests {
             any<Map<String, Any>>(),
         )
         assertEquals(MessageType.SYNC, captor.firstValue.type)
+        @Suppress("UNCHECKED_CAST")
+        val payload = captor.firstValue.payload as Map<String, Any>
+        assertEquals(foundUser.id, payload["targetUserId"])
+        assertEquals("session-race", payload["targetSessionId"])
     }
 
     @Test
@@ -218,6 +226,10 @@ class WebSocketControllerTests {
         )
         assertEquals(MessageType.SYNC, captor.firstValue.type)
         assertEquals(8, captor.firstValue.gameId)
+        @Suppress("UNCHECKED_CAST")
+        val payload = captor.firstValue.payload as Map<String, Any>
+        assertEquals(50, payload["targetUserId"])
+        assertEquals("session-sync", payload["targetSessionId"])
     }
 
     @Test
