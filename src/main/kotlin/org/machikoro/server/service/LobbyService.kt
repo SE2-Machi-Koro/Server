@@ -6,15 +6,16 @@ import org.machikoro.server.dao.GameMarketplaceDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.domain.enums.GameStatus
-import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
+import org.machikoro.server.dto.GameStateDto
 import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.exception.LobbyFullException
+import org.machikoro.server.exception.NotHostException
 import org.springframework.stereotype.Service
 
 @Service
-class LobbyService(
+open class LobbyService(
     private val gameDao: GameDao,
     private val playerDao: PlayerDao,
     private val gameMarketplaceDao: GameMarketplaceDao,
@@ -24,72 +25,97 @@ class LobbyService(
     private val lobbyLocks = mutableMapOf<Int, Any>()
 
     /**
-     * Creates a new lobby for a given host user.
+     * Runs [block] inside an Exposed transaction.
      *
-     * A lobby is represented as a Game with status WAITING.
-     * This method:
-     * 1. Creates a new game entry in the database (including a unique lobby code)
-     * 2. Adds the host user as the first player in the lobby
-     * 3. Returns the fully initialized GameModel
-     *
-     * @param hostUserId the ID of the user creating the lobby (host)
-     * @return the created GameModel representing the lobby
-     * @throws GameNotFoundException if the created game cannot be retrieved
+     * Extracted as a protected open method so that pure unit tests can subclass
+     * [LobbyService] and override this to `block()` directly, bypassing the
+     * Exposed transaction machinery that requires a real database connection.
      */
-    fun createLobby(hostUserId: Int): GameModel {
+    protected open fun <T> runInTransaction(block: () -> T): T = transaction { block() }
 
-        // Step 1: Create a new game (lobby) in the database
-        // This automatically generates a unique lobby code
-        val gameId = gameDao.create(hostUserId = hostUserId)
-
-        // Step 2: Add the host as the first player in the lobby
-        playerDao.addPlayer(gameId, hostUserId)
-
-        // Step 3: Retrieve and return the created game
-        return gameDao.findById(gameId)
-            ?: throw GameNotFoundException("Game with id $gameId not found after creation")
+    companion object {
+        /**
+         * Temporary offset applied to all player turn orders in the first pass of
+         * the shuffle so that intermediate values don't collide with the unique
+         * (gameId, turnOrder) constraint while the final values are being assigned.
+         * Any value larger than the max players limit works; 10 000 provides headroom.
+         */
+        private const val TEMP_TURN_ORDER_OFFSET = 10_000
     }
 
+    /**
+     * Adds [userId] to the lobby for [gameId] if the game exists, is still in the
+     * WAITING state and has not yet reached its player cap.
+     *
+     * @throws GameNotFoundException  if no game with [gameId] exists.
+     * @throws GameStartedException   if the game has already moved to IN_PROGRESS.
+     * @throws LobbyFullException     if the lobby already has reached its player cap.
+     */
     fun addUserToLobby(gameId: Int, userId: Int): PlayerModel {
-        val lock = synchronized(lobbyLocks) {
-            lobbyLocks.computeIfAbsent(gameId) { Any() }
+        val game = gameDao.findById(gameId)
+            ?: throw GameNotFoundException("Game $gameId not found")
+
+        if (game.status == GameStatus.IN_PROGRESS) {
+            throw GameStartedException("Game $gameId has already started")
         }
 
-        synchronized(lock) {
-            val game = gameDao.findById(gameId) ?: throw GameNotFoundException("Game with id $gameId not found")
-            if (game.status == GameStatus.IN_PROGRESS) {
-                throw GameStartedException("Game with id $gameId has already started")
-            }
+        synchronized(lobbyLocks.getOrPut(gameId) { Any() }) {
             val players = playerDao.getPlayers(gameId)
-            if (players.size >= 4) {
-                throw LobbyFullException("Lobby for game with id $gameId is full")
+            if (players.size >= game.maxPlayers) {
+                throw LobbyFullException("Game $gameId is full (max ${game.maxPlayers} players)")
             }
             return playerDao.addPlayer(gameId, userId)
         }
     }
 
     /**
-     * Moves a lobby into IN_PROGRESS and performs the setup needed for the
-     * buy/build flow in one transaction.
+     * Starts the game identified by [gameId].
      *
-     * This avoids leaving a game half-started if marketplace or landmark setup
-     * fails after the status update.
+     * When [requestingUserId] is provided, the caller must be the lobby host —
+     * otherwise [NotHostException] is thrown.
+     *
+     * Inside a single transaction this method:
+     * 1. Validates the game exists and (optionally) that the caller is the host.
+     * 2. Randomly shuffles the player turn order using a two-pass update to avoid
+     *    unique-constraint collisions on the (gameId, turnOrder) pair.
+     * 3. Initialises the marketplace supply rows for the game.
+     * 4. Initialises landmark entries for every player.
+     * 5. Flips the game status to IN_PROGRESS.
+     *
+     * @throws GameNotFoundException if no game with [gameId] exists.
+     * @throws NotHostException      if [requestingUserId] is provided but is not the host.
      */
-    fun startGame(gameId: Int): GameModel {
-        return transaction {
-            val game = gameDao.findById(gameId) ?: throw GameNotFoundException("Game with id $gameId not found")
-            val players = playerDao.getPlayers(gameId)
+    fun startGame(gameId: Int, requestingUserId: Int? = null): GameStateDto = runInTransaction {
+        val game = gameDao.findById(gameId)
+            ?: throw GameNotFoundException("Game $gameId not found")
 
-            gameDao.updateStatus(gameId, GameStatus.IN_PROGRESS)
-
-            // Buying-phase setup lives on game start so purchases can read existing rows.
-            gameMarketplaceDao.initForGame(gameId)
-            players.forEach { player ->
-                // Landmark state is created once per player and then updated over the game.
-                playerLandmarkDao.initForPlayer(player.id)
-            }
-
-            game.copy(status = GameStatus.IN_PROGRESS)
+        if (requestingUserId != null && game.hostUserId != requestingUserId) {
+            throw NotHostException("User $requestingUserId is not the host of game $gameId")
         }
+
+        val players = playerDao.getPlayers(gameId)
+        val shuffled = players.shuffled()
+
+        // Two-pass update to avoid unique (gameId, turnOrder) constraint violations
+        // while reassigning turn orders.
+        shuffled.forEachIndexed { index, player ->
+            playerDao.updateTurnOrder(player.id, index + TEMP_TURN_ORDER_OFFSET)
+        }
+        shuffled.forEachIndexed { index, player ->
+            playerDao.updateTurnOrder(player.id, index)
+        }
+
+        gameMarketplaceDao.initForGame(gameId)
+        shuffled.forEach { player -> playerLandmarkDao.initForPlayer(player.id) }
+
+        gameDao.updateStatus(gameId, GameStatus.IN_PROGRESS)
+        val updatedGame = gameDao.findById(gameId)!!
+
+        GameStateDto(
+            game = updatedGame,
+            players = shuffled,
+            playerCards = emptyMap(),
+            turnOrder = shuffled.map { it.id },
+        )
     }
 }
