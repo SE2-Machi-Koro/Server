@@ -30,6 +30,16 @@ class LobbyService(
 
     private val lobbyLocks = mutableMapOf<Int, Any>()
 
+    companion object {
+        /**
+         * Temporary offset applied to all player turn orders in the first pass of
+         * the shuffle so that intermediate values don't collide with the unique
+         * (gameId, turnOrder) constraint while the final values are being assigned.
+         * Any value larger than [Games.maxPlayers] works; 10 000 provides headroom.
+         */
+        private const val TEMP_TURN_ORDER_OFFSET = 10_000
+    }
+
     /**
      * Creates a new lobby for a given host user.
      *
@@ -131,7 +141,7 @@ class LobbyService(
         // unique (gameId, turnOrder) constraint violations during intermediate states.
         val shuffledPlayers = activePlayers.shuffled()
         val shuffledPlayerIds = shuffledPlayers.map { it.id }
-        val tempOffset = 10_000
+        val tempOffset = TEMP_TURN_ORDER_OFFSET
         allPlayers.forEachIndexed { index, player ->
             playerDao.updateTurnOrder(player.id, tempOffset + index)
         }
