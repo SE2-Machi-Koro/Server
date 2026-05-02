@@ -66,8 +66,13 @@ class GameSyncServiceTest {
 
         whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.IN_PROGRESS))
         whenever(playerDao.getPlayers(gameId)).thenReturn(listOf(p1, p2))
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(PlayerCardModel(1, CardType.BAKERY, 1)))
-        whenever(playerCardDao.findByPlayerId(2)).thenReturn(emptyList())
+        // Bulk fetch: one query for all player IDs
+        whenever(playerCardDao.findByPlayerIds(listOf(1, 2))).thenReturn(
+            mapOf(
+                1 to listOf(PlayerCardModel(1, CardType.BAKERY, 1)),
+                // player 2 has no cards — absent from the map
+            )
+        )
 
         val snapshot = service.buildSnapshot(gameId)
 
