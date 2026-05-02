@@ -3,6 +3,7 @@ package org.machikoro.server.service
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.dao.GameDao
@@ -49,6 +50,15 @@ class GameSyncServiceTest {
     }
 
     @Test
+    fun `findActiveInProgressGameId returns null when PlayerDao returns null`() {
+        whenever(playerDao.findActiveGameIdByUserId(8)).thenReturn(null)
+
+        assertNull(service.findActiveInProgressGameId(8))
+        
+        verify(playerDao).findActiveGameIdByUserId(8)
+    }
+
+    @Test
     fun `buildSnapshot returns players cards and sorted turnOrder`() {
         val gameId = 10
         val p1 = PlayerModel(id = 1, gameId = gameId, userId = 11, turnOrder = 1, coins = 3, lastSeenAt = null)
@@ -66,6 +76,20 @@ class GameSyncServiceTest {
         assertEquals(listOf(2, 1), snapshot.turnOrder)
         assertEquals(1, snapshot.playerCards[1]?.size)
         assertTrue(snapshot.playerCards[2].isNullOrEmpty())
+    }
+
+    @Test
+    fun `buildSnapshot works with zero players`() {
+        val gameId = 11
+        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.IN_PROGRESS))
+        whenever(playerDao.getPlayers(gameId)).thenReturn(emptyList())
+
+        val snapshot = service.buildSnapshot(gameId)
+
+        assertEquals(gameId, snapshot.game.id)
+        assertTrue(snapshot.players.isEmpty())
+        assertTrue(snapshot.turnOrder.isEmpty())
+        assertTrue(snapshot.playerCards.isEmpty())
     }
 
     @Test
@@ -99,4 +123,3 @@ class GameSyncServiceTest {
         assertFalse(service.isUserInGame(50, 6))
     }
 }
-
