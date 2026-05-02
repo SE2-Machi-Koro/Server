@@ -6,6 +6,7 @@ import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.LandmarkType
 import org.machikoro.server.domain.enums.TurnPhase
+import org.machikoro.server.dto.EndTurnOutcome
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.dto.AdvancePhaseRequest
@@ -22,7 +23,6 @@ import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.NotHostException
 import org.machikoro.server.service.DiceService
 import org.machikoro.server.service.GamePhaseService
-import org.machikoro.server.service.GamePhaseService.EndTurnOutcome
 import org.machikoro.server.service.LeaveFinishedGameService
 import org.machikoro.server.service.LobbyService
 import org.machikoro.server.service.PurchaseResult
@@ -191,10 +191,10 @@ class GameControllerTest {
     @Test
     fun `endTurn broadcasts GAME_END on game topic when winner exists`() {
         val gameId = 42
-        val winner = mock<PlayerModel>()
-        whenever(winner.id).thenReturn(1)
+        val winnerId = 1
+
         whenever(gamePhaseService.endTurn(gameId))
-            .thenReturn(EndTurnOutcome.Won(winner))
+            .thenReturn(EndTurnOutcome.Won(winnerId))
 
         controller.endTurn(EndTurnRequest(gameId))
 
@@ -204,7 +204,7 @@ class GameControllerTest {
         val message = captor.firstValue
         assertEquals(MessageType.GAME_END, message.type)
         assertEquals("server", message.sender)
-        assertEquals(mapOf("winnerId" to 1), message.payload)
+        assertEquals(mapOf("winnerId" to winnerId), message.payload)
     }
 
     @Test
