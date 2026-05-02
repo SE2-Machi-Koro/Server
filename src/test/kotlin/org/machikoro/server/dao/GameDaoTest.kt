@@ -138,6 +138,15 @@ class GameDaoTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `tryMarkPurchasedThisTurn succeeds once and then rejects repeats`() {
+        val id = gameDao.create(hostId)
+
+        assertTrue(gameDao.tryMarkPurchasedThisTurn(id))
+        assertFalse(gameDao.tryMarkPurchasedThisTurn(id))
+        assertTrue(gameDao.findById(id)!!.hasPurchasedThisTurn)
+    }
+
+    @Test
     fun `updateHasPurchasedThisTurn throws when game does not exist`() {
         assertThrows<GameNotFoundException> {
             gameDao.updateHasPurchasedThisTurn(999999, true)

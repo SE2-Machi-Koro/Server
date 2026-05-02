@@ -30,6 +30,11 @@ class GameController(
 ) {
     private val logger = LoggerFactory.getLogger(GameController::class.java)
 
+    /**
+     * Handles one buy/build action from the active player during BUY_OR_BUILD
+     * and broadcasts either the purchase result or the win event after a
+     * landmark completes the game.
+     */
     @MessageMapping("/game.purchase")
     fun purchase(@Payload request: PurchaseRequest) {
         val result = purchaseService.purchase(
@@ -43,6 +48,10 @@ class GameController(
         broadcastPurchase(request.gameId, result)
     }
 
+    /**
+     * Handles the explicit "End Turn" action from the client after the
+     * buy/build window is finished.
+     */
     @MessageMapping("/game.endTurn")
     fun endTurn(@Payload request: EndTurnRequest) {
         when (val result = gamePhaseService.endTurn(request.gameId)) {
@@ -108,12 +117,12 @@ class GameController(
     }
 
     private fun broadcastPurchase(gameId: Int, result: PurchaseResult) {
-        val payload = linkedMapOf<String, String>(
-            "turnPhase" to result.turnPhase.name,
-            "purchaseType" to result.purchaseType.name,
-        )
-        result.cardType?.let { payload["cardType"] = it.name }
-        result.landmarkType?.let { payload["landmarkType"] = it.name }
+        val payload = buildMap<String, String> {
+            put("turnPhase", result.turnPhase.name)
+            put("purchaseType", result.purchaseType.name)
+            result.cardType?.let { put("cardType", it.name) }
+            result.landmarkType?.let { put("landmarkType", it.name) }
+        }
         messagingTemplate.convertAndSend(
             "/topic/game/$gameId",
             WebSocketMessage(

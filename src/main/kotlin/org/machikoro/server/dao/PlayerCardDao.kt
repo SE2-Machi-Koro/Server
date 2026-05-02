@@ -92,7 +92,7 @@ class PlayerCardDao {
     }
 
     /**
-     * Deletes all card entry for a player
+     * Deletes all card entries for a player
      */
     fun deleteAllByPlayerId(playerId: Int) = transaction {
         PlayerCards.deleteWhere {
