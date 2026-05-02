@@ -15,7 +15,7 @@ import org.machikoro.server.exception.NotHostException
 import org.springframework.stereotype.Service
 
 @Service
-class LobbyService(
+open class LobbyService(
     private val gameDao: GameDao,
     private val playerDao: PlayerDao,
     private val gameMarketplaceDao: GameMarketplaceDao,
@@ -44,22 +44,12 @@ class LobbyService(
     }
 
     /**
-     * Creates a new lobby for a given host user.
-     *
-     * A lobby is represented as a Game with status WAITING.
-     * This method:
-     * 1. Creates a new game
-     * 2. Returns the created game ID
-     */
-    fun createLobby(hostUserId: Int): Int = gameDao.create(hostUserId)
-
-    /**
      * Adds [userId] to the lobby for [gameId] if the game exists, is still in the
      * WAITING state and has not yet reached its player cap.
      *
      * @throws GameNotFoundException  if no game with [gameId] exists.
      * @throws GameStartedException   if the game has already moved to IN_PROGRESS.
-     * @throws LobbyFullException     if the lobby already has [GameModel.maxPlayers] players.
+     * @throws LobbyFullException     if the lobby already has reached its player cap.
      */
     fun addUserToLobby(gameId: Int, userId: Int): PlayerModel {
         val game = gameDao.findById(gameId)
