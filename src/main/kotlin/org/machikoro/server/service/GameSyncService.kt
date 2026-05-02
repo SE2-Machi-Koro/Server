@@ -23,8 +23,10 @@ class GameSyncService(
             ?: throw GameNotFoundException("Game $gameId not found")
 
         val players = playerDao.getPlayers(gameId)
+        // Fetch all player cards in one query instead of N individual lookups.
+        val playerCardsByPlayerId = playerCardDao.findByPlayerIds(players.map { it.id })
         val playerCards = players.associate { player ->
-            player.id to playerCardDao.findByPlayerId(player.id)
+            player.id to (playerCardsByPlayerId[player.id] ?: emptyList())
         }
 
         return GameStateDto(
