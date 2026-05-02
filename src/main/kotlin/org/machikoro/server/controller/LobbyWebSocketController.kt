@@ -29,6 +29,7 @@ class LobbyWebSocketController(
      */
     @MessageMapping("/lobby.create")
     @SendTo("/topic/public")
+    @Suppress("UNUSED_PARAMETER") // Spring requires a @Payload parameter to deserialize the STOMP frame body
     fun createLobby(
         @Payload message: WebSocketMessage,
         headerAccessor: SimpMessageHeaderAccessor,
