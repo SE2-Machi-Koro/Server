@@ -1,6 +1,7 @@
 package org.machikoro.server.controller
 
 import org.machikoro.server.domain.enums.TurnPhase
+import org.machikoro.server.dto.EndTurnOutcome
 import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.dto.AdvancePhaseRequest
 import org.machikoro.server.dto.EndTurnRequest
@@ -13,7 +14,6 @@ import org.machikoro.server.dto.StartGameRequest
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.service.DiceService
 import org.machikoro.server.service.GamePhaseService
-import org.machikoro.server.service.GamePhaseService.EndTurnOutcome
 import org.machikoro.server.service.LeaveFinishedGameService
 import org.machikoro.server.service.LobbyService
 import org.machikoro.server.service.PurchaseResult
@@ -145,8 +145,8 @@ class GameController(
                 broadcastPhase(request.gameId, result.nextPhase)
             }
             is EndTurnOutcome.Won -> {
-                logger.info("Game ${request.gameId} finished, winner=${result.winner.id}")
-                broadcastWinner(request.gameId, result.winner)
+                logger.info("Game ${request.gameId} finished, winner=${result.winnerId}")
+                broadcastWinner(request.gameId, result.winnerId)
             }
         }
     }
@@ -190,7 +190,7 @@ class GameController(
         }
     }
 
-    private fun broadcastPhase(gameId: Int, newPhase: TurnPhase) {
+    private fun broadcastPhase(gameId: Int, newPhase : TurnPhase) {
         messagingTemplate.convertAndSend(
             "/topic/game/$gameId",
             WebSocketMessage(
@@ -229,13 +229,13 @@ class GameController(
         )
     }
 
-    private fun broadcastWinner(gameId: Int, winner: PlayerModel) {
+    private fun broadcastWinner(gameId: Int, winnerId: Int) {
         messagingTemplate.convertAndSend(
             "/topic/game/$gameId",
             WebSocketMessage(
                 type = MessageType.GAME_END,
                 sender = "server",
-                payload = mapOf("winnerId" to winner.id)
+                payload = mapOf("winnerId" to winnerId)
             )
         )
     }
