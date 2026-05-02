@@ -204,7 +204,16 @@ class WebSocketController(
         ).increment()
     }
 
-    private fun publishSync(sessionId: String, userId: Int, gameId: Int) {
+    /**
+     * Builds and delivers the game-state snapshot to a single reconnecting user.
+     *
+     * [principalName] is the value from [UserPrincipal.name] (i.e. the username),
+     * which is what Spring's [org.springframework.messaging.simp.user.UserDestinationResolver]
+     * uses to look up the subscriber's session.  Passing a raw STOMP sessionId here
+     * would cause the message to be silently dropped in production because the resolver
+     * resolves destinations by principal, not by session ID directly.
+     */
+    private fun publishSync(principalName: String, sessionId: String, userId: Int, gameId: Int) {
         val snapshot = gameSyncService.buildSnapshot(gameId)
         val headers = SimpMessageHeaderAccessor.create(SimpMessageType.MESSAGE).apply {
             setSessionId(sessionId)
@@ -212,7 +221,7 @@ class WebSocketController(
         }.messageHeaders
 
         messagingTemplate.convertAndSendToUser(
-            sessionId,
+            principalName,
             "/queue/game-sync",
             WebSocketMessage(
                 type = MessageType.SYNC,
