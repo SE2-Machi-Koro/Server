@@ -1,7 +1,6 @@
 package org.machikoro.server.service
 
 import org.machikoro.server.dao.GameDao
-import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.domain.enums.LandmarkType
 import org.machikoro.server.domain.enums.TurnPhase
@@ -13,7 +12,6 @@ import org.springframework.stereotype.Service
 @Service
 class DiceService(
     private val gameDao: GameDao,
-    private val playerDao: PlayerDao,
     private val playerLandmarkDao: PlayerLandmarkDao,
     private val gameStateGuard: GameStateGuard,
 ) {
@@ -22,14 +20,6 @@ class DiceService(
 
         if (game.turnPhase != TurnPhase.ROLL_DICE) {
             throw CustomWebSocketException("WRONG_PHASE", "It's not the roll dice phase")
-        }
-
-        val activePlayer = playerDao.getPlayers(request.gameId)
-            .getOrNull(game.currentTurnIndex)
-            ?: throw CustomWebSocketException("PLAYER_NOT_FOUND", "Active player not found")
-
-        if (activePlayer.id != request.playerId) {
-            throw CustomWebSocketException("NOT_YOUR_TURN", "It's not your turn!")
         }
 
         if (request.rollTwoDice) {
