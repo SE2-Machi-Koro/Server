@@ -125,7 +125,7 @@ class LobbyServiceTest {
         val gameId = 1
         val createdGame = game(gameId, GameStatus.WAITING).copy(hostUserId = hostUserId)
 
-        whenever(gameDao.create(any())).thenReturn(gameId)
+        whenever(gameDao.create(any(), any(), any())).thenReturn(gameId)
         whenever(playerDao.addPlayer(gameId, hostUserId)).thenReturn(player(1))
         whenever(gameDao.findById(gameId)).thenReturn(createdGame)
 
@@ -135,7 +135,7 @@ class LobbyServiceTest {
         assertEquals(hostUserId, result.hostUserId)
         assertEquals(GameStatus.WAITING, result.status)
 
-        verify(gameDao).create(hostUserId)
+        verify(gameDao).create(eq(hostUserId), any<String>(), eq(4))
         verify(playerDao).addPlayer(gameId, hostUserId)
         verify(gameDao).findById(gameId)
     }
@@ -145,7 +145,7 @@ class LobbyServiceTest {
         val hostUserId = 10
         val gameId = 1
 
-        whenever(gameDao.create(any())).thenReturn(gameId)
+        whenever(gameDao.create(any(), any(), any())).thenReturn(gameId)
         whenever(playerDao.addPlayer(gameId, hostUserId)).thenReturn(player(1))
         whenever(gameDao.findById(gameId)).thenReturn(null)
 
