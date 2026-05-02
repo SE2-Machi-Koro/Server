@@ -35,7 +35,7 @@ class LobbyWebSocketControllerTest {
 
     @Test
     fun `createLobby creates lobby for sender and returns LOBBY_CREATED message`() {
-        val username = "Ivona"
+        val username = "Player1"
         val user = UserModel(
             id = 10,
             username = username,
