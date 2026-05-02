@@ -3,15 +3,11 @@ package org.machikoro.server.service
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.GameMarketplaceDao
-import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
-import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.GameStatus
-import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.dto.GameStateDto
-import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.exception.LobbyFullException
@@ -22,10 +18,8 @@ import org.springframework.stereotype.Service
 class LobbyService(
     private val gameDao: GameDao,
     private val playerDao: PlayerDao,
-    private val playerCardDao: PlayerCardDao,
     private val gameMarketplaceDao: GameMarketplaceDao,
     private val playerLandmarkDao: PlayerLandmarkDao,
-    private val connectionTracker: WebSocketConnectionTracker,
 ) {
 
     private val lobbyLocks = mutableMapOf<Int, Any>()
@@ -49,9 +43,89 @@ class LobbyService(
         private const val TEMP_TURN_ORDER_OFFSET = 10_000
     }
 
-/**
- * Creates a new lobby for a given host user.
- *
- * A lobby is represented as a Game with status WAITING.
- * This method:
- * 1. Creates a new game
+    /**
+     * Creates a new lobby for a given host user.
+     *
+     * A lobby is represented as a Game with status WAITING.
+     * This method:
+     * 1. Creates a new game
+     * 2. Returns the created game ID
+     */
+    fun createLobby(hostUserId: Int): Int = gameDao.create(hostUserId)
+
+    /**
+     * Adds [userId] to the lobby for [gameId] if the game exists, is still in the
+     * WAITING state and has not yet reached its player cap.
+     *
+     * @throws GameNotFoundException  if no game with [gameId] exists.
+     * @throws GameStartedException   if the game has already moved to IN_PROGRESS.
+     * @throws LobbyFullException     if the lobby already has [GameModel.maxPlayers] players.
+     */
+    fun addUserToLobby(gameId: Int, userId: Int): PlayerModel {
+        val game = gameDao.findById(gameId)
+            ?: throw GameNotFoundException("Game $gameId not found")
+
+        if (game.status == GameStatus.IN_PROGRESS) {
+            throw GameStartedException("Game $gameId has already started")
+        }
+
+        synchronized(lobbyLocks.getOrPut(gameId) { Any() }) {
+            val players = playerDao.getPlayers(gameId)
+            if (players.size >= game.maxPlayers) {
+                throw LobbyFullException("Game $gameId is full (max ${game.maxPlayers} players)")
+            }
+            return playerDao.addPlayer(gameId, userId)
+        }
+    }
+
+    /**
+     * Starts the game identified by [gameId].
+     *
+     * When [requestingUserId] is provided, the caller must be the lobby host —
+     * otherwise [NotHostException] is thrown.
+     *
+     * Inside a single transaction this method:
+     * 1. Validates the game exists and (optionally) that the caller is the host.
+     * 2. Randomly shuffles the player turn order using a two-pass update to avoid
+     *    unique-constraint collisions on the (gameId, turnOrder) pair.
+     * 3. Initialises the marketplace supply rows for the game.
+     * 4. Initialises landmark entries for every player.
+     * 5. Flips the game status to IN_PROGRESS.
+     *
+     * @throws GameNotFoundException if no game with [gameId] exists.
+     * @throws NotHostException      if [requestingUserId] is provided but is not the host.
+     */
+    fun startGame(gameId: Int, requestingUserId: Int? = null): GameStateDto = runInTransaction {
+        val game = gameDao.findById(gameId)
+            ?: throw GameNotFoundException("Game $gameId not found")
+
+        if (requestingUserId != null && game.hostUserId != requestingUserId) {
+            throw NotHostException("User $requestingUserId is not the host of game $gameId")
+        }
+
+        val players = playerDao.getPlayers(gameId)
+        val shuffled = players.shuffled()
+
+        // Two-pass update to avoid unique (gameId, turnOrder) constraint violations
+        // while reassigning turn orders.
+        shuffled.forEachIndexed { index, player ->
+            playerDao.updateTurnOrder(player.id, index + TEMP_TURN_ORDER_OFFSET)
+        }
+        shuffled.forEachIndexed { index, player ->
+            playerDao.updateTurnOrder(player.id, index)
+        }
+
+        gameMarketplaceDao.initForGame(gameId)
+        shuffled.forEach { player -> playerLandmarkDao.initForPlayer(player.id) }
+
+        gameDao.updateStatus(gameId, GameStatus.IN_PROGRESS)
+        val updatedGame = gameDao.findById(gameId)!!
+
+        GameStateDto(
+            game = updatedGame,
+            players = shuffled,
+            playerCards = emptyMap(),
+            turnOrder = shuffled.map { it.id },
+        )
+    }
+}
