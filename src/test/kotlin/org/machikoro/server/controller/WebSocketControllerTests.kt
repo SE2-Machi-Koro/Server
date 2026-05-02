@@ -8,6 +8,7 @@ import org.machikoro.server.dao.UserDao
 import org.machikoro.server.domain.models.UserModel
 import org.machikoro.server.dto.GameStateDto
 import org.machikoro.server.dto.MessageType
+import org.machikoro.server.dto.SyncGameRequest
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.service.GameSyncService
@@ -184,5 +185,35 @@ class WebSocketControllerTests {
         val captor = argumentCaptor<WebSocketMessage>()
         verify(messagingTemplate).convertAndSend(eq("/topic/game/3"), captor.capture())
         assertEquals(MessageType.SYNC, captor.firstValue.type)
+    }
+
+    @Test
+    fun `syncGameState publishes SYNC for connected player with active game`() {
+        whenever(connectionTracker.getUserId("session-sync")).thenReturn(50)
+        whenever(gameSyncService.findActiveInProgressGameId(50)).thenReturn(8)
+        whenever(gameSyncService.isInProgress(8)).thenReturn(true)
+        whenever(gameSyncService.buildSnapshot(8)).thenReturn(mock<GameStateDto>())
+
+        val accessor = SimpMessageHeaderAccessor.create()
+        accessor.sessionId = "session-sync"
+
+        controller.syncGameState(SyncGameRequest(gameId = null), accessor)
+
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/8"), captor.capture())
+        assertEquals(MessageType.SYNC, captor.firstValue.type)
+        assertEquals(8, captor.firstValue.gameId)
+    }
+
+    @Test
+    fun `syncGameState does nothing when session is unknown`() {
+        whenever(connectionTracker.getUserId("session-missing")).thenReturn(null)
+
+        val accessor = SimpMessageHeaderAccessor.create()
+        accessor.sessionId = "session-missing"
+
+        controller.syncGameState(SyncGameRequest(gameId = 1), accessor)
+
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }
 }
