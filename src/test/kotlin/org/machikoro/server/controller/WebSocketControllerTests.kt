@@ -2,6 +2,7 @@ package org.machikoro.server.controller
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.machikoro.server.dao.UserDao
 import org.machikoro.server.domain.models.UserModel
@@ -41,6 +42,11 @@ class WebSocketControllerTests {
         id = id, username = username, passwordHash = null,
         sessionToken = null, totalWins = 0, totalGamesPlayed = 0
     )
+
+    @BeforeEach
+    fun setup() {
+        whenever(gameSyncService.findActiveInProgressGameId(any())).thenReturn(null)
+    }
 
     @Test
     fun sendMessageShouldReturnUnchangedMessage() {
