@@ -234,9 +234,11 @@ class GameController(
             WebSocketMessage(
                 type = MessageType.GAME_END,
                 sender = "server",
-                payload = mapOf("winnerId" to winnerId,
-                                "roundsPlayed" to roundsPlayed)
-            )
+                payload = mapOf(
+                    "winnerId" to winnerId,
+                    "roundsPlayed" to roundsPlayed,
+                ),
+            ),
         )
     }
 }
