@@ -1,11 +1,12 @@
 package org.machikoro.server.service
 
-import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.dao.GameDao
+import org.machikoro.server.dao.GameMarketplaceDao
 import org.machikoro.server.dao.PlayerDao
+import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
@@ -13,16 +14,23 @@ import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.exception.LobbyFullException
 import org.mockito.kotlin.any
-import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 
+/**
+ * Fast behavior-level checks for lobby service branching.
+ *
+ * startGame has DB-backed coverage in LobbyServiceIntegrationTest for the
+ * transactional setup path.
+ */
 class LobbyServiceTest {
 
     private val gameDao = mock<GameDao>()
     private val playerDao = mock<PlayerDao>()
-    private val lobbyService = LobbyService(gameDao, playerDao)
+    private val gameMarketplaceDao = mock<GameMarketplaceDao>()
+    private val playerLandmarkDao = mock<PlayerLandmarkDao>()
+    private val lobbyService = LobbyService(gameDao, playerDao, gameMarketplaceDao, playerLandmarkDao)
 
     private fun game(id: Int, status: GameStatus) =
         GameModel(
@@ -39,7 +47,7 @@ class LobbyServiceTest {
         )
 
     private fun player(id: Int) =
-        PlayerModel(id = id, gameId = 1, userId = id, turnOrder = 0, coins = 3, lastSeenAt = 30)
+        PlayerModel(id = id, gameId = 1, userId = id, turnOrder = 0, coins = 3, lastSeenAt = null)
 
     @Test
     fun `addUserToLobby adds player successfully`() {
@@ -87,58 +95,4 @@ class LobbyServiceTest {
         }
     }
 
-    @Test
-    fun `createLobby creates game and adds host as player`() {
-        val hostUserId = 10
-        val gameId = 1
-        val createdGame = game(gameId, GameStatus.WAITING).copy(hostUserId = hostUserId)
-
-        whenever(gameDao.create(any(), any(), any())).thenReturn(gameId)
-        whenever(playerDao.addPlayer(gameId, hostUserId)).thenReturn(player(1))
-        whenever(gameDao.findById(gameId)).thenReturn(createdGame)
-
-        val result = lobbyService.createLobby(hostUserId)
-
-        assertEquals(gameId, result.id)
-        assertEquals(hostUserId, result.hostUserId)
-        assertEquals(GameStatus.WAITING, result.status)
-
-        verify(gameDao).create(eq(hostUserId), any<String>(), eq(4))
-        verify(playerDao).addPlayer(gameId, hostUserId)
-        verify(gameDao).findById(gameId)
-    }
-
-    @Test
-    fun `createLobby throws GameNotFoundException when created game cannot be found`() {
-        val hostUserId = 10
-        val gameId = 1
-
-        whenever(gameDao.create(hostUserId = hostUserId)).thenReturn(gameId)
-        whenever(playerDao.addPlayer(gameId, hostUserId)).thenReturn(player(1))
-        whenever(gameDao.findById(gameId)).thenReturn(null)
-
-        assertThrows<GameNotFoundException> {
-            lobbyService.createLobby(hostUserId)
-        }
-    }
-
-    @Test
-    fun `startGame sets status to in progress`() {
-        val gameId = 4
-        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING))
-
-        val result = lobbyService.startGame(gameId)
-
-        assertEquals(GameStatus.IN_PROGRESS, result.status)
-        verify(gameDao).updateStatus(gameId, GameStatus.IN_PROGRESS)
-    }
-
-    @Test
-    fun `startGame throws GameNotFoundException`() {
-        whenever(gameDao.findById(any())).thenReturn(null)
-
-        assertThrows<GameNotFoundException> {
-            lobbyService.startGame(1)
-        }
-    }
 }

@@ -1,7 +1,10 @@
 package org.machikoro.server.service
 
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.machikoro.server.dao.GameDao
+import org.machikoro.server.dao.GameMarketplaceDao
 import org.machikoro.server.dao.PlayerDao
+import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
@@ -13,7 +16,9 @@ import org.springframework.stereotype.Service
 @Service
 class LobbyService(
     private val gameDao: GameDao,
-    private val playerDao: PlayerDao
+    private val playerDao: PlayerDao,
+    private val gameMarketplaceDao: GameMarketplaceDao,
+    private val playerLandmarkDao: PlayerLandmarkDao,
 ) {
 
     private val lobbyLocks = mutableMapOf<Int, Any>()
@@ -40,7 +45,7 @@ class LobbyService(
         // Step 2: Add the host as the first player in the lobby
         playerDao.addPlayer(gameId, hostUserId)
 
-        // Step 3: Retrieve and return the created gamegit add .
+        // Step 3: Retrieve and return the created game
         return gameDao.findById(gameId)
             ?: throw GameNotFoundException("Game with id $gameId not found after creation")
     }
@@ -63,10 +68,28 @@ class LobbyService(
         }
     }
 
+    /**
+     * Moves a lobby into IN_PROGRESS and performs the setup needed for the
+     * buy/build flow in one transaction.
+     *
+     * This avoids leaving a game half-started if marketplace or landmark setup
+     * fails after the status update.
+     */
     fun startGame(gameId: Int): GameModel {
-        val game = gameDao.findById(gameId) ?: throw GameNotFoundException("Game with id $gameId not found")
-        gameDao.updateStatus(gameId, GameStatus.IN_PROGRESS)
-        // Here you would initialize the game state, e.g., by creating the initial deck of cards, etc.
-        return game.copy(status = GameStatus.IN_PROGRESS)
+        return transaction {
+            val game = gameDao.findById(gameId) ?: throw GameNotFoundException("Game with id $gameId not found")
+            val players = playerDao.getPlayers(gameId)
+
+            gameDao.updateStatus(gameId, GameStatus.IN_PROGRESS)
+
+            // Buying-phase setup lives on game start so purchases can read existing rows.
+            gameMarketplaceDao.initForGame(gameId)
+            players.forEach { player ->
+                // Landmark state is created once per player and then updated over the game.
+                playerLandmarkDao.initForPlayer(player.id)
+            }
+
+            game.copy(status = GameStatus.IN_PROGRESS)
+        }
     }
 }
