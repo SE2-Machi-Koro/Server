@@ -9,6 +9,7 @@ enum class MessageType {
     LEAVE,
     GAME_START,
     GAME_STARTED,
+    SYNC,
     GAME_ACTION,
     GAME_END,
     PLAYER_LEFT_FINISHED_GAME,
