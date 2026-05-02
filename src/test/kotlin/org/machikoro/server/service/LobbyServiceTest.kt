@@ -1,5 +1,6 @@
 package org.machikoro.server.service
 
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -14,6 +15,7 @@ import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.exception.LobbyFullException
 import org.mockito.kotlin.any
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
