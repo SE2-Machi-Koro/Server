@@ -20,6 +20,6 @@ sealed interface EndTurnOutcome {
         @field:Schema(description = "ID of the winning player", example = "1")
         val winnerId: Int,
         @field:Schema(description = "Number of played rounds", example = "10")
-        val roundsPlayed: Int
+        val roundsPlayed: Int,
     ) : EndTurnOutcome
 }
