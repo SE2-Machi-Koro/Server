@@ -30,6 +30,15 @@ class LobbyService(
 
     private val lobbyLocks = mutableMapOf<Int, Any>()
 
+    /**
+     * Runs [block] inside an Exposed transaction.
+     *
+     * Extracted as a protected open method so that pure unit tests can subclass
+     * [LobbyService] and override this to `block()` directly, bypassing the
+     * Exposed transaction machinery that requires a real database connection.
+     */
+    protected open fun <T> runInTransaction(block: () -> T): T = transaction { block() }
+
     companion object {
         /**
          * Temporary offset applied to all player turn orders in the first pass of
@@ -108,7 +117,7 @@ class LobbyService(
      * @return [GameStateDto] ready to be broadcast via WebSocket.
      */
     fun startGame(gameId: Int, requestingUserId: Int): GameStateDto {
-        return transaction {
+        return runInTransaction {
         // 1. Load game
         val game = gameDao.findById(gameId)
             ?: throw GameNotFoundException("Game with id $gameId not found")
