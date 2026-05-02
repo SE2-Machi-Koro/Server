@@ -163,7 +163,7 @@ class WebSocketControllerTests {
     fun `addUser handles transition race by re-mapping user and syncing state`() {
         val foundUser = user(id = 12, username = "harry")
         whenever(userDao.findByUsername("harry")).thenReturn(foundUser)
-        whenever(gameSyncService.findActiveInProgressGameId(foundUser.id)).thenReturn(null, 3)
+        whenever(gameSyncService.findActiveInProgressGameId(foundUser.id)).thenReturn(null, 3, 3)
         whenever(lobbyService.addUserToLobby(3, foundUser.id)).thenThrow(GameStartedException("already started"))
         whenever(gameSyncService.buildSnapshot(3)).thenReturn(mock<GameStateDto>())
 
@@ -172,14 +172,11 @@ class WebSocketControllerTests {
         accessor.sessionId = "session-race"
         accessor.sessionAttributes = mutableMapOf()
 
-        // addUserToLobby is now idempotent in LobbyService, but we keep this test to
-        // prove reconnect path tolerates start transition races in controller mapping.
-        try {
-            controller.addUser(message, accessor)
-        } catch (_: GameStartedException) {
-            // If service throws in this mocked setup, the mapping lookup still happened.
-        }
+        controller.addUser(message, accessor)
 
-        verify(gameSyncService).findActiveInProgressGameId(foundUser.id)
+        verify(connectionTracker).register("session-race", foundUser.id, 3)
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/3"), captor.capture())
+        assertEquals(MessageType.SYNC, captor.firstValue.type)
     }
 }
