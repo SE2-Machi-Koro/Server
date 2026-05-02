@@ -165,7 +165,7 @@ class WebSocketControllerTests {
             eq("session-rejoin"),
             eq("/queue/game-sync"),
             captor.capture(),
-            any(),
+            any<Map<String, Any>>(),
         )
         assertEquals(MessageType.SYNC, captor.firstValue.type)
         assertEquals(7, captor.firstValue.gameId)
@@ -192,7 +192,7 @@ class WebSocketControllerTests {
             eq("session-race"),
             eq("/queue/game-sync"),
             captor.capture(),
-            any(),
+            any<Map<String, Any>>(),
         )
         assertEquals(MessageType.SYNC, captor.firstValue.type)
     }
@@ -214,7 +214,7 @@ class WebSocketControllerTests {
             eq("session-sync"),
             eq("/queue/game-sync"),
             captor.capture(),
-            any(),
+            any<Map<String, Any>>(),
         )
         assertEquals(MessageType.SYNC, captor.firstValue.type)
         assertEquals(8, captor.firstValue.gameId)
@@ -229,6 +229,11 @@ class WebSocketControllerTests {
 
         controller.syncGameState(SyncGameRequest(gameId = 1), accessor)
 
-        verify(messagingTemplate, never()).convertAndSendToUser(any<String>(), any<String>(), any<WebSocketMessage>(), any())
+        verify(messagingTemplate, never()).convertAndSendToUser(
+            any<String>(),
+            any<String>(),
+            any<WebSocketMessage>(),
+            any<Map<String, Any>>(),
+        )
     }
 }
