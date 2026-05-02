@@ -112,7 +112,7 @@ class UserDao {
      */
     fun incrementGamesPlayed(id: Int): Unit = transaction {
         val updatedRows = Users.update({ Users.id eq id }) {
-            it[totalGamesPlayed] = totalGamesPlayed + 1
+            it[Users.totalGamesPlayed] = Users.totalGamesPlayed + 1
         }
         if (updatedRows == 0) throw UserNotFoundException("User $id not found")
     }

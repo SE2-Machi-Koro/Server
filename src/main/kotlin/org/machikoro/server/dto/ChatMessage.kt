@@ -8,6 +8,7 @@ enum class MessageType {
     JOIN,
     LEAVE,
     GAME_START,
+    GAME_STARTED,
     GAME_ACTION,
     GAME_END,
     PLAYER_LEFT_FINISHED_GAME,

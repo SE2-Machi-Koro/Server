@@ -1,6 +1,7 @@
 package org.machikoro.server.dao
 
 import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insertAndGetId
@@ -138,6 +139,22 @@ class GameDao {
             it[Games.hasPurchasedThisTurn] = hasPurchasedThisTurn
         }
         if (updatedRows == 0) throw GameNotFoundException("Game $id not found")
+    }
+
+    /**
+     * Atomically marks the current turn as having purchased only if it has not
+     * already been marked by another request.
+     *
+     * This is used by the buying-phase purchase flow to enforce the
+     * "only one purchase per turn" rule without a separate read-then-write race.
+     */
+    fun tryMarkPurchasedThisTurn(id: Int): Boolean = transaction {
+        Games.update({
+            (Games.id eq id) and
+                (Games.hasPurchasedThisTurn eq false)
+        }) {
+            it[hasPurchasedThisTurn] = true
+        } > 0
     }
 
     /**

@@ -13,8 +13,8 @@ import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
+import org.machikoro.server.dto.EndTurnOutcome
 import org.machikoro.server.exception.CustomWebSocketException
-import org.machikoro.server.service.GamePhaseService.EndTurnOutcome
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
 import org.mockito.kotlin.any
@@ -158,8 +158,8 @@ class GamePhaseServiceTest {
             .thenReturn(gameInPhase(gameId, TurnPhase.BUY_OR_BUILD, currentTurnIndex = 0, roundNumber = 1))
         whenever(playerDao.getPlayers(gameId)).thenReturn(
             listOf(
-                PlayerModel(1, gameId, 10, 0, 3),
-                PlayerModel(2, gameId, 11, 1, 3),
+                PlayerModel(1, gameId, 10, 0, 3, lastSeenAt = 30),
+                PlayerModel(2, gameId, 11, 1, 3, lastSeenAt = 30),
             )
         )
 
@@ -184,8 +184,8 @@ class GamePhaseServiceTest {
             .thenReturn(gameInPhase(gameId, TurnPhase.BUY_OR_BUILD, currentTurnIndex = 1, roundNumber = 3))
         whenever(playerDao.getPlayers(gameId)).thenReturn(
             listOf(
-                PlayerModel(1, gameId, 10, 0, 3),
-                PlayerModel(2, gameId, 11, 1, 3),
+                PlayerModel(1, gameId, 10, 0, 3, lastSeenAt = 30),
+                PlayerModel(2, gameId, 11, 1, 3, lastSeenAt = 30),
             )
         )
 
@@ -205,7 +205,8 @@ class GamePhaseServiceTest {
     fun `endTurn detects winner and finishes game`() {
         val gameId = 30
         val userId = 10
-        val winner = PlayerModel(1, gameId, userId, 0, 3)
+        val id = 1
+        val winner = PlayerModel(id, gameId, userId, 0, 3, 30)
 
         whenever(gameStateGuard.ensureGameIsRunning(gameId))
             .thenReturn(gameInPhase(gameId, TurnPhase.BUY_OR_BUILD))
@@ -218,8 +219,8 @@ class GamePhaseServiceTest {
 
         assertTrue(result is EndTurnOutcome.Won)
         assertEquals(
-            winner,
-            (result).winner
+            id,
+            (result).winnerId
         )
 
         verify(gameDao).updateTurnPhase(gameId, TurnPhase.END_TURN)

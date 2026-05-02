@@ -28,19 +28,21 @@ class PurchaseService(
     private val gameStateGuard: GameStateGuard,
 ) {
 
+    /**
+     * Executes the single allowed purchase during the active player's
+     * BUY_OR_BUILD phase.
+     *
+     * The full flow runs in one transaction so coin changes, ownership changes,
+     * supply updates, and purchase-state enforcement succeed or fail together.
+     */
     fun purchase(
         gameId: Int,
         purchaseType: PurchaseType,
         cardType: CardType?,
         landmarkType: LandmarkType?,
     ): PurchaseResult = transaction {
-
-        // TODO(#61): Verify the websocket caller is the active player for this game.
+        // TODO(#160): Enforce active-player authorization on game-mutating WebSocket actions.
         // Do not trust gameId from the client payload alone.
-
-        // TODO: Improve race-safety for hasPurchasedThisTurn using row locking
-        // (e.g. SELECT FOR UPDATE) or a conditional update to prevent double-purchase
-        // when two websocket messages arrive at nearly the same time.
 
         val game = gameStateGuard.ensureGameIsRunning(gameId)
 
@@ -48,13 +50,6 @@ class PurchaseService(
             throw CustomWebSocketException(
                 errorCode = "INVALID_TURN_PHASE",
                 message = "Purchases are only allowed during BUY_OR_BUILD",
-            )
-        }
-
-        if (game.hasPurchasedThisTurn) {
-            throw CustomWebSocketException(
-                errorCode = "PURCHASE_ALREADY_MADE",
-                message = "Only one purchase is allowed per turn",
             )
         }
 
@@ -66,37 +61,69 @@ class PurchaseService(
                 message = "Could not resolve the active player for game $gameId",
             )
 
-        when (purchaseType) {
-            PurchaseType.ESTABLISHMENT ->
+        val target = resolvePurchaseTarget(purchaseType, cardType, landmarkType)
+
+        if (!gameDao.tryMarkPurchasedThisTurn(gameId)) {
+            throw CustomWebSocketException(
+                errorCode = "PURCHASE_ALREADY_MADE",
+                message = "Only one purchase is allowed per turn",
+            )
+        }
+
+        when (target) {
+            is PurchaseTarget.Establishment ->
                 purchaseEstablishment(
                     gameId,
                     activePlayer,
-                    cardType,
-                    landmarkType,
+                    target.cardType,
                 )
 
-            PurchaseType.LANDMARK ->
+            is PurchaseTarget.Landmark ->
                 purchaseLandmark(
-                    gameId,
                     activePlayer,
-                    cardType,
-                    landmarkType,
+                    target.landmarkType,
                 )
         }
     }
 
+    /**
+     * Normalizes the WebSocket request into one concrete internal target before
+     * the purchase-specific helpers run.
+     */
+    private fun resolvePurchaseTarget(
+        purchaseType: PurchaseType,
+        cardType: CardType?,
+        landmarkType: LandmarkType?,
+    ): PurchaseTarget =
+        when (purchaseType) {
+            PurchaseType.ESTABLISHMENT -> {
+                if (cardType == null || landmarkType != null) {
+                    throw invalidPurchaseRequest(
+                        "Establishment purchase requires cardType only"
+                    )
+                }
+                PurchaseTarget.Establishment(cardType)
+            }
+
+            PurchaseType.LANDMARK -> {
+                if (landmarkType == null || cardType != null) {
+                    throw invalidPurchaseRequest(
+                        "Landmark purchase requires landmarkType only"
+                    )
+                }
+                PurchaseTarget.Landmark(landmarkType)
+            }
+        }
+
+    /**
+     * Buys one establishment card for the active player and removes that card
+     * from the current game's marketplace supply.
+     */
     private fun purchaseEstablishment(
         gameId: Int,
         activePlayer: PlayerModel,
-        cardType: CardType?,
-        landmarkType: LandmarkType?,
+        cardType: CardType,
     ): PurchaseResult {
-        if (cardType == null || landmarkType != null) {
-            throw invalidPurchaseRequest(
-                "Establishment purchase requires cardType only"
-            )
-        }
-
         val card = cardDao.findByCardType(cardType)
             ?: throw CustomWebSocketException(
                 "CARD_NOT_FOUND",
@@ -109,8 +136,6 @@ class PurchaseService(
                 "Player does not have enough coins"
             )
         }
-
-        gameMarketplaceDao.initForGame(gameId)
 
         val entry = gameMarketplaceDao.findByGameIdAndType(gameId, cardType)
 
@@ -138,15 +163,7 @@ class PurchaseService(
             currentQuantity + 1
         )
 
-        gameMarketplaceDao.decrementQuantity(
-            gameId,
-            cardType
-        )
-
-        gameDao.updateHasPurchasedThisTurn(
-            gameId,
-            true
-        )
+        gameMarketplaceDao.decrementQuantity(gameId, cardType)
 
         return PurchaseResult(
             turnPhase = TurnPhase.BUY_OR_BUILD,
@@ -155,18 +172,14 @@ class PurchaseService(
         )
     }
 
+    /**
+     * Builds one landmark for the active player. Landmark rows are expected to
+     * exist already from game start initialization.
+     */
     private fun purchaseLandmark(
-        gameId: Int,
         activePlayer: PlayerModel,
-        cardType: CardType?,
-        landmarkType: LandmarkType?,
+        landmarkType: LandmarkType,
     ): PurchaseResult {
-        if (landmarkType == null || cardType != null) {
-            throw invalidPurchaseRequest(
-                "Landmark purchase requires landmarkType only"
-            )
-        }
-
         val landmark = landmarkDao.findByLandmarkType(landmarkType)
             ?: throw CustomWebSocketException(
                 "LANDMARK_NOT_FOUND",
@@ -179,8 +192,6 @@ class PurchaseService(
                 "Player does not have enough coins"
             )
         }
-
-        playerLandmarkDao.initForPlayer(activePlayer.id)
 
         val playerLandmark = playerLandmarkDao
             .findByPlayerIdAndType(activePlayer.id, landmarkType)
@@ -206,11 +217,6 @@ class PurchaseService(
             landmarkType
         )
 
-        gameDao.updateHasPurchasedThisTurn(
-            gameId,
-            true
-        )
-
         return PurchaseResult(
             turnPhase = TurnPhase.BUY_OR_BUILD,
             purchaseType = PurchaseType.LANDMARK,
@@ -223,8 +229,14 @@ class PurchaseService(
             "INVALID_PURCHASE_REQUEST",
             message
         )
+
+    private sealed interface PurchaseTarget {
+        data class Establishment(val cardType: CardType) : PurchaseTarget
+        data class Landmark(val landmarkType: LandmarkType) : PurchaseTarget
+    }
 }
 
+/** Minimal result payload broadcast back to clients after a successful purchase. */
 data class PurchaseResult(
     val turnPhase: TurnPhase,
     val purchaseType: PurchaseType,
