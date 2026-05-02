@@ -4,8 +4,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.machikoro.server.dao.UserDao
-import org.machikoro.server.domain.models.UserModel
+import org.machikoro.server.auth.UserPrincipal
 import org.machikoro.server.dto.GameStateDto
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.SyncGameRequest
@@ -27,22 +26,26 @@ import org.springframework.messaging.simp.SimpMessagingTemplate
 class WebSocketControllerTests {
 
     private val lobbyService = mock<LobbyService>()
-    private val userDao = mock<UserDao>()
     private val connectionTracker = mock<WebSocketConnectionTracker>()
     private val gameSyncService = mock<GameSyncService>()
     private val messagingTemplate = mock<SimpMessagingTemplate>()
     private val controller = WebSocketController(
         lobbyService,
-        userDao,
         connectionTracker,
         gameSyncService,
         messagingTemplate,
     )
 
-    private fun user(id: Int, username: String) = UserModel(
-        id = id, username = username, passwordHash = null,
-        sessionToken = null, totalWins = 0, totalGamesPlayed = 0
-    )
+    /** Helper: create an accessor pre-populated with an authenticated UserPrincipal. */
+    private fun authenticatedAccessor(
+        userId: Int,
+        username: String,
+        sessionId: String = "session-default",
+    ): SimpMessageHeaderAccessor = SimpMessageHeaderAccessor.create().apply {
+        this.sessionId = sessionId
+        this.sessionAttributes = mutableMapOf()
+        user = UserPrincipal(userId = userId, username = username)
+    }
 
     @BeforeEach
     fun setup() {
@@ -60,20 +63,23 @@ class WebSocketControllerTests {
 
     @Test
     fun addUserShouldStoreUsernameInSessionAttributes() {
-        val message = WebSocketMessage(type = MessageType.JOIN, sender = "bob")
-        val accessor = SimpMessageHeaderAccessor.create()
-        accessor.sessionAttributes = mutableMapOf()
+        val message = WebSocketMessage(type = MessageType.JOIN, sender = "ignored-payload-sender")
+        val accessor = authenticatedAccessor(userId = 1, username = "bob")
 
         val result = controller.addUser(message, accessor)
 
         assertEquals(message, result)
+        // Username stored must come from the authenticated principal, not from message.sender
         assertEquals("bob", accessor.sessionAttributes?.get("username"))
     }
 
     @Test
     fun addUserShouldNotFailWhenSessionAttributesAreMissing() {
         val message = WebSocketMessage(type = MessageType.JOIN, sender = "carol")
-        val accessor = SimpMessageHeaderAccessor.create()
+        // A valid principal but no sessionAttributes map
+        val accessor = SimpMessageHeaderAccessor.create().apply {
+            user = UserPrincipal(userId = 2, username = "carol")
+        }
 
         val result = controller.addUser(message, accessor)
 
@@ -82,29 +88,12 @@ class WebSocketControllerTests {
     }
 
     @Test
-    fun `addUser calls addUserToLobby and registers session when user and gameId are present`() {
-        val gameId = 1
-        val foundUser = user(id = 10, username = "dave")
-        whenever(userDao.findByUsername("dave")).thenReturn(foundUser)
-
-        val message = WebSocketMessage(type = MessageType.JOIN, sender = "dave", gameId = gameId)
-        val accessor = SimpMessageHeaderAccessor.create()
-        accessor.sessionId = "session-abc"
-        accessor.sessionAttributes = mutableMapOf()
-
-        controller.addUser(message, accessor)
-
-        verify(lobbyService).addUserToLobby(gameId, foundUser.id)
-        verify(connectionTracker).register("session-abc", foundUser.id, gameId)
-    }
-
-    @Test
-    fun `addUser does not call addUserToLobby when user is not found`() {
-        whenever(userDao.findByUsername("unknown")).thenReturn(null)
-
-        val message = WebSocketMessage(type = MessageType.JOIN, sender = "unknown", gameId = 1)
-        val accessor = SimpMessageHeaderAccessor.create()
-        accessor.sessionAttributes = mutableMapOf()
+    fun `addUser returns early without touching lobby when principal is missing`() {
+        val message = WebSocketMessage(type = MessageType.JOIN, sender = "ghost", gameId = 1)
+        // No principal set — simulates a connection that bypassed STOMP auth (shouldn't happen in prod)
+        val accessor = SimpMessageHeaderAccessor.create().apply {
+            sessionAttributes = mutableMapOf()
+        }
 
         controller.addUser(message, accessor)
 
@@ -113,13 +102,23 @@ class WebSocketControllerTests {
     }
 
     @Test
-    fun `addUser does not call addUserToLobby when gameId is null`() {
-        val foundUser = user(id = 5, username = "eve")
-        whenever(userDao.findByUsername("eve")).thenReturn(foundUser)
+    fun `addUser calls addUserToLobby and registers session when user and gameId are present`() {
+        val gameId = 1
+        val accessor = authenticatedAccessor(userId = 10, username = "dave", sessionId = "session-abc")
+
+        val message = WebSocketMessage(type = MessageType.JOIN, sender = "dave", gameId = gameId)
+
+        controller.addUser(message, accessor)
+
+        verify(lobbyService).addUserToLobby(gameId, 10)
+        verify(connectionTracker).register("session-abc", 10, gameId)
+    }
+
+    @Test
+    fun `addUser does not call addUserToLobby when gameId is null and no active game`() {
+        val accessor = authenticatedAccessor(userId = 5, username = "eve")
 
         val message = WebSocketMessage(type = MessageType.JOIN, sender = "eve", gameId = null)
-        val accessor = SimpMessageHeaderAccessor.create()
-        accessor.sessionAttributes = mutableMapOf()
 
         controller.addUser(message, accessor)
 
@@ -129,40 +128,36 @@ class WebSocketControllerTests {
 
     @Test
     fun `addUser does not register session when sessionId is null`() {
-        val foundUser = user(id = 7, username = "frank")
-        whenever(userDao.findByUsername("frank")).thenReturn(foundUser)
-
         val message = WebSocketMessage(type = MessageType.JOIN, sender = "frank", gameId = 2)
-        // SimpMessageHeaderAccessor.create() without setting sessionId → sessionId is null
-        val accessor = SimpMessageHeaderAccessor.create()
-        accessor.sessionAttributes = mutableMapOf()
+        // accessor without sessionId set → sessionId is null
+        val accessor = SimpMessageHeaderAccessor.create().apply {
+            sessionAttributes = mutableMapOf()
+            user = UserPrincipal(userId = 7, username = "frank")
+        }
 
         controller.addUser(message, accessor)
 
-        verify(lobbyService).addUserToLobby(2, foundUser.id)
+        verify(lobbyService).addUserToLobby(2, 7)
         verify(connectionTracker, never()).register(any(), any(), any())
     }
 
     @Test
     fun `addUser maps reconnecting user to active in-progress game and sends SYNC`() {
-        val foundUser = user(id = 11, username = "gina")
-        whenever(userDao.findByUsername("gina")).thenReturn(foundUser)
-        whenever(gameSyncService.findActiveInProgressGameId(foundUser.id)).thenReturn(7)
+        whenever(gameSyncService.findActiveInProgressGameId(11)).thenReturn(7)
         whenever(gameSyncService.buildSnapshot(7)).thenReturn(mock<GameStateDto>())
 
+        val accessor = authenticatedAccessor(userId = 11, username = "gina", sessionId = "session-rejoin")
         val message = WebSocketMessage(type = MessageType.JOIN, sender = "gina", gameId = null)
-        val accessor = SimpMessageHeaderAccessor.create()
-        accessor.sessionId = "session-rejoin"
-        accessor.sessionAttributes = mutableMapOf()
 
         controller.addUser(message, accessor)
 
-        verify(lobbyService).addUserToLobby(7, foundUser.id)
-        verify(connectionTracker).register("session-rejoin", foundUser.id, 7)
+        verify(lobbyService).addUserToLobby(7, 11)
+        verify(connectionTracker).register("session-rejoin", 11, 7)
 
         val captor = argumentCaptor<WebSocketMessage>()
+        // convertAndSendToUser first arg must be the principal name, not the sessionId
         verify(messagingTemplate).convertAndSendToUser(
-            eq("session-rejoin"),
+            eq("gina"),
             eq("/queue/game-sync"),
             captor.capture(),
             any<Map<String, Any>>(),
@@ -171,29 +166,25 @@ class WebSocketControllerTests {
         assertEquals(7, captor.firstValue.gameId)
         @Suppress("UNCHECKED_CAST")
         val payload = captor.firstValue.payload as Map<String, Any>
-        assertEquals(foundUser.id, payload["targetUserId"])
+        assertEquals(11, payload["targetUserId"])
         assertEquals("session-rejoin", payload["targetSessionId"])
     }
 
     @Test
     fun `addUser handles transition race by re-mapping user and syncing state`() {
-        val foundUser = user(id = 12, username = "harry")
-        whenever(userDao.findByUsername("harry")).thenReturn(foundUser)
-        whenever(gameSyncService.findActiveInProgressGameId(foundUser.id)).thenReturn(null, 3, 3)
-        whenever(lobbyService.addUserToLobby(3, foundUser.id)).thenThrow(GameStartedException("already started"))
+        whenever(gameSyncService.findActiveInProgressGameId(12)).thenReturn(null, 3, 3)
+        whenever(lobbyService.addUserToLobby(3, 12)).thenThrow(GameStartedException("already started"))
         whenever(gameSyncService.buildSnapshot(3)).thenReturn(mock<GameStateDto>())
 
+        val accessor = authenticatedAccessor(userId = 12, username = "harry", sessionId = "session-race")
         val message = WebSocketMessage(type = MessageType.JOIN, sender = "harry", gameId = 3)
-        val accessor = SimpMessageHeaderAccessor.create()
-        accessor.sessionId = "session-race"
-        accessor.sessionAttributes = mutableMapOf()
 
         controller.addUser(message, accessor)
 
-        verify(connectionTracker).register("session-race", foundUser.id, 3)
+        verify(connectionTracker).register("session-race", 12, 3)
         val captor = argumentCaptor<WebSocketMessage>()
         verify(messagingTemplate).convertAndSendToUser(
-            eq("session-race"),
+            eq("harry"),
             eq("/queue/game-sync"),
             captor.capture(),
             any<Map<String, Any>>(),
@@ -201,25 +192,24 @@ class WebSocketControllerTests {
         assertEquals(MessageType.SYNC, captor.firstValue.type)
         @Suppress("UNCHECKED_CAST")
         val payload = captor.firstValue.payload as Map<String, Any>
-        assertEquals(foundUser.id, payload["targetUserId"])
+        assertEquals(12, payload["targetUserId"])
         assertEquals("session-race", payload["targetSessionId"])
     }
 
     @Test
     fun `syncGameState publishes SYNC for connected player with active game`() {
-        whenever(connectionTracker.getUserId("session-sync")).thenReturn(50)
         whenever(gameSyncService.findActiveInProgressGameId(50)).thenReturn(8)
         whenever(gameSyncService.isInProgress(8)).thenReturn(true)
         whenever(gameSyncService.buildSnapshot(8)).thenReturn(mock<GameStateDto>())
 
-        val accessor = SimpMessageHeaderAccessor.create()
-        accessor.sessionId = "session-sync"
+        val accessor = authenticatedAccessor(userId = 50, username = "sync-user", sessionId = "session-sync")
 
         controller.syncGameState(SyncGameRequest(gameId = null), accessor)
 
         val captor = argumentCaptor<WebSocketMessage>()
+        // First arg must be the principal name, not the sessionId
         verify(messagingTemplate).convertAndSendToUser(
-            eq("session-sync"),
+            eq("sync-user"),
             eq("/queue/game-sync"),
             captor.capture(),
             any<Map<String, Any>>(),
@@ -233,11 +223,11 @@ class WebSocketControllerTests {
     }
 
     @Test
-    fun `syncGameState does nothing when session is unknown`() {
-        whenever(connectionTracker.getUserId("session-missing")).thenReturn(null)
-
-        val accessor = SimpMessageHeaderAccessor.create()
-        accessor.sessionId = "session-missing"
+    fun `syncGameState does nothing when principal is missing`() {
+        // No UserPrincipal on the accessor — should reject silently
+        val accessor = SimpMessageHeaderAccessor.create().apply {
+            sessionId = "session-no-principal"
+        }
 
         controller.syncGameState(SyncGameRequest(gameId = 1), accessor)
 
@@ -251,11 +241,9 @@ class WebSocketControllerTests {
 
     @Test
     fun `syncGameState rejects explicit gameId when user is not a member`() {
-        whenever(connectionTracker.getUserId("session-unauthorized")).thenReturn(70)
         whenever(gameSyncService.isUserInGame(70, 99)).thenReturn(false)
 
-        val accessor = SimpMessageHeaderAccessor.create()
-        accessor.sessionId = "session-unauthorized"
+        val accessor = authenticatedAccessor(userId = 70, username = "unauthorized-user", sessionId = "session-unauthorized")
 
         controller.syncGameState(SyncGameRequest(gameId = 99), accessor)
 
@@ -268,3 +256,4 @@ class WebSocketControllerTests {
         verify(gameSyncService, never()).buildSnapshot(any())
     }
 }
+
