@@ -5,8 +5,10 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.dao.GameDao
+import org.machikoro.server.dao.GameMarketplaceDao
 import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
+import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
@@ -24,13 +26,21 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 
+/**
+ * Fast behavior-level checks for lobby service branching.
+ *
+ * startGame has DB-backed coverage in LobbyServiceIntegrationTest for the
+ * transactional setup path.
+ */
 class LobbyServiceTest {
 
     private val gameDao = mock<GameDao>()
     private val playerDao = mock<PlayerDao>()
     private val playerCardDao = mock<PlayerCardDao>()
+    private val gameMarketplaceDao = mock<GameMarketplaceDao>()
+    private val playerLandmarkDao = mock<PlayerLandmarkDao>()
     private val connectionTracker = mock<WebSocketConnectionTracker>()
-    private val lobbyService = LobbyService(gameDao, playerDao, playerCardDao, connectionTracker)
+    private val lobbyService = LobbyService(gameDao, playerDao, playerCardDao, gameMarketplaceDao, playerLandmarkDao, connectionTracker)
 
     // ── helpers ──────────────────────────────────────────────────────────────
 

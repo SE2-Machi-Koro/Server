@@ -1,8 +1,11 @@
 package org.machikoro.server.service
 
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.machikoro.server.dao.GameDao
+import org.machikoro.server.dao.GameMarketplaceDao
 import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
+import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.models.GameModel
@@ -14,13 +17,14 @@ import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.exception.LobbyFullException
 import org.machikoro.server.exception.NotHostException
 import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Transactional
 
 @Service
 class LobbyService(
     private val gameDao: GameDao,
     private val playerDao: PlayerDao,
     private val playerCardDao: PlayerCardDao,
+    private val gameMarketplaceDao: GameMarketplaceDao,
+    private val playerLandmarkDao: PlayerLandmarkDao,
     private val connectionTracker: WebSocketConnectionTracker,
 ) {
 
@@ -82,18 +86,19 @@ class LobbyService(
      * 5. Shuffle player IDs to produce a random turn order and persist it.
      * 6. Initialize each player's starting hand: 1× WHEAT_FIELD + 1× BAKERY
      *    (coins default to 3 and are already set by [PlayerDao.addPlayer]).
-     * 7. Flip game status to IN_PROGRESS.
+     * 7. Initialize the game marketplace supply and per-player landmark state.
+     * 8. Flip game status to IN_PROGRESS.
      *
-     * The entire sequence runs inside a single database transaction so that any
-     * mid-sequence failure rolls back completely and the lobby never wedges in
+     * The entire sequence runs inside a single Exposed database transaction so that
+     * any mid-sequence failure rolls back completely and the lobby never wedges in
      * an inconsistent state.
      *
      * @param gameId           ID of the game to start.
      * @param requestingUserId User ID of the caller — must be the host.
      * @return [GameStateDto] ready to be broadcast via WebSocket.
      */
-    @Transactional
     fun startGame(gameId: Int, requestingUserId: Int): GameStateDto {
+        return transaction {
         // 1. Load game
         val game = gameDao.findById(gameId)
             ?: throw GameNotFoundException("Game with id $gameId not found")
@@ -122,8 +127,14 @@ class LobbyService(
         }
 
         // 5. Randomize turn order and persist
+        // Two-pass approach: first shift all players to a temporary range to avoid
+        // unique (gameId, turnOrder) constraint violations during intermediate states.
         val shuffledPlayers = activePlayers.shuffled()
         val shuffledPlayerIds = shuffledPlayers.map { it.id }
+        val tempOffset = 10_000
+        allPlayers.forEachIndexed { index, player ->
+            playerDao.updateTurnOrder(player.id, tempOffset + index)
+        }
         shuffledPlayers.forEachIndexed { index, player ->
             playerDao.updateTurnOrder(player.id, index)
         }
@@ -134,7 +145,13 @@ class LobbyService(
             playerCardDao.upsert(player.id, CardType.BAKERY, 1)
         }
 
-        // 7. Flip game to IN_PROGRESS
+        // 7. Initialize marketplace supply and per-player landmark state
+        gameMarketplaceDao.initForGame(gameId)
+        activePlayers.forEach { player ->
+            playerLandmarkDao.initForPlayer(player.id)
+        }
+
+        // 8. Flip game to IN_PROGRESS
         gameDao.updateStatus(gameId, GameStatus.IN_PROGRESS)
         val updatedGame: GameModel = game.copy(status = GameStatus.IN_PROGRESS)
 
@@ -148,11 +165,12 @@ class LobbyService(
             player.id to playerCardDao.findByPlayerId(player.id)
         }
 
-        return GameStateDto(
+        GameStateDto(
             game = updatedGame,
             players = finalPlayers,
             playerCards = playerCards,
             turnOrder = shuffledPlayerIds,
         )
+        }
     }
 }

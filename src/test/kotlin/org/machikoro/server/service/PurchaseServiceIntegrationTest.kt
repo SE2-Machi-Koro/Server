@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.GameMarketplaceDao
 import org.machikoro.server.dao.PlayerCardDao
@@ -26,13 +27,25 @@ import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.LandmarkType
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.dto.PurchaseType
+import org.machikoro.server.exception.CustomWebSocketException
+import org.machikoro.server.service.interfaces.EarningsService
 import org.springframework.beans.factory.annotation.Autowired
 import kotlin.test.Test
 
+/**
+ * DB-backed regression coverage for the buying-phase purchase flow.
+ *
+ * These tests focus on the hardening added after the first purchase
+ * implementation: one purchase per turn, no-mutation failures, and purchased
+ * establishments working in later turns.
+ */
 class PurchaseServiceIntegrationTest : AbstractDBSetup() {
 
     @Autowired
     private lateinit var purchaseService: PurchaseService
+
+    @Autowired
+    private lateinit var earningsService: EarningsService
 
     @Autowired
     private lateinit var gameDao: GameDao
@@ -51,6 +64,7 @@ class PurchaseServiceIntegrationTest : AbstractDBSetup() {
 
     private var gameId: Int = 0
     private var activePlayerId: Int = 0
+    private var inactivePlayerId: Int = 0
 
     @BeforeEach
     fun setup() {
@@ -72,6 +86,14 @@ class PurchaseServiceIntegrationTest : AbstractDBSetup() {
                 it[diceMin] = 2
                 it[diceMax] = 3
                 it[income] = 1
+            }
+
+            Cards.insert {
+                it[cardType] = CardType.STADIUM
+                it[cost] = 6
+                it[diceMin] = 6
+                it[diceMax] = 6
+                it[income] = 2
             }
 
             Landmarks.insert {
@@ -99,12 +121,13 @@ class PurchaseServiceIntegrationTest : AbstractDBSetup() {
                 it[hasPurchasedThisTurn] = false
             } get Games.id).value
 
-            // Updated for new PlayerDao API
             activePlayerId = playerDao.addPlayer(gameId, user1Id).id
-            playerDao.addPlayer(gameId, user2Id)
+            inactivePlayerId = playerDao.addPlayer(gameId, user2Id).id
 
-            // Override default starting coins (3) for test setup
             playerDao.updateCoins(activePlayerId, 6)
+            gameMarketplaceDao.initForGame(gameId)
+            playerLandmarkDao.initForPlayer(activePlayerId)
+            playerLandmarkDao.initForPlayer(inactivePlayerId)
         }
     }
 
@@ -167,4 +190,213 @@ class PurchaseServiceIntegrationTest : AbstractDBSetup() {
 
         assertFalse(gameDao.findById(gameId)!!.hasPurchasedThisTurn)
     }
+
+    @Test
+    fun `second purchase in same turn is rejected without mutating state`() {
+        purchaseService.purchase(
+            gameId,
+            PurchaseType.ESTABLISHMENT,
+            CardType.BAKERY,
+            null
+        )
+
+        val before = snapshot()
+
+        val ex = assertThrows<CustomWebSocketException> {
+            purchaseService.purchase(
+                gameId,
+                PurchaseType.LANDMARK,
+                null,
+                LandmarkType.TRAIN_STATION
+            )
+        }
+
+        assertEquals("PURCHASE_ALREADY_MADE", ex.errorCode)
+        assertEquals(before, snapshot())
+    }
+
+    @Test
+    fun `purchase outside buy or build phase does not mutate state`() {
+        gameDao.updateTurnPhase(gameId, TurnPhase.RESOLVE_EFFECTS)
+        val before = snapshot()
+
+        val ex = assertThrows<CustomWebSocketException> {
+            purchaseService.purchase(
+                gameId,
+                PurchaseType.ESTABLISHMENT,
+                CardType.BAKERY,
+                null
+            )
+        }
+
+        assertEquals("INVALID_TURN_PHASE", ex.errorCode)
+        assertEquals(before, snapshot())
+    }
+
+    @Test
+    fun `establishment purchase with insufficient coins does not mutate state`() {
+        playerDao.updateCoins(activePlayerId, 0)
+        val before = snapshot()
+
+        val ex = assertThrows<CustomWebSocketException> {
+            purchaseService.purchase(
+                gameId,
+                PurchaseType.ESTABLISHMENT,
+                CardType.BAKERY,
+                null
+            )
+        }
+
+        assertEquals("INSUFFICIENT_COINS", ex.errorCode)
+        assertEquals(before, snapshot())
+    }
+
+    @Test
+    fun `landmark purchase with insufficient coins does not mutate state`() {
+        playerDao.updateCoins(activePlayerId, 3)
+        val before = snapshot()
+
+        val ex = assertThrows<CustomWebSocketException> {
+            purchaseService.purchase(
+                gameId,
+                PurchaseType.LANDMARK,
+                null,
+                LandmarkType.TRAIN_STATION
+            )
+        }
+
+        assertEquals("INSUFFICIENT_COINS", ex.errorCode)
+        assertEquals(before, snapshot())
+    }
+
+    @Test
+    fun `unavailable establishment supply does not mutate state`() {
+        gameMarketplaceDao.updateQuantity(gameId, CardType.BAKERY, 0)
+        val before = snapshot()
+
+        val ex = assertThrows<CustomWebSocketException> {
+            purchaseService.purchase(
+                gameId,
+                PurchaseType.ESTABLISHMENT,
+                CardType.BAKERY,
+                null
+            )
+        }
+
+        assertEquals("CARD_UNAVAILABLE", ex.errorCode)
+        assertEquals(before, snapshot())
+    }
+
+    @Test
+    fun `already built landmark does not mutate state`() {
+        playerLandmarkDao.markBuilt(activePlayerId, LandmarkType.TRAIN_STATION)
+        val before = snapshot()
+
+        val ex = assertThrows<CustomWebSocketException> {
+            purchaseService.purchase(
+                gameId,
+                PurchaseType.LANDMARK,
+                null,
+                LandmarkType.TRAIN_STATION
+            )
+        }
+
+        assertEquals("LANDMARK_ALREADY_BUILT", ex.errorCode)
+        assertEquals(before, snapshot())
+    }
+
+    @Test
+    fun `malformed establishment purchase requests do not mutate state`() {
+        val before = snapshot()
+
+        val bothFields = assertThrows<CustomWebSocketException> {
+            purchaseService.purchase(
+                gameId,
+                PurchaseType.ESTABLISHMENT,
+                CardType.BAKERY,
+                LandmarkType.TRAIN_STATION
+            )
+        }
+
+        val neitherField = assertThrows<CustomWebSocketException> {
+            purchaseService.purchase(
+                gameId,
+                PurchaseType.ESTABLISHMENT,
+                null,
+                null
+            )
+        }
+
+        assertEquals("INVALID_PURCHASE_REQUEST", bothFields.errorCode)
+        assertEquals("INVALID_PURCHASE_REQUEST", neitherField.errorCode)
+        assertEquals(before, snapshot())
+    }
+
+    @Test
+    fun `malformed landmark purchase requests do not mutate state`() {
+        val before = snapshot()
+
+        val bothFields = assertThrows<CustomWebSocketException> {
+            purchaseService.purchase(
+                gameId,
+                PurchaseType.LANDMARK,
+                CardType.BAKERY,
+                LandmarkType.TRAIN_STATION
+            )
+        }
+
+        val neitherField = assertThrows<CustomWebSocketException> {
+            purchaseService.purchase(
+                gameId,
+                PurchaseType.LANDMARK,
+                null,
+                null
+            )
+        }
+
+        assertEquals("INVALID_PURCHASE_REQUEST", bothFields.errorCode)
+        assertEquals("INVALID_PURCHASE_REQUEST", neitherField.errorCode)
+        assertEquals(before, snapshot())
+    }
+
+    @Test
+    fun `purchased establishment contributes to earnings in a later turn`() {
+        purchaseService.purchase(
+            gameId,
+            PurchaseType.ESTABLISHMENT,
+            CardType.BAKERY,
+            null
+        )
+
+        gameDao.advanceTurn(gameId, nextTurnIndex = 1, roundNumber = 1)
+        gameDao.advanceTurn(gameId, nextTurnIndex = 0, roundNumber = 2)
+        gameDao.updateAfterRoll(gameId, diceRoll = 2, phase = TurnPhase.RESOLVE_EFFECTS)
+
+        earningsService.resolveEffects(gameId)
+
+        assertEquals(6, playerDao.findById(activePlayerId)!!.coins)
+    }
+
+    private fun snapshot() = PurchaseStateSnapshot(
+        activeCoins = playerDao.findById(activePlayerId)!!.coins,
+        bakeryQuantity = playerCardDao.findByPlayerId(activePlayerId)
+            .firstOrNull { it.cardType == CardType.BAKERY }
+            ?.quantity
+            ?: 0,
+        bakerySupply = gameMarketplaceDao.findByGameIdAndType(gameId, CardType.BAKERY)
+            ?.quantityAvailable
+            ?: 0,
+        trainStationBuilt = playerLandmarkDao.findByPlayerIdAndType(activePlayerId, LandmarkType.TRAIN_STATION)
+            ?.isBuilt
+            ?: false,
+        hasPurchasedThisTurn = gameDao.findById(gameId)!!.hasPurchasedThisTurn,
+    )
+
+    private data class PurchaseStateSnapshot(
+        val activeCoins: Int,
+        val bakeryQuantity: Int,
+        val bakerySupply: Int,
+        val trainStationBuilt: Boolean,
+        val hasPurchasedThisTurn: Boolean,
+    )
 }
