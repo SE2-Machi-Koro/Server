@@ -1,7 +1,6 @@
 package org.machikoro.server.controller
 
 import org.machikoro.server.domain.enums.TurnPhase
-import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.dto.EndTurnOutcome
 import org.machikoro.server.dto.EndTurnRequest
 import org.machikoro.server.dto.LeaveFinishedGameRequest
@@ -60,8 +59,8 @@ class GameController(
                 broadcastPhase(request.gameId, result.nextPhase)
             }
             is EndTurnOutcome.Won -> {
-                logger.info("Game ${request.gameId} finished, winner=${result.winner.id}")
-                broadcastWinner(request.gameId, result.winner)
+                logger.info("Game ${request.gameId} finished, winner=${result.winnerId}")
+                broadcastWinner(request.gameId, result.winnerId)
             }
         }
     }
@@ -144,13 +143,13 @@ class GameController(
         )
     }
 
-    private fun broadcastWinner(gameId: Int, winner: PlayerModel) {
+    private fun broadcastWinner(gameId: Int, winnerId: Int) {
         messagingTemplate.convertAndSend(
             "/topic/game/$gameId",
             WebSocketMessage(
                 type = MessageType.GAME_END,
                 sender = "server",
-                payload = mapOf("winnerId" to winner.id)
+                payload = mapOf("winnerId" to winnerId)
             )
         )
     }

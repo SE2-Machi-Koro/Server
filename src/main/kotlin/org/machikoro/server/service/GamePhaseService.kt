@@ -57,7 +57,7 @@ class GamePhaseService(
         winConditionService.detectWinner(gameId)?.let { winner ->
             userDao.incrementWins(winner.userId)
             finishGame(gameId)
-            return EndTurnOutcome.Won(winner)
+            return EndTurnOutcome.Won(winner.id)
         }
 
         val nextPhase = advanceTurn(gameId)
