@@ -7,13 +7,14 @@ enum class MessageType {
     CHAT,
     JOIN,
     LEAVE,
+    LOBBY_CREATED,
     GAME_START,
     GAME_STARTED,
     GAME_ACTION,
     GAME_END,
     PLAYER_LEFT_FINISHED_GAME,
     ERROR,
-    ROLL_DICE
+    ROLL_DICE,
 }
 
 @Schema(description = "Message broadcast to all clients via WebSocket")

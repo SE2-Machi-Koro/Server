@@ -14,6 +14,7 @@ import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.exception.LobbyFullException
 import org.mockito.kotlin.any
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -30,7 +31,13 @@ class LobbyServiceTest {
     private val playerDao = mock<PlayerDao>()
     private val gameMarketplaceDao = mock<GameMarketplaceDao>()
     private val playerLandmarkDao = mock<PlayerLandmarkDao>()
-    private val lobbyService = LobbyService(gameDao, playerDao, gameMarketplaceDao, playerLandmarkDao)
+
+    // Anonymous subclass that bypasses the real Exposed transaction so this
+    // unit test doesn't need a database. Methods that don't call
+    // runInTransaction (e.g. addUserToLobby) are unaffected.
+    private val lobbyService = object : LobbyService(gameDao, playerDao, gameMarketplaceDao, playerLandmarkDao) {
+        override fun <T> runInTransaction(block: () -> T): T = block()
+    }
 
     private fun game(id: Int, status: GameStatus) =
         GameModel(
@@ -92,6 +99,37 @@ class LobbyServiceTest {
 
         assertThrows<LobbyFullException> {
             lobbyService.addUserToLobby(gameId, 10)
+        }
+    }
+
+    @Test
+    fun `createLobby creates a game and returns the persisted GameModel`() {
+        val hostUserId = 7
+        val gameId = 42
+        val expected = game(gameId, GameStatus.WAITING)
+        // gameDao.create has default args (lobbyCode, maxPlayers) that the
+        // production caller leaves to defaults. Mockito sees the full
+        // bytecode-level call so we match any() for the optional params.
+        whenever(gameDao.create(eq(hostUserId), any(), any())).thenReturn(gameId)
+        whenever(gameDao.findById(gameId)).thenReturn(expected)
+
+        val result = lobbyService.createLobby(hostUserId)
+
+        kotlin.test.assertEquals(expected, result)
+        verify(gameDao).create(eq(hostUserId), any(), any())
+        verify(gameDao).findById(gameId)
+    }
+
+    @Test
+    fun `createLobby throws GameNotFoundException when the re-fetch returns null`() {
+        // Defensive — gameDao.create returned an id but findById missed it. Should
+        // never happen with a well-behaved DAO + transaction, but the assertion
+        // documents the intent and is cheap to test.
+        whenever(gameDao.create(any(), any(), any())).thenReturn(99)
+        whenever(gameDao.findById(99)).thenReturn(null)
+
+        assertThrows<GameNotFoundException> {
+            lobbyService.createLobby(7)
         }
     }
 
