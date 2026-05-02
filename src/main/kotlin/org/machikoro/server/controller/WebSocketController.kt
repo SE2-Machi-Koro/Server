@@ -1,5 +1,7 @@
 package org.machikoro.server.controller
 
+import io.micrometer.core.instrument.Metrics
+import io.micrometer.core.instrument.Timer
 import org.machikoro.server.dao.UserDao
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.SyncGameRequest
@@ -16,6 +18,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate
 import org.springframework.messaging.simp.SimpMessageType
 import org.springframework.stereotype.Controller
 import org.slf4j.LoggerFactory
+import java.util.concurrent.TimeUnit
 
 @Controller
 class WebSocketController(
@@ -26,6 +29,12 @@ class WebSocketController(
     private val messagingTemplate: SimpMessagingTemplate,
 ) {
     private val logger = LoggerFactory.getLogger(WebSocketController::class.java)
+
+    companion object {
+        private const val SYNC_SUCCESS_METRIC = "machikoro.reconnect.sync.success.total"
+        private const val SYNC_FAILURE_METRIC = "machikoro.reconnect.sync.failure.total"
+        private const val SYNC_LATENCY_METRIC = "machikoro.reconnect.sync.latency.ms"
+    }
 
     /**
      * Handle incoming chat messages and broadcast to all subscribers.
@@ -78,7 +87,12 @@ class WebSocketController(
                 val syncGameId = gameSyncService.findActiveInProgressGameId(user.id)
 
                 if (syncGameId != null && sessionId != null) {
-                    publishSync(sessionId, user.id, syncGameId)
+                    emitSyncWithTelemetry(
+                        source = "chat.addUser",
+                        sessionId = sessionId,
+                        userId = user.id,
+                        gameId = syncGameId,
+                    )
                 }
             }
         }
@@ -94,21 +108,74 @@ class WebSocketController(
         @Payload request: SyncGameRequest,
         headerAccessor: SimpMessageHeaderAccessor,
     ) {
-        val sessionId = headerAccessor.sessionId ?: return
-        val userId = connectionTracker.getUserId(sessionId) ?: return
+        val sessionId = headerAccessor.sessionId
+        if (sessionId == null) {
+            recordSyncFailure(source = "game.sync", reason = "missing_session")
+            return
+        }
+
+        val userId = connectionTracker.getUserId(sessionId)
+        if (userId == null) {
+            recordSyncFailure(source = "game.sync", reason = "unknown_session")
+            return
+        }
 
         if (request.gameId != null && !gameSyncService.isUserInGame(userId, request.gameId)) {
             logger.warn("SYNC rejected for userId={} on unrelated gameId={}", userId, request.gameId)
+            recordSyncFailure(source = "game.sync", reason = "unauthorized_game")
             return
         }
 
         val resolvedGameId = request.gameId ?: gameSyncService.findActiveInProgressGameId(userId)
         if (resolvedGameId == null || !gameSyncService.isInProgress(resolvedGameId)) {
             logger.info("SYNC skipped for userId={} - no active in-progress game", userId)
+            recordSyncFailure(source = "game.sync", reason = "no_active_game")
             return
         }
 
-        publishSync(sessionId, userId, resolvedGameId)
+        emitSyncWithTelemetry(
+            source = "game.sync",
+            sessionId = sessionId,
+            userId = userId,
+            gameId = resolvedGameId,
+        )
+    }
+
+    private fun emitSyncWithTelemetry(
+        source: String,
+        sessionId: String,
+        userId: Int,
+        gameId: Int,
+    ) {
+        val startedNs = System.nanoTime()
+        runCatching { publishSync(sessionId, userId, gameId) }
+            .onSuccess {
+                val elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNs)
+                Metrics.counter(SYNC_SUCCESS_METRIC, "source", source).increment()
+                Timer.builder(SYNC_LATENCY_METRIC)
+                    .tag("source", source)
+                    .register(Metrics.globalRegistry)
+                    .record(elapsedMs, TimeUnit.MILLISECONDS)
+            }
+            .onFailure { ex ->
+                logger.warn(
+                    "SYNC publish failed (source={}, sessionId={}, userId={}, gameId={})",
+                    source,
+                    sessionId,
+                    userId,
+                    gameId,
+                    ex,
+                )
+                recordSyncFailure(source = source, reason = "publish_failed")
+            }
+    }
+
+    private fun recordSyncFailure(source: String, reason: String) {
+        Metrics.counter(
+            SYNC_FAILURE_METRIC,
+            "source", source,
+            "reason", reason,
+        ).increment()
     }
 
     private fun publishSync(sessionId: String, userId: Int, gameId: Int) {
@@ -127,6 +194,7 @@ class WebSocketController(
                 content = "State sync for reconnecting player",
                 payload = mapOf(
                     "targetUserId" to userId,
+                    "targetSessionId" to sessionId,
                     "state" to snapshot,
                 ),
                 gameId = gameId,
