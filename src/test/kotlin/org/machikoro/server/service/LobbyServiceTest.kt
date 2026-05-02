@@ -40,7 +40,11 @@ class LobbyServiceTest {
     private val gameMarketplaceDao = mock<GameMarketplaceDao>()
     private val playerLandmarkDao = mock<PlayerLandmarkDao>()
     private val connectionTracker = mock<WebSocketConnectionTracker>()
-    private val lobbyService = LobbyService(gameDao, playerDao, playerCardDao, gameMarketplaceDao, playerLandmarkDao, connectionTracker)
+    private val lobbyService = object : LobbyService(gameDao, playerDao, playerCardDao, gameMarketplaceDao, playerLandmarkDao, connectionTracker) {
+        // Bypass Exposed transaction block so these pure-mock unit tests
+        // don't need a real database connection.
+        override fun <T> runInTransaction(block: () -> T): T = block()
+    }
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
