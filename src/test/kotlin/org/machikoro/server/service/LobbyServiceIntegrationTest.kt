@@ -101,7 +101,7 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
     fun `startGame sets status and initializes marketplace and landmark rows`() {
         val result = lobbyService.startGame(gameId)
 
-        assertEquals(GameStatus.IN_PROGRESS, result.status)
+        assertEquals(GameStatus.IN_PROGRESS, result.game.status)
         assertTrue(gameMarketplaceDao.findByGameId(gameId).isNotEmpty())
         assertTrue(playerLandmarkDao.findByPlayerId(firstPlayerId).isNotEmpty())
         assertTrue(playerLandmarkDao.findByPlayerId(secondPlayerId).isNotEmpty())
