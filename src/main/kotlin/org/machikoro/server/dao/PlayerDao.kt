@@ -2,9 +2,9 @@ package org.machikoro.server.dao
 
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.JoinType
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.jdbc.innerJoin
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insertAndGetId
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -67,7 +67,11 @@ class PlayerDao {
      * Returns the most recent IN_PROGRESS game ID the given user belongs to.
      */
     fun findActiveGameIdByUserId(userId: Int): Int? = transaction {
-        (Players innerJoin Games)
+        Players.join(
+            Games,
+            JoinType.INNER,
+            additionalConstraint = { Players.gameId eq Games.id }
+        )
             .selectAll()
             .where { (Players.userId eq userId) and (Games.status eq GameStatus.IN_PROGRESS) }
             .orderBy(Games.id to SortOrder.DESC)
