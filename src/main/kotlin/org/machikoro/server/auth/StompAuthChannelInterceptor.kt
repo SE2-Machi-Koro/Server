@@ -73,7 +73,7 @@ class StompAuthChannelInterceptor(
     /**
      * Strip CR/LF so a malicious username can't inject extra log lines. Username
      * is already trimmed + lower-cased + length-limited at registration (#162),
-     * but charset isn't restricted yet (Server #170 follow-up). Cheap belt.
+     * but charset isn't restricted yet. Cheap belt.
      */
     private fun sanitizeForLog(value: String): String =
         value.replace(Regex("[\r\n]"), "_")
