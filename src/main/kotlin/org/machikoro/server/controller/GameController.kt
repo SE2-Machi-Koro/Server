@@ -1,5 +1,6 @@
 package org.machikoro.server.controller
 
+import java.security.Principal
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.dto.EndTurnOutcome
 import org.machikoro.server.domain.models.PlayerModel
@@ -14,6 +15,7 @@ import org.machikoro.server.dto.StartGameRequest
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.service.DiceService
 import org.machikoro.server.service.GamePhaseService
+import org.machikoro.server.service.GameStateGuard
 import org.machikoro.server.service.LeaveFinishedGameService
 import org.machikoro.server.service.LobbyService
 import org.machikoro.server.service.PurchaseResult
@@ -35,6 +37,7 @@ class GameController(
     private val diceService: DiceService,
     private val lobbyService: LobbyService,
     private val connectionTracker: WebSocketConnectionTracker,
+    private val gameStateGuard: GameStateGuard,
 ) {
     private val logger = LoggerFactory.getLogger(GameController::class.java)
 
@@ -113,7 +116,8 @@ class GameController(
      * Message is sent to /app/game.advancePhase and broadcast to /topic/game/{gameId}.
      */
     @MessageMapping("/game.advancePhase")
-    fun advancePhase(@Payload request: AdvancePhaseRequest) {
+    fun advancePhase(@Payload request: AdvancePhaseRequest, principal: Principal) {
+        gameStateGuard.ensureSenderIsActivePlayer(request.gameId, principal)
         val newPhase = gamePhaseService.advancePhase(request.gameId)
         logger.info("Advanced phase for game ${request.gameId} to $newPhase")
         broadcastPhase(request.gameId, newPhase)
@@ -125,7 +129,8 @@ class GameController(
      * landmark completes the game.
      */
     @MessageMapping("/game.purchase")
-    fun purchase(@Payload request: PurchaseRequest) {
+    fun purchase(@Payload request: PurchaseRequest, principal: Principal) {
+        gameStateGuard.ensureSenderIsActivePlayer(request.gameId, principal)
         val result = purchaseService.purchase(
             gameId = request.gameId,
             purchaseType = request.purchaseType,
@@ -138,7 +143,8 @@ class GameController(
     }
 
     @MessageMapping("/game.endTurn")
-    fun endTurn(@Payload request: EndTurnRequest) {
+    fun endTurn(@Payload request: EndTurnRequest, principal: Principal) {
+        gameStateGuard.ensureSenderIsActivePlayer(request.gameId, principal)
         when (val result = gamePhaseService.endTurn(request.gameId)) {
             is EndTurnOutcome.Continue -> {
                 logger.info("Ended turn for game ${request.gameId}, new phase ${result.nextPhase}")
@@ -152,7 +158,8 @@ class GameController(
     }
 
     @MessageMapping("/game.leave")
-    fun leaveFinishedGame(@Payload request: LeaveFinishedGameRequest) {
+    fun leaveFinishedGame(@Payload request: LeaveFinishedGameRequest, principal: Principal) {
+        gameStateGuard.ensureSenderOwnsPlayer(request.gameId, request.playerId, principal)
         leaveFinishedGameService.leaveFinishedGame(request.gameId, request.playerId)
         logger.info("${request.playerId} left game ${request.gameId}")
         broadcastPlayerLeftFinishedGame(request.gameId, request.playerId)
@@ -163,7 +170,8 @@ class GameController(
      * Message is sent to /app/game.rollDice and broadcast to /topic/game/{gameId}
      */
     @MessageMapping("/game.rollDice")
-    fun rollDice(@Payload request: RollDiceRequest) {
+    fun rollDice(@Payload request: RollDiceRequest, principal: Principal) {
+        gameStateGuard.ensureSenderIsActivePlayer(request.gameId, principal)
         val gameTopic = "/topic/game/${request.gameId}"
         logger.info("Roll dice request from player ${request.playerId} in game ${request.gameId}")
         try {

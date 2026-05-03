@@ -1,8 +1,10 @@
 package org.machikoro.server.controller
 
+import java.security.Principal
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.ResolveEffectsRequest
 import org.machikoro.server.dto.WebSocketMessage
+import org.machikoro.server.service.GameStateGuard
 import org.machikoro.server.service.interfaces.EarningsService
 import org.slf4j.LoggerFactory
 import org.springframework.messaging.handler.annotation.MessageMapping
@@ -16,7 +18,8 @@ import org.springframework.stereotype.Controller
 @Controller
 class EarningsController(
     private val earningsService: EarningsService,
-    private val messagingTemplate: SimpMessagingTemplate
+    private val messagingTemplate: SimpMessagingTemplate,
+    private val gameStateGuard: GameStateGuard,
 ) {
     private val logger = LoggerFactory.getLogger(EarningsController::class.java)
 
@@ -24,7 +27,8 @@ class EarningsController(
      * Resolves card effects for all players and broadcasts the result to the game topic.
      */
     @MessageMapping("/game.resolveEffects")
-    fun resolveEffects(@Payload request: ResolveEffectsRequest) {
+    fun resolveEffects(@Payload request: ResolveEffectsRequest, principal: Principal) {
+        gameStateGuard.ensureSenderIsActivePlayer(request.gameId, principal)
         val gameTopic = "/topic/game/${request.gameId}"
         try {
             earningsService.resolveEffects(request.gameId)

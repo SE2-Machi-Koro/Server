@@ -1,7 +1,10 @@
 package org.machikoro.server.controller
 
+import java.security.Principal
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
+import org.machikoro.server.auth.UserPrincipal
 import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.LandmarkType
@@ -20,9 +23,11 @@ import org.machikoro.server.dto.RollDiceRequest
 import org.machikoro.server.dto.RollDiceResponse
 import org.machikoro.server.dto.StartGameRequest
 import org.machikoro.server.dto.WebSocketMessage
+import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.exception.NotHostException
 import org.machikoro.server.service.DiceService
 import org.machikoro.server.service.GamePhaseService
+import org.machikoro.server.service.GameStateGuard
 import org.machikoro.server.service.LeaveFinishedGameService
 import org.machikoro.server.service.LobbyService
 import org.machikoro.server.service.PurchaseResult
@@ -48,10 +53,13 @@ class GameControllerTest {
     private val diceService = mock<DiceService>()
     private val lobbyService = mock<LobbyService>()
     private val connectionTracker = mock<WebSocketConnectionTracker>()
+    private val gameStateGuard = mock<GameStateGuard>()
     private val controller = GameController(
         gamePhaseService, messagingTemplate, leaveFinishedGameService,
-        purchaseService, diceService, lobbyService, connectionTracker
+        purchaseService, diceService, lobbyService, connectionTracker, gameStateGuard,
     )
+
+    private val principal: Principal = UserPrincipal(userId = 1, username = "alice")
 
     // ── startGame ─────────────────────────────────────────────────────────────
 
@@ -134,13 +142,16 @@ class GameControllerTest {
         assertEquals("START_FAILED", (message.payload as Map<String, Any>)["event"])
     }
 
+    // ── advancePhase ──────────────────────────────────────────────────────────
+
     @Test
     fun `advancePhase delegates to service with the requested game id`() {
         val gameId = 42
         whenever(gamePhaseService.advancePhase(gameId)).thenReturn(TurnPhase.RESOLVE_EFFECTS)
 
-        controller.advancePhase(AdvancePhaseRequest(gameId))
+        controller.advancePhase(AdvancePhaseRequest(gameId), principal)
 
+        verify(gameStateGuard).ensureSenderIsActivePlayer(gameId, principal)
         verify(gamePhaseService).advancePhase(gameId)
     }
 
@@ -149,7 +160,7 @@ class GameControllerTest {
         val gameId = 42
         whenever(gamePhaseService.advancePhase(gameId)).thenReturn(TurnPhase.RESOLVE_EFFECTS)
 
-        controller.advancePhase(AdvancePhaseRequest(gameId))
+        controller.advancePhase(AdvancePhaseRequest(gameId), principal)
 
         val captor = argumentCaptor<WebSocketMessage>()
         verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
@@ -161,13 +172,30 @@ class GameControllerTest {
     }
 
     @Test
+    fun `advancePhase propagates NOT_YOUR_TURN and does not call service`() {
+        val gameId = 42
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, principal))
+            .thenThrow(CustomWebSocketException("NOT_YOUR_TURN", "It is not your turn"))
+
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.advancePhase(AdvancePhaseRequest(gameId), principal)
+        }
+        assertEquals("NOT_YOUR_TURN", ex.errorCode)
+        verify(gamePhaseService, never()).advancePhase(any())
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+    }
+
+    // ── endTurn ───────────────────────────────────────────────────────────────
+
+    @Test
     fun `endTurn delegates to service with the requested game id`() {
         val gameId = 42
         whenever(gamePhaseService.endTurn(gameId))
             .thenReturn(EndTurnOutcome.Continue(TurnPhase.ROLL_DICE))
 
-        controller.endTurn(EndTurnRequest(gameId))
+        controller.endTurn(EndTurnRequest(gameId), principal)
 
+        verify(gameStateGuard).ensureSenderIsActivePlayer(gameId, principal)
         verify(gamePhaseService).endTurn(gameId)
     }
 
@@ -177,7 +205,7 @@ class GameControllerTest {
         whenever(gamePhaseService.endTurn(gameId))
             .thenReturn(EndTurnOutcome.Continue(TurnPhase.ROLL_DICE))
 
-        controller.endTurn(EndTurnRequest(gameId))
+        controller.endTurn(EndTurnRequest(gameId), principal)
 
         val captor = argumentCaptor<WebSocketMessage>()
         verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
@@ -196,7 +224,7 @@ class GameControllerTest {
         whenever(gamePhaseService.endTurn(gameId))
             .thenReturn(EndTurnOutcome.Won(winnerId))
 
-        controller.endTurn(EndTurnRequest(gameId))
+        controller.endTurn(EndTurnRequest(gameId), principal)
 
         val captor = argumentCaptor<WebSocketMessage>()
         verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
@@ -206,6 +234,22 @@ class GameControllerTest {
         assertEquals("server", message.sender)
         assertEquals(mapOf("winnerId" to winnerId), message.payload)
     }
+
+    @Test
+    fun `endTurn propagates NOT_YOUR_TURN and does not call service`() {
+        val gameId = 42
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, principal))
+            .thenThrow(CustomWebSocketException("NOT_YOUR_TURN", "It is not your turn"))
+
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.endTurn(EndTurnRequest(gameId), principal)
+        }
+        assertEquals("NOT_YOUR_TURN", ex.errorCode)
+        verify(gamePhaseService, never()).endTurn(any())
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+    }
+
+    // ── purchase ──────────────────────────────────────────────────────────────
 
     @Test
     fun `purchase delegates to service with the requested payload`() {
@@ -221,9 +265,11 @@ class GameControllerTest {
         )
 
         controller.purchase(
-            PurchaseRequest(gameId, PurchaseType.ESTABLISHMENT, cardType = CardType.BAKERY)
+            PurchaseRequest(gameId, PurchaseType.ESTABLISHMENT, cardType = CardType.BAKERY),
+            principal,
         )
 
+        verify(gameStateGuard).ensureSenderIsActivePlayer(gameId, principal)
         verify(purchaseService).purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.BAKERY, null)
     }
 
@@ -242,7 +288,8 @@ class GameControllerTest {
         )
 
         controller.purchase(
-            PurchaseRequest(gameId, PurchaseType.LANDMARK, landmarkType = LandmarkType.TRAIN_STATION)
+            PurchaseRequest(gameId, PurchaseType.LANDMARK, landmarkType = LandmarkType.TRAIN_STATION),
+            principal,
         )
 
         val captor = argumentCaptor<WebSocketMessage>()
@@ -262,13 +309,33 @@ class GameControllerTest {
     }
 
     @Test
+    fun `purchase propagates NOT_YOUR_TURN and does not call service`() {
+        val gameId = 42
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, principal))
+            .thenThrow(CustomWebSocketException("NOT_YOUR_TURN", "It is not your turn"))
+
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.purchase(
+                PurchaseRequest(gameId, PurchaseType.ESTABLISHMENT, cardType = CardType.BAKERY),
+                principal,
+            )
+        }
+        assertEquals("NOT_YOUR_TURN", ex.errorCode)
+        verify(purchaseService, never()).purchase(any(), any(), any(), any())
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+    }
+
+    // ── leaveFinishedGame ─────────────────────────────────────────────────────
+
+    @Test
     fun `leaveFinishedGame calls service before broadcasting`() {
         val gameId = 1
         val playerId = 10
 
-        controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId))
+        controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId), principal)
 
-        val order = inOrder(leaveFinishedGameService, messagingTemplate)
+        val order = inOrder(gameStateGuard, leaveFinishedGameService, messagingTemplate)
+        order.verify(gameStateGuard).ensureSenderOwnsPlayer(gameId, playerId, principal)
         order.verify(leaveFinishedGameService).leaveFinishedGame(gameId, playerId)
         order.verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), any<WebSocketMessage>())
     }
@@ -282,7 +349,7 @@ class GameControllerTest {
             .thenThrow(RuntimeException("boom"))
 
         org.junit.jupiter.api.assertThrows<RuntimeException> {
-            controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId))
+            controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId), principal)
         }
     }
 
@@ -291,7 +358,7 @@ class GameControllerTest {
         val gameId = 5
         val playerId = 20
 
-        controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId))
+        controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId), principal)
 
         verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), any<WebSocketMessage>())
     }
@@ -301,7 +368,7 @@ class GameControllerTest {
         val gameId = 3
         val playerId = 99
 
-        controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId))
+        controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId), principal)
 
         val captor = argumentCaptor<WebSocketMessage>()
         verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
@@ -312,6 +379,23 @@ class GameControllerTest {
     }
 
     @Test
+    fun `leaveFinishedGame propagates NOT_YOUR_PLAYER and does not call service`() {
+        val gameId = 3
+        val playerId = 99
+        whenever(gameStateGuard.ensureSenderOwnsPlayer(gameId, playerId, principal))
+            .thenThrow(CustomWebSocketException("NOT_YOUR_PLAYER", "You do not own player 99"))
+
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId), principal)
+        }
+        assertEquals("NOT_YOUR_PLAYER", ex.errorCode)
+        verify(leaveFinishedGameService, never()).leaveFinishedGame(any(), any())
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+    }
+
+    // ── rollDice ──────────────────────────────────────────────────────────────
+
+    @Test
     fun `rollDice broadcasts result to correct game topic`() {
         val gameId = 1
         val playerId = 2
@@ -320,8 +404,9 @@ class GameControllerTest {
 
         whenever(diceService.rollDice(request)).thenReturn(response)
 
-        controller.rollDice(request)
+        controller.rollDice(request, principal)
 
+        verify(gameStateGuard).ensureSenderIsActivePlayer(gameId, principal)
         val captor = argumentCaptor<WebSocketMessage>()
         verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
 
@@ -340,7 +425,7 @@ class GameControllerTest {
 
         whenever(diceService.rollDice(request)).thenThrow(RuntimeException("dice exploded"))
 
-        controller.rollDice(request)
+        controller.rollDice(request, principal)
 
         val captor = argumentCaptor<WebSocketMessage>()
         verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
@@ -352,5 +437,21 @@ class GameControllerTest {
             mapOf("event" to "ROLL_FAILED", "message" to "dice exploded"),
             message.payload
         )
+    }
+
+    @Test
+    fun `rollDice propagates NOT_YOUR_TURN and does not call service or broadcast`() {
+        val gameId = 1
+        val playerId = 2
+        val request = RollDiceRequest(gameId = gameId, playerId = playerId)
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, principal))
+            .thenThrow(CustomWebSocketException("NOT_YOUR_TURN", "It is not your turn"))
+
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.rollDice(request, principal)
+        }
+        assertEquals("NOT_YOUR_TURN", ex.errorCode)
+        verify(diceService, never()).rollDice(any())
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }
 }
