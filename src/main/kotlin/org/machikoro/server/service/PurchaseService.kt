@@ -41,9 +41,6 @@ class PurchaseService(
         cardType: CardType?,
         landmarkType: LandmarkType?,
     ): PurchaseResult = transaction {
-        // TODO(#160): Enforce active-player authorization on game-mutating WebSocket actions.
-        // Do not trust gameId from the client payload alone.
-
         val game = gameStateGuard.ensureGameIsRunning(gameId)
 
         if (game.turnPhase != TurnPhase.BUY_OR_BUILD) {
