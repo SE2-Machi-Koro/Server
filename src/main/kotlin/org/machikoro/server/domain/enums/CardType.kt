@@ -1,19 +1,20 @@
 package org.machikoro.server.domain.enums
 
-enum class CardType(val color: CardColor) {
-    WHEAT_FIELD(CardColor.BLUE),
-    RANCH(CardColor.BLUE),
-    FOREST(CardColor.BLUE),
-    MINE(CardColor.BLUE),
-    APPLE_ORCHARD(CardColor.BLUE),
-    BAKERY(CardColor.GREEN),
-    CONVENIENCE_STORE(CardColor.GREEN),
-    CHEESE_FACTORY(CardColor.GREEN),
-    FURNITURE_FACTORY(CardColor.GREEN),
-    FRUIT_AND_VEGETABLE_MARKET(CardColor.GREEN),
-    CAFE(CardColor.RED),
-    FAMILY_RESTAURANT(CardColor.RED),
-    STADIUM(CardColor.PURPLE),
-    TV_STATION(CardColor.PURPLE),
-    BUSINESS_CENTER(CardColor.PURPLE),
+enum class CardType(val color: CardColor, val establishmentType: EstablishmentType) {
+    WHEAT_FIELD(CardColor.BLUE, EstablishmentType.AGRICULTURE),
+    RANCH(CardColor.BLUE, EstablishmentType.LIVESTOCK),
+    FOREST(CardColor.BLUE, EstablishmentType.RESOURCE),
+    MINE(CardColor.BLUE, EstablishmentType.RESOURCE),
+    APPLE_ORCHARD(CardColor.BLUE, EstablishmentType.AGRICULTURE),
+    BAKERY(CardColor.GREEN, EstablishmentType.RETAIL),
+    CONVENIENCE_STORE(CardColor.GREEN, EstablishmentType.RETAIL),
+    CHEESE_FACTORY(CardColor.GREEN, EstablishmentType.INDUSTRY),
+    FURNITURE_FACTORY(CardColor.GREEN, EstablishmentType.INDUSTRY),
+    FRUIT_AND_VEGETABLE_MARKET(CardColor.GREEN, EstablishmentType.RETAIL),
+    CAFE(CardColor.RED, EstablishmentType.HOSPITALITY),
+    FAMILY_RESTAURANT(CardColor.RED, EstablishmentType.HOSPITALITY),
+    STADIUM(CardColor.PURPLE, EstablishmentType.MAJOR),
+    TV_STATION(CardColor.PURPLE, EstablishmentType.MAJOR),
+    BUSINESS_CENTER(CardColor.PURPLE, EstablishmentType.MAJOR),
+
 }
