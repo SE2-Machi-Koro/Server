@@ -206,10 +206,11 @@ class GamePhaseServiceTest {
         val gameId = 30
         val userId = 10
         val id = 1
+        val roundsPlayed = 10
         val winner = PlayerModel(id, gameId, userId, 0, 3, 30)
 
         whenever(gameStateGuard.ensureGameIsRunning(gameId))
-            .thenReturn(gameInPhase(gameId, TurnPhase.BUY_OR_BUILD))
+            .thenReturn(gameInPhase(gameId, TurnPhase.BUY_OR_BUILD, roundNumber = roundsPlayed ))
         whenever(winConditionService.detectWinner(gameId))
             .thenReturn(winner)
         whenever(playerDao.getPlayers(gameId))
@@ -221,6 +222,10 @@ class GamePhaseServiceTest {
         assertEquals(
             id,
             (result).winnerId
+        )
+        assertEquals(
+            roundsPlayed,
+            (result).roundsPlayed
         )
 
         verify(gameDao).updateTurnPhase(gameId, TurnPhase.END_TURN)

@@ -220,9 +220,10 @@ class GameControllerTest {
     fun `endTurn broadcasts GAME_END on game topic when winner exists`() {
         val gameId = 42
         val winnerId = 1
+        val roundsPlayed = 10
 
         whenever(gamePhaseService.endTurn(gameId))
-            .thenReturn(EndTurnOutcome.Won(winnerId))
+            .thenReturn(EndTurnOutcome.Won(winnerId, roundsPlayed))
 
         controller.endTurn(EndTurnRequest(gameId), principal)
 
@@ -232,7 +233,7 @@ class GameControllerTest {
         val message = captor.firstValue
         assertEquals(MessageType.GAME_END, message.type)
         assertEquals("server", message.sender)
-        assertEquals(mapOf("winnerId" to winnerId), message.payload)
+        assertEquals(mapOf("winnerId" to winnerId, "roundsPlayed" to roundsPlayed), message.payload)
     }
 
     @Test

@@ -3,7 +3,6 @@ package org.machikoro.server.controller
 import java.security.Principal
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.dto.EndTurnOutcome
-import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.dto.AdvancePhaseRequest
 import org.machikoro.server.dto.EndTurnRequest
 import org.machikoro.server.dto.GameStateDto
@@ -152,7 +151,7 @@ class GameController(
             }
             is EndTurnOutcome.Won -> {
                 logger.info("Game ${request.gameId} finished, winner=${result.winnerId}")
-                broadcastWinner(request.gameId, result.winnerId)
+                broadcastWin(request.gameId, result.winnerId, result.roundsPlayed)
             }
         }
     }
@@ -237,14 +236,17 @@ class GameController(
         )
     }
 
-    private fun broadcastWinner(gameId: Int, winnerId: Int) {
+    private fun broadcastWin(gameId: Int, winnerId: Int, roundsPlayed: Int) {
         messagingTemplate.convertAndSend(
             "/topic/game/$gameId",
             WebSocketMessage(
                 type = MessageType.GAME_END,
                 sender = "server",
-                payload = mapOf("winnerId" to winnerId)
-            )
+                payload = mapOf(
+                    "winnerId" to winnerId,
+                    "roundsPlayed" to roundsPlayed,
+                ),
+            ),
         )
     }
 }
