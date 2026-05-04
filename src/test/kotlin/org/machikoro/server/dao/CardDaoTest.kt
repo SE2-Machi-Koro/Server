@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test
 import org.machikoro.server.database.AbstractDBSetup
 import org.machikoro.server.database.Cards
 import org.machikoro.server.domain.enums.CardType
+import org.machikoro.server.domain.enums.EstablishmentType
 import org.machikoro.server.domain.utils.displayName
 
 class CardDaoTest : AbstractDBSetup() {
@@ -50,8 +51,9 @@ class CardDaoTest : AbstractDBSetup() {
     fun `findByCardType returns correct card`() {
         val card = dao.findByCardType(CardType.WHEAT_FIELD)
         assertNotNull(card)
-        assertEquals("Wheat Field", CardType.WHEAT_FIELD.displayName())
-        assertEquals(1, card!!.cost)
+        assertEquals("Wheat Field", card!!.cardType.displayName())
+        assertEquals(EstablishmentType.AGRICULTURE, card.cardType.establishmentType)
+        assertEquals(1, card.cost)
         assertEquals(1, card.diceMin)
         assertEquals(1, card.diceMax)
         assertEquals(1, card.income)
