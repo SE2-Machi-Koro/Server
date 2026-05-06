@@ -99,4 +99,4 @@ jobs:
             export PGADMIN_EMAIL='${{ secrets.PGADMIN_EMAIL }}'
             export PGADMIN_PASSWORD='${{ secrets.PGADMIN_PASSWORD }}'
 
-            docker compose up -d --build
+            docker compose up -d --build --pull always
