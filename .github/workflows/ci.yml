@@ -82,7 +82,19 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: 53210
           script: |
-            cd /opt/machi-koro-server
-            docker compose pull
+            cd /opt/machi-koro-server || exit 1
+
+            if [ ! -d ".git" ]; then
+              git clone https://github.com/SE2-Machi-Koro/Server.git .
+            fi
+
+            git pull origin main
+
+            export DB_USERNAME='${{ secrets.DB_USERNAME }}'
+            export DB_PASSWORD='${{ secrets.DB_PASSWORD }}'
+            export PGADMIN_EMAIL='${{ secrets.PGADMIN_EMAIL }}'
+            export PGADMIN_PASSWORD='${{ secrets.PGADMIN_PASSWORD }}'
+
             docker compose up -d --build
