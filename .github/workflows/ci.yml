@@ -73,19 +73,19 @@ jobs:
             set -euo pipefail
             DEPLOY_DIR="/opt/machi-koro-server"
             REPO_URL="https://github.com/SE2-Machi-Koro/Server.git"
-
+            
             if [ ! -d "$DEPLOY_DIR/.git" ]; then
               rm -rf "$DEPLOY_DIR"
               git clone "$REPO_URL" "$DEPLOY_DIR"
             fi
-
+            
             cd "$DEPLOY_DIR"
-
+            
             git fetch origin main
             git reset --hard origin/main
             
-            cat > .env <<'ENVEOF'
-            SERVER_PORT=${SERVER_PORT:-8080}
+            cat > .env <<-'ENVEOF'
+            SERVER_PORT=8080
             DB_HOST=postgres
             DB_PORT=5432
             DB_NAME=machikoro
@@ -95,7 +95,7 @@ jobs:
             PGADMIN_PASSWORD=${PGADMIN_PASSWORD}
             ENVEOF
             chmod 600 .env
-
+            
             docker compose up -d --build --pull always
         env:
           DB_USERNAME: ${{ secrets.DB_USERNAME }}
