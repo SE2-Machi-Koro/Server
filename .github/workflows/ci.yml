@@ -16,7 +16,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0  # Wichtig für SonarCloud (vollständige Git-History)
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
@@ -75,7 +75,6 @@ jobs:
             REPO_URL="https://github.com/SE2-Machi-Koro/Server.git"
 
             if [ ! -d "$DEPLOY_DIR/.git" ]; then
-              # Directory exists but is not a git repo — clear it before cloning
               rm -rf "$DEPLOY_DIR"
               git clone "$REPO_URL" "$DEPLOY_DIR"
             fi
@@ -85,13 +84,13 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
-            cat > .env <<'ENVEOF'
+            cat > .env.secrets <<'ENVEOF'
             DB_USERNAME=${DB_USERNAME}
             DB_PASSWORD=${DB_PASSWORD}
             PGADMIN_EMAIL=${PGADMIN_EMAIL}
             PGADMIN_PASSWORD=${PGADMIN_PASSWORD}
             ENVEOF
-            chmod 600 .env
+            chmod 600 .env.secrets
 
             docker compose up -d --build --pull always
         env:
