@@ -83,14 +83,18 @@ jobs:
 
             git fetch origin main
             git reset --hard origin/main
-
-            cat > .env.secrets <<'ENVEOF'
+            
+            cat > .env <<'ENVEOF'
+            SERVER_PORT=${SERVER_PORT:-8080}
+            DB_HOST=postgres
+            DB_PORT=5432
+            DB_NAME=machikoro
             DB_USERNAME=${DB_USERNAME}
             DB_PASSWORD=${DB_PASSWORD}
             PGADMIN_EMAIL=${PGADMIN_EMAIL}
             PGADMIN_PASSWORD=${PGADMIN_PASSWORD}
             ENVEOF
-            chmod 600 .env.secrets
+            chmod 600 .env
 
             docker compose up -d --build --pull always
         env:
