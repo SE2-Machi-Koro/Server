@@ -84,13 +84,15 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: 53210
           script: |
+            set -euo pipefail
+
             cd /opt/machi-koro-server || exit 1
 
             if [ ! -d ".git" ]; then
-              git clone https://github.com/SE2-Machi-Koro/Server.git .
+              git clone https://github.com/SE2-Machi-Koro/Server.git . || exit 1
             fi
 
-            git pull origin main
+            git pull origin main || exit 1
 
             export DB_USERNAME='${{ secrets.DB_USERNAME }}'
             export DB_PASSWORD='${{ secrets.DB_PASSWORD }}'
