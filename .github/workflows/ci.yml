@@ -1,34 +1,27 @@
 name: Server CI
-
 on:
   push:
     branches: [ "main", "develop" ]
   pull_request:
     types: [opened, synchronize, reopened]
-
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-
 permissions:
   contents: read
-
 jobs:
   build-and-test:
     name: Build, Test & SonarCloud
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Wichtig für SonarCloud (vollständige Git-History)
-
+          fetch-depth: 0
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
-
       - name: Cache Gradle packages
         uses: actions/cache@v4
         with:
@@ -38,13 +31,10 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle.kts', '**/*.gradle') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
-
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
-
       - name: Build & Test
         run: ./gradlew clean build test --info --stacktrace
-
       - name: Upload Test Reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -59,23 +49,18 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     permissions:
       contents: read
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
-
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
-
       - name: Build JAR
         run: ./gradlew bootJar
-
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -83,18 +68,34 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: 53210
+          envs: DB_USERNAME,DB_PASSWORD,PGADMIN_EMAIL,PGADMIN_PASSWORD
           script: |
-            cd /opt/machi-koro-server || exit 1
+            set -euo pipefail
+            DEPLOY_DIR="/opt/machi-koro-server"
+            REPO_URL="https://github.com/SE2-Machi-Koro/Server.git"
 
-            if [ ! -d ".git" ]; then
-              git clone https://github.com/SE2-Machi-Koro/Server.git .
+            if [ ! -d "$DEPLOY_DIR/.git" ]; then
+              # Directory exists but is not a git repo — clear it before cloning
+              rm -rf "$DEPLOY_DIR"
+              git clone "$REPO_URL" "$DEPLOY_DIR"
             fi
 
-            git pull origin main
+            cd "$DEPLOY_DIR"
 
-            export DB_USERNAME='${{ secrets.DB_USERNAME }}'
-            export DB_PASSWORD='${{ secrets.DB_PASSWORD }}'
-            export PGADMIN_EMAIL='${{ secrets.PGADMIN_EMAIL }}'
-            export PGADMIN_PASSWORD='${{ secrets.PGADMIN_PASSWORD }}'
+            git fetch origin main
+            git reset --hard origin/main
 
-            docker compose up -d --build
+            cat > .env <<'ENVEOF'
+            DB_USERNAME=${DB_USERNAME}
+            DB_PASSWORD=${DB_PASSWORD}
+            PGADMIN_EMAIL=${PGADMIN_EMAIL}
+            PGADMIN_PASSWORD=${PGADMIN_PASSWORD}
+            ENVEOF
+            chmod 600 .env
+
+            docker compose up -d --build --pull always
+        env:
+          DB_USERNAME: ${{ secrets.DB_USERNAME }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          PGADMIN_EMAIL: ${{ secrets.PGADMIN_EMAIL }}
+          PGADMIN_PASSWORD: ${{ secrets.PGADMIN_PASSWORD }}
