@@ -247,3 +247,53 @@ To verify the server is running:
 ```
 GET http://localhost:8080/actuator/health
 ```
+
+## Deployment
+
+The server is deployed to the AAU shared infrastructure (`se2-demo.aau.at`, group 6) via
+[doco-cd](https://github.com/kimdre/doco-cd), which reconciles the running stack from this
+repository's `compose.yaml` on every push to `main`.
+
+### Pipeline overview
+
+1. A push to `main` triggers the [`Publish Docker image to GHCR`](.github/workflows/docker-publish.yml)
+   workflow, which builds the backend image and pushes it to
+   `ghcr.io/se2-machi-koro/server` with the tags:
+   - `latest` (only on `main`)
+   - `sha-<short-commit>` (every build, used for rollback)
+   - `v*` (when a Git tag matching `v*` is pushed)
+2. doco-cd on the AAU server detects the change, pulls the new image (`pull_policy: always`),
+   and restarts the `backend` service defined in [compose.yaml](compose.yaml).
+3. The Postgres service runs alongside the backend on the internal compose network and is
+   **not exposed to the host** — only the backend is published on `PUBLIC_PORT` (`53210`).
+
+### Live endpoints
+
+| Resource     | URL                                                  |
+|--------------|------------------------------------------------------|
+| Backend      | `http://se2-demo.aau.at:53210`                       |
+| Health check | `http://se2-demo.aau.at:53210/actuator/health`       |
+| WebSocket    | `ws://se2-demo.aau.at:53210/ws`                      |
+
+### Server access
+
+```bash
+ssh grp-6@se2-demo.aau.at -p 53200
+```
+
+The doco-cd working copy of this repo lives at:
+
+```
+/var/lib/docker/volumes/doco-cd-setup_data/_data/github.com/SE2-Machi-Koro/Server/
+```
+
+The production `.env` must be placed next to `compose.yaml` in that directory and locked
+down with `chmod 600`. Use [.env.example](.env.example) as the template; the production
+values for `DB_USERNAME` / `DB_PASSWORD` are set by the team and never committed.
+
+### Rollback
+
+To roll back to a previous image, edit the production `.env` on the server and set
+`IMAGE_TAG=sha-<short-commit>` (or any other tag published to GHCR), then trigger a
+doco-cd reconcile. The `compose.yaml` resolves the image as
+`ghcr.io/se2-machi-koro/server:${IMAGE_TAG:-latest}`.
