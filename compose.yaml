@@ -10,7 +10,7 @@ services:
     # Database is reached by the backend over the internal compose network
     # (DB_HOST=postgres). Not exposed to the host on the shared AAU server.
     volumes:
-      - postgres_data:/var/lib/postgresql
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_NAME:-machikoro}" ]
       interval: 5s
@@ -20,7 +20,13 @@ services:
 
   backend:
     container_name: 'machikoro-server'
-    build: .
+    # Image is built and pushed to GHCR by .github/workflows/docker-publish.yml
+    # on every push to `main` (tagged `latest` and `sha-<short>`) and on git
+    # tags `v*` (tagged with the version). Override IMAGE_TAG in the server-side
+    # `.env` (e.g. `IMAGE_TAG=sha-abc1234`) to roll back to a specific build
+    # without changing the repo, then `docker compose up -d` over SSH.
+    image: 'ghcr.io/se2-machi-koro/server:${IMAGE_TAG:-latest}'
+    pull_policy: always
     restart: unless-stopped
     ports:
       # Host port (assigned by AAU course infra) -> container port (always 8080).
