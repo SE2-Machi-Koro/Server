@@ -62,8 +62,11 @@ jobs:
       # Manual build: compile only what CodeQL needs to analyze (main + test sources).
       # `--no-daemon` avoids leaking a Gradle daemon between Action steps; memory
       # for the Kotlin compile worker is configured in gradle.properties.
+      # `clean` + `--no-build-cache` are required so kotlinc actually runs under
+      # the CodeQL tracer; otherwise cached/UP-TO-DATE outputs cause CodeQL to
+      # see zero source files ("no source code seen during build").
       - name: Build (compile sources for CodeQL)
-        run: ./gradlew --no-daemon compileKotlin compileTestKotlin -x test --stacktrace
+        run: ./gradlew --no-daemon --no-build-cache clean compileKotlin compileTestKotlin -x test --stacktrace
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
