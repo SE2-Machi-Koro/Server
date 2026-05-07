@@ -10,7 +10,10 @@ services:
     # Database is reached by the backend over the internal compose network
     # (DB_HOST=postgres). Not exposed to the host on the shared AAU server.
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # Postgres 18+ requires the mount at /var/lib/postgresql (the parent dir);
+      # data is stored under /var/lib/postgresql/<major>/docker/ to support
+      # pg_upgrade --link across major versions.
+      - postgres_data:/var/lib/postgresql
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_NAME:-machikoro}" ]
       interval: 5s
