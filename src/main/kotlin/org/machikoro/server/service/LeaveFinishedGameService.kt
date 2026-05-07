@@ -2,6 +2,7 @@ package org.machikoro.server.service
 
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.PlayerDao
+import org.machikoro.server.exception.PlayerNotFoundException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 @Service
@@ -13,8 +14,9 @@ class LeaveFinishedGameService(
     @Transactional
     fun leaveFinishedGame(gameId: Int, playerId: Int) {
         gameStateGuard.ensureGameIsFinished(gameId)
-        val players = playerDao.getPlayers(gameId)
-        require(!(players.none { it.id == playerId })) { "Player not in game" }
+        if (playerDao.findByGameIdAndUserId(gameId, playerId) == null) {
+            throw PlayerNotFoundException("Player not in game")
+        }
         playerDao.delete(playerId)
         if (playerDao.countByGameId(gameId) == 0) {
             gameDao.delete(gameId)
