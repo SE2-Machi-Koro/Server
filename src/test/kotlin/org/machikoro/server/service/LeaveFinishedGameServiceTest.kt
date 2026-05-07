@@ -4,7 +4,6 @@ import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.domain.models.PlayerModel
-import org.machikoro.server.exception.PlayerNotFoundException
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
 import org.mockito.kotlin.verify
@@ -24,8 +23,8 @@ class LeaveFinishedGameServiceTest {
         val gameId = 1
         val playerId = 10
 
-        whenever(playerDao.findByGameIdAndUserId(gameId, playerId))
-            .thenReturn(PlayerModel(playerId, gameId, 1, 0, 3, lastSeenAt = 30))
+        whenever(playerDao.getPlayers(gameId))
+            .thenReturn(listOf(PlayerModel(playerId, gameId, 1, 0, 3, lastSeenAt = 30)))
 
         whenever(playerDao.countByGameId(gameId))
             .thenReturn(0)
@@ -40,8 +39,8 @@ class LeaveFinishedGameServiceTest {
         val gameId = 1
         val playerId = 10
 
-        whenever(playerDao.findByGameIdAndUserId(gameId, playerId))
-            .thenReturn(PlayerModel(playerId, gameId, 1, 0, 3, lastSeenAt = 30))
+        whenever(playerDao.getPlayers(gameId))
+            .thenReturn(listOf(PlayerModel(playerId, gameId, 1, 0, 3, lastSeenAt = 30)))
 
         whenever(playerDao.countByGameId(gameId))
             .thenReturn(0)
@@ -56,8 +55,13 @@ class LeaveFinishedGameServiceTest {
         val gameId = 1
         val playerId = 10
 
-        whenever(playerDao.findByGameIdAndUserId(gameId, playerId))
-            .thenReturn(PlayerModel(playerId, gameId, 1, 0, 3, lastSeenAt = 30))
+        whenever(playerDao.getPlayers(gameId))
+            .thenReturn(
+                listOf(
+                    PlayerModel(playerId, gameId, 1, 0, 3, lastSeenAt = 30),
+                    PlayerModel(2, gameId, 2, 1, 3, lastSeenAt = 30)
+                )
+            )
 
         whenever(playerDao.countByGameId(gameId))
             .thenReturn(1)
@@ -73,10 +77,10 @@ class LeaveFinishedGameServiceTest {
         val gameId = 1
         val playerId = 10
 
-        whenever(playerDao.findByGameIdAndUserId(gameId, playerId))
-            .thenReturn(null)
+        whenever(playerDao.getPlayers(gameId))
+            .thenReturn(emptyList())
 
-        assertThrows<PlayerNotFoundException> {
+        assertThrows<IllegalArgumentException> {
             service.leaveFinishedGame(gameId, playerId)
         }
 
@@ -88,11 +92,12 @@ class LeaveFinishedGameServiceTest {
         val gameId = 1
         val playerId = 10
 
-        whenever(playerDao.findByGameIdAndUserId(gameId, playerId))
-            .thenReturn(PlayerModel(playerId, gameId, 1, 0, 3, lastSeenAt = 30))
+        whenever(playerDao.getPlayers(gameId))
+            .thenReturn(listOf(PlayerModel(playerId, gameId, 1, 0, 3, lastSeenAt = 30)))
 
         whenever(playerDao.countByGameId(gameId))
             .thenReturn(0)
+
         service.leaveFinishedGame(gameId, playerId)
 
         verify(gameStateGuard).ensureGameIsFinished(gameId)
