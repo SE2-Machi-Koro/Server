@@ -42,6 +42,14 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Verify Gradle dependency lockfile is up to date
+        run: |
+          ./gradlew dependencies --write-locks --quiet
+          if ! git diff --exit-code -- gradle.lockfile; then
+            echo "::error::gradle.lockfile is out of date. Run './gradlew dependencies --write-locks' locally and commit the updated lockfile."
+            exit 1
+          fi
+
       - name: Build & Test
         run: ./gradlew clean build test --info --stacktrace
 
