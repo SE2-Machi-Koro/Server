@@ -158,15 +158,17 @@ internal `GameModel` may hold additional state used purely for server-side logic
 
 2. Edit the following required variables in `.env`:
 
-   | Variable         | Description                     | 
-   |------------------|---------------------------------|
-   | DB_USERNAME      | PostgreSQL database username    |
-   | DB_PASSWORD      | PostgreSQL database password    |
-   | DB_NAME          | Database name                   |
-   | DB_PORT          | Database port (default: 5432)   |
-   | PGADMIN_EMAIL    | Email for pgAdmin (optional)    |
-   | PGADMIN_PASSWORD | Password for pgAdmin (optional) |
-   | SERVER_PORT      | Port for backend server         |
+   | Variable                    | Description                                                                  |
+   |-----------------------------|------------------------------------------------------------------------------|
+   | DB_USERNAME                 | PostgreSQL database username                                                 |
+   | DB_PASSWORD                 | PostgreSQL database password                                                 |
+   | DB_NAME                     | Database name                                                                |
+   | DB_PORT                     | Database port (default: 5432, local dev only)                                |
+   | SERVER_PORT                 | Port for backend server inside the container (default: 8080)                 |
+   | PUBLIC_PORT                 | Host port the backend is published on in production (AAU group 6: `53210`)   |
+   | WEBSOCKET_ALLOWED_ORIGINS   | Comma-separated list of allowed CORS origins for the WebSocket endpoint      |
+   | PGADMIN_EMAIL               | Email for pgAdmin (local dev only — see `compose-dev.yaml`)                  |
+   | PGADMIN_PASSWORD            | Password for pgAdmin (local dev only — see `compose-dev.yaml`)               |
 
 Example `.env`:
 
@@ -175,9 +177,11 @@ DB_USERNAME=admin
 DB_PASSWORD=password123
 DB_NAME=machikoro
 DB_PORT=5432
+SERVER_PORT=8080
+PUBLIC_PORT=53210
+WEBSOCKET_ALLOWED_ORIGINS=http://localhost:8080,http://localhost:3000
 PGADMIN_EMAIL=admin@admin.com
 PGADMIN_PASSWORD=admin
-SERVER_PORT=8080
 ```
 
 ## Local Build & Run
