@@ -45,3 +45,5 @@ out/
 ### GitHub Copilot ###
 .copilot/
 copilotDiffState.xml
+.env.test
+compose.local-test.yaml
