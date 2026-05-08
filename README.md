@@ -263,7 +263,8 @@ repository's `compose.yaml` on every push to `main`.
    - `sha-<short-commit>` (every build, used for rollback)
    - `v*` (when a Git tag matching `v*` is pushed)
 2. doco-cd on the AAU server detects the change, pulls the new image (`pull_policy: always`),
-   and restarts the `backend` service defined in [compose.yaml](compose.yaml).
+   and restarts the `backend` service defined in [compose.yaml](compose.yaml), when the
+   course deployment config contains a stack entry for this repository.
 3. The Postgres service runs alongside the backend on the internal compose network and is
    **not exposed to the host** — only the backend is published on `PUBLIC_PORT` (`53210`).
 
@@ -287,13 +288,54 @@ The doco-cd working copy of this repo lives at:
 /var/lib/docker/volumes/doco-cd-setup_data/_data/github.com/SE2-Machi-Koro/Server/
 ```
 
-The production `.env` must be placed next to `compose.yaml` in that directory and locked
-down with `chmod 600`. Use [.env.example](.env.example) as the template; the production
-values for `DB_USERNAME` / `DB_PASSWORD` are set by the team and never committed.
+This path is owned by Docker and may not be directly readable from the `grp-6` shell.
+If doco-cd has not created a group 6 stack yet, deploy from the group home directory:
+
+```bash
+mkdir -p /home/grp-6/machi-koro-server-deploy
+cp compose.yaml /home/grp-6/machi-koro-server-deploy/compose.yaml
+cd /home/grp-6/machi-koro-server-deploy
+```
+
+The production `.env` must be placed next to `compose.yaml` in the active deployment
+directory and locked down with `chmod 600`. Use [.env.example](.env.example) as the
+template; the production values for `DB_USERNAME` / `DB_PASSWORD` are set by the team
+and never committed.
+
+Minimal production `.env` for the AAU group 6 server:
+
+```env
+DB_NAME=machikoro
+DB_USERNAME=machikoro
+DB_PASSWORD=<production-password>
+PUBLIC_PORT=53210
+WEBSOCKET_ALLOWED_ORIGINS=http://se2-demo.aau.at:53210,https://se2-demo.aau.at:53210
+IMAGE_TAG=latest
+```
+
+Start or refresh the manual deployment:
+
+```bash
+docker compose pull
+docker compose up -d
+docker compose ps
+```
+
+This manual fallback does not auto-restart on every push to `main`. After a new image is
+published to GHCR, refresh the running stack from `/home/grp-6/machi-koro-server-deploy`
+with the same `docker compose pull && docker compose up -d` commands, or add a group 6
+stack entry to the course doco-cd config so reconciliation is automatic.
+
+The deployment is healthy when `docker compose ps` shows both `machikoro-db` and
+`machikoro-server` as healthy and the external health check returns `status: UP`:
+
+```bash
+curl http://se2-demo.aau.at:53210/actuator/health
+```
 
 ### Rollback
 
 To roll back to a previous image, edit the production `.env` on the server and set
 `IMAGE_TAG=sha-<short-commit>` (or any other tag published to GHCR), then trigger a
-doco-cd reconcile. The `compose.yaml` resolves the image as
+manual `docker compose up -d` or a doco-cd reconcile. The `compose.yaml` resolves the image as
 `ghcr.io/se2-machi-koro/server:${IMAGE_TAG:-latest}`.
