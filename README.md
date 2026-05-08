@@ -321,6 +321,11 @@ docker compose up -d
 docker compose ps
 ```
 
+This manual fallback does not auto-restart on every push to `main`. After a new image is
+published to GHCR, refresh the running stack from `/home/grp-6/machi-koro-server-deploy`
+with the same `docker compose pull && docker compose up -d` commands, or add a group 6
+stack entry to the course doco-cd config so reconciliation is automatic.
+
 The deployment is healthy when `docker compose ps` shows both `machikoro-db` and
 `machikoro-server` as healthy and the external health check returns `status: UP`:
 
@@ -332,5 +337,5 @@ curl http://se2-demo.aau.at:53210/actuator/health
 
 To roll back to a previous image, edit the production `.env` on the server and set
 `IMAGE_TAG=sha-<short-commit>` (or any other tag published to GHCR), then trigger a
-doco-cd reconcile. The `compose.yaml` resolves the image as
+manual `docker compose up -d` or a doco-cd reconcile. The `compose.yaml` resolves the image as
 `ghcr.io/se2-machi-koro/server:${IMAGE_TAG:-latest}`.
