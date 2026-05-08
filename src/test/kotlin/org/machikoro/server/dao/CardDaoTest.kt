@@ -14,6 +14,7 @@ import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.EstablishmentType
 import org.machikoro.server.domain.enums.PaymentSource
 import org.machikoro.server.domain.enums.TriggerCondition
+import org.machikoro.server.domain.utils.displayName
 
 class CardDaoTest : AbstractDBSetup() {
 
@@ -23,11 +24,11 @@ class CardDaoTest : AbstractDBSetup() {
     @BeforeEach
     fun seed() {
         transaction {
-            // Robust cleanup before seeding to avoid Unique Constraint violations
+            // Clean up to ensure a fresh state and avoid Unique Constraint violations
             CardActivationNumbers.deleteAll()
             Cards.deleteAll()
 
-            // 1. Wheat Field (Blue / Wheat symbol / Roll 1)
+            // 1. Wheat Field (Blue card, triggers on 1)
             val wheatId = Cards.insert {
                 it[cardType] = CardType.WHEAT_FIELD
                 it[cost] = 1
@@ -42,7 +43,7 @@ class CardDaoTest : AbstractDBSetup() {
                 it[number] = 1
             }
 
-            // 2. Bakery (Green / Bread symbol / Roll 2, 3)
+            // 2. Bakery (Green card, triggers on 2 and 3)
             val bakeryId = Cards.insert {
                 it[cardType] = CardType.BAKERY
                 it[cost] = 1
@@ -55,7 +56,7 @@ class CardDaoTest : AbstractDBSetup() {
             CardActivationNumbers.insert { it[cardId] = bakeryId; it[number] = 2 }
             CardActivationNumbers.insert { it[cardId] = bakeryId; it[number] = 3 }
 
-            // 3. Cafe (Red / Cup symbol / Roll 3)
+            // 3. Cafe (Red card, triggers on 3)
             val cafeId = Cards.insert {
                 it[cardType] = CardType.CAFE
                 it[cost] = 2
@@ -68,6 +69,21 @@ class CardDaoTest : AbstractDBSetup() {
             CardActivationNumbers.insert {
                 it[cardId] = cafeId
                 it[number] = 3
+            }
+
+            // 4. Stadium (Purple/Major card, triggers on 6)
+            val stadiumId = Cards.insert {
+                it[cardType] = CardType.STADIUM
+                it[cost] = 6
+                it[income] = 2
+                it[establishmentType] = EstablishmentType.MAJOR
+                it[triggerCondition] = TriggerCondition.OWN_TURN
+                it[paymentSource] = PaymentSource.ALL_PLAYERS
+            }[Cards.id].value
+
+            CardActivationNumbers.insert {
+                it[cardId] = stadiumId
+                it[number] = 6
             }
         }
     }
@@ -82,45 +98,47 @@ class CardDaoTest : AbstractDBSetup() {
 
     @Test
     fun `findAll returns all seeded cards`() {
-        assertEquals(3, dao.findAll().size)
+        assertEquals(4, dao.findAll().size)
     }
 
     @Test
-    fun `findAllByCardTypes returns only requested types`() {
-        val typesToFind = listOf(CardType.WHEAT_FIELD, CardType.CAFE)
-        val results = dao.findAllByCardTypes(typesToFind)
+    fun `findAllByCardTypes returns only requested subset`() {
+        val types = listOf(CardType.WHEAT_FIELD, CardType.STADIUM)
+        val results = dao.findAllByCardTypes(types)
 
         assertEquals(2, results.size)
         assertTrue(results.any { it.cardType == CardType.WHEAT_FIELD })
-        assertTrue(results.any { it.cardType == CardType.CAFE })
-        assertFalse(results.any { it.cardType == CardType.BAKERY })
+        assertTrue(results.any { it.cardType == CardType.STADIUM })
     }
 
     @Test
-    fun `findByEstablishmentType finds all cards with specific symbol`() {
-        val wheatCards = dao.findByEstablishmentType(EstablishmentType.WHEAT)
-        assertEquals(1, wheatCards.size)
-        assertEquals(CardType.WHEAT_FIELD, wheatCards[0].cardType)
+    fun `findByCardType returns fully hydrated model`() {
+        val card = dao.findByCardType(CardType.WHEAT_FIELD)
 
-        val cupCards = dao.findByEstablishmentType(EstablishmentType.CUP)
-        assertEquals(1, cupCards.size)
-        assertEquals(CardType.CAFE, cupCards[0].cardType)
+        assertNotNull(card)
+        assertEquals("Wheat Field", CardType.WHEAT_FIELD.displayName())
+        assertEquals(1, card!!.cost)
+        assertEquals(1, card.income)
+        assertEquals(TriggerCondition.ANY_TURN, card.triggerCondition)
+        assertEquals(EstablishmentType.WHEAT, card.establishmentType)
+        assertEquals(listOf(1), card.activationNumbers)
     }
 
     @Test
-    fun `findByTriggerCondition groups cards by turn activation logic`() {
-        val ownTurnCards = dao.findByTriggerCondition(TriggerCondition.OWN_TURN)
-        assertEquals(1, ownTurnCards.size)
-        assertEquals(CardType.BAKERY, ownTurnCards[0].cardType)
-
-        val anyTurnCards = dao.findByTriggerCondition(TriggerCondition.ANY_TURN)
-        assertEquals(1, anyTurnCards.size)
-        assertEquals(CardType.WHEAT_FIELD, anyTurnCards[0].cardType)
+    fun `findByCardType returns activation numbers for multi-number cards`() {
+        val card = dao.findByCardType(CardType.BAKERY)
+        assertNotNull(card)
+        assertEquals(listOf(2, 3), card!!.activationNumbers)
     }
 
     @Test
-    fun `findByActivationNumber returns multiple cards if multiple trigger on same roll`() {
-        // Roll 3 triggers both Bakery (Green) and Cafe (Red)
+    fun `findByCardType returns null for unseeded card`() {
+        assertNull(dao.findByCardType(CardType.MINE))
+    }
+
+    @Test
+    fun `findByActivationNumber returns multiple cards on same number`() {
+        // Both Bakery (2,3) and Cafe (3) activate on 3
         val cardsOn3 = dao.findByActivationNumber(3)
 
         assertEquals(2, cardsOn3.size)
@@ -130,19 +148,24 @@ class CardDaoTest : AbstractDBSetup() {
     }
 
     @Test
-    fun `findByActivationNumber returns empty list for roll with no mappings`() {
-        val results = dao.findByActivationNumber(12)
-        assertTrue(results.isEmpty())
+    fun `findByEstablishmentType filters cards by symbol`() {
+        val majorCards = dao.findByEstablishmentType(EstablishmentType.MAJOR)
+
+        assertEquals(1, majorCards.size)
+        assertEquals(CardType.STADIUM, majorCards[0].cardType)
     }
 
     @Test
-    fun `findByCardType returns fully hydrated model with activation numbers`() {
-        val bakery = dao.findByCardType(CardType.BAKERY)
+    fun `findByTriggerCondition filters cards by turn logic`() {
+        val redCards = dao.findByTriggerCondition(TriggerCondition.OTHER_TURN)
 
-        assertNotNull(bakery)
-        assertEquals(CardType.BAKERY, bakery!!.cardType)
-        assertEquals(listOf(2, 3), bakery.activationNumbers)
-        assertEquals(EstablishmentType.BREAD, bakery.establishmentType)
-        assertEquals(PaymentSource.BANK, bakery.paymentSource)
+        assertEquals(1, redCards.size)
+        assertEquals(CardType.CAFE, redCards[0].cardType)
+    }
+
+    @Test
+    fun `findByActivationNumber returns empty list for roll with no mappings`() {
+        val results = dao.findByActivationNumber(12)
+        assertTrue(results.isEmpty())
     }
 }
