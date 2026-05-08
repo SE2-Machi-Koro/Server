@@ -1,6 +1,7 @@
 package org.machikoro.server.dao
 
 import org.jetbrains.exposed.v1.jdbc.deleteAll
+import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.insertAndGetId
 import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -32,6 +33,14 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
     @BeforeEach
     fun seed() {
         transaction {
+            GameMarketplace.deleteAll()
+            CardActivationNumbers.deleteAll()
+            Games.deleteAll()
+            Users.deleteAll()
+            Cards.deleteAll()
+        }
+
+        transaction {
 
             fun insertCard(
                 type: CardType,
@@ -52,7 +61,7 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
                 }
 
                 activationNumbers.forEach { number ->
-                    CardActivationNumbers.insertIgnore {
+                    CardActivationNumbers.insert {
                         it[CardActivationNumbers.cardId] = cardId
                         it[CardActivationNumbers.number] = number
                     }
