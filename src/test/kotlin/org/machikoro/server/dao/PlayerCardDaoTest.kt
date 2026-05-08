@@ -30,64 +30,79 @@ class PlayerCardDaoTest : AbstractDBSetup() {
     fun seed() {
         transaction {
             Cards.insertIgnore {
-                it[Cards.cardType] = CardType.WHEAT_FIELD; it[Cards.cost] = 1; it[Cards.diceMin] =
-                1; it[Cards.diceMax] = 1; it[Cards.income] = 1
+                it[Cards.cardType] = CardType.WHEAT_FIELD
+                it[Cards.cost] = 1
+                it[Cards.income] = 1
             }
             Cards.insertIgnore {
-                it[Cards.cardType] = CardType.RANCH; it[Cards.cost] = 1; it[Cards.diceMin] = 2; it[Cards.diceMax] =
-                2; it[Cards.income] = 1
+                it[Cards.cardType] = CardType.RANCH
+                it[Cards.cost] = 1
+                it[Cards.income] = 1
             }
             Cards.insertIgnore {
-                it[Cards.cardType] = CardType.FOREST; it[Cards.cost] = 3; it[Cards.diceMin] = 5; it[Cards.diceMax] =
-                5; it[Cards.income] = 1
+                it[Cards.cardType] = CardType.FOREST
+                it[Cards.cost] = 3
+                it[Cards.income] = 1
             }
             Cards.insertIgnore {
-                it[Cards.cardType] = CardType.MINE; it[Cards.cost] = 6; it[Cards.diceMin] = 9; it[Cards.diceMax] =
-                9; it[Cards.income] = 5
+                it[Cards.cardType] = CardType.MINE
+                it[Cards.cost] = 6
+                it[Cards.income] = 5
             }
             Cards.insertIgnore {
-                it[Cards.cardType] = CardType.APPLE_ORCHARD; it[Cards.cost] = 3; it[Cards.diceMin] =
-                10; it[Cards.diceMax] = 10; it[Cards.income] = 3
+                it[Cards.cardType] = CardType.APPLE_ORCHARD
+                it[Cards.cost] = 3
+                it[Cards.income] = 3
             }
             Cards.insertIgnore {
-                it[Cards.cardType] = CardType.BAKERY; it[Cards.cost] = 1; it[Cards.diceMin] = 2; it[Cards.diceMax] =
-                3; it[Cards.income] = 1
+                it[Cards.cardType] = CardType.BAKERY
+                it[Cards.cost] = 1
+                it[Cards.income] = 1
             }
             Cards.insertIgnore {
-                it[Cards.cardType] = CardType.CONVENIENCE_STORE; it[Cards.cost] = 2; it[Cards.diceMin] =
-                4; it[Cards.diceMax] = 4; it[Cards.income] = 3
+                it[Cards.cardType] = CardType.CONVENIENCE_STORE
+                it[Cards.cost] = 2
+                it[Cards.income] = 3
             }
             Cards.insertIgnore {
-                it[Cards.cardType] = CardType.CHEESE_FACTORY; it[Cards.cost] = 5; it[Cards.diceMin] =
-                7; it[Cards.diceMax] = 7; it[Cards.income] = 3
+                it[Cards.cardType] = CardType.CHEESE_FACTORY
+                it[Cards.cost] = 5
+                it[Cards.income] = 3
             }
             Cards.insertIgnore {
-                it[Cards.cardType] = CardType.FURNITURE_FACTORY; it[Cards.cost] = 3; it[Cards.diceMin] =
-                8; it[Cards.diceMax] = 8; it[Cards.income] = 3
+                it[Cards.cardType] = CardType.FURNITURE_FACTORY
+                it[Cards.cost] = 3
+                it[Cards.income] = 3
             }
             Cards.insertIgnore {
-                it[Cards.cardType] = CardType.FRUIT_AND_VEGETABLE_MARKET; it[Cards.cost] = 2; it[Cards.diceMin] =
-                11; it[Cards.diceMax] = 11; it[Cards.income] = 2
+                it[Cards.cardType] = CardType.FRUIT_AND_VEGETABLE_MARKET
+                it[Cards.cost] = 2
+                it[Cards.income] = 2
             }
             Cards.insertIgnore {
-                it[Cards.cardType] = CardType.CAFE; it[Cards.cost] = 2; it[Cards.diceMin] = 3; it[Cards.diceMax] =
-                3; it[Cards.income] = 1
+                it[Cards.cardType] = CardType.CAFE
+                it[Cards.cost] = 2
+                it[Cards.income] = 1
             }
             Cards.insertIgnore {
-                it[Cards.cardType] = CardType.FAMILY_RESTAURANT; it[Cards.cost] = 3; it[Cards.diceMin] =
-                9; it[Cards.diceMax] = 10; it[Cards.income] = 2
+                it[Cards.cardType] = CardType.FAMILY_RESTAURANT
+                it[Cards.cost] = 3
+                it[Cards.income] = 2
             }
             Cards.insertIgnore {
-                it[Cards.cardType] = CardType.STADIUM; it[Cards.cost] = 6; it[Cards.diceMin] = 6; it[Cards.diceMax] =
-                6; it[Cards.income] = 2
+                it[Cards.cardType] = CardType.STADIUM
+                it[Cards.cost] = 6
+                it[Cards.income] = 2
             }
             Cards.insertIgnore {
-                it[Cards.cardType] = CardType.TV_STATION; it[Cards.cost] = 7; it[Cards.diceMin] = 6; it[Cards.diceMax] =
-                6; it[Cards.income] = 0
+                it[Cards.cardType] = CardType.TV_STATION
+                it[Cards.cost] = 7
+                it[Cards.income] = 0
             }
             Cards.insertIgnore {
-                it[Cards.cardType] = CardType.BUSINESS_CENTER; it[Cards.cost] = 8; it[Cards.diceMin] =
-                6; it[Cards.diceMax] = 6; it[Cards.income] = 0
+                it[Cards.cardType] = CardType.BUSINESS_CENTER
+                it[Cards.cost] = 8
+                it[Cards.income] = 0
             }
         }
         val userId = userDao.create("card_user")
@@ -194,10 +209,8 @@ class PlayerCardDaoTest : AbstractDBSetup() {
 
     @Test
     fun `deleteAllByPlayerId does not affect other players`() {
-        // current player
         playerCardDao.upsert(playerId, CardType.WHEAT_FIELD, 1)
 
-        // second player
         val userId2 = userDao.create("other_user")
         val gameId2 = gameDao.create(userId2)
         val otherPlayerId = playerDao.addPlayer(gameId2, userId2).id

@@ -83,16 +83,12 @@ class PurchaseServiceIntegrationTest : AbstractDBSetup() {
             Cards.insert {
                 it[cardType] = CardType.BAKERY
                 it[cost] = 1
-                it[diceMin] = 2
-                it[diceMax] = 3
                 it[income] = 1
             }
 
             Cards.insert {
                 it[cardType] = CardType.STADIUM
                 it[cost] = 6
-                it[diceMin] = 6
-                it[diceMax] = 6
                 it[income] = 2
             }
 

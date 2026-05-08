@@ -30,12 +30,6 @@ import org.mockito.kotlin.mock
 import org.springframework.beans.factory.annotation.Autowired
 import kotlin.test.Test
 
-/**
- * DB-backed coverage for the transactional startGame setup path.
- *
- * This proves the game status flip and the buy/build setup rows are created
- * together against the real persistence layer.
- */
 class LobbyServiceIntegrationTest : AbstractDBSetup() {
 
     @Autowired
@@ -65,14 +59,14 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
             GameMarketplace.deleteAll()
             Games.deleteAll()
             Users.deleteAll()
+            Landmarks.deleteAll()
+            Cards.deleteAll()
         }
 
         val userIds = transaction {
             Cards.insertIgnore {
                 it[cardType] = CardType.BAKERY
                 it[cost] = 1
-                it[diceMin] = 2
-                it[diceMax] = 3
                 it[income] = 1
             }
 
@@ -119,6 +113,7 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
         val failingLandmarkDao = mock<PlayerLandmarkDao> {
             on { initForPlayer(any()) } doThrow RuntimeException("landmark setup failed")
         }
+
         val service = LobbyService(
             gameDao,
             playerDao,

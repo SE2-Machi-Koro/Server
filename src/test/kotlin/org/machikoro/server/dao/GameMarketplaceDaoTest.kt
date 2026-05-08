@@ -1,6 +1,7 @@
 package org.machikoro.server.dao
 
 import org.jetbrains.exposed.v1.jdbc.deleteAll
+import org.jetbrains.exposed.v1.jdbc.insertAndGetId
 import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
@@ -9,11 +10,15 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.database.AbstractDBSetup
+import org.machikoro.server.database.CardActivationNumbers
 import org.machikoro.server.database.Cards
 import org.machikoro.server.database.GameMarketplace
 import org.machikoro.server.database.Games
 import org.machikoro.server.database.Users
 import org.machikoro.server.domain.enums.CardType
+import org.machikoro.server.domain.enums.EstablishmentType
+import org.machikoro.server.domain.enums.PaymentSource
+import org.machikoro.server.domain.enums.TriggerCondition
 import org.machikoro.server.exception.CardNotFoundException
 
 class GameMarketplaceDaoTest : AbstractDBSetup() {
@@ -27,67 +32,184 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
     @BeforeEach
     fun seed() {
         transaction {
-            Cards.insertIgnore {
-                it[Cards.cardType] = CardType.WHEAT_FIELD; it[Cards.cost] = 1; it[Cards.diceMin] =
-                1; it[Cards.diceMax] = 1; it[Cards.income] = 1
+
+            fun insertCard(
+                type: CardType,
+                cost: Int,
+                income: Int,
+                activationNumbers: List<Int>,
+                establishmentType: EstablishmentType?,
+                triggerCondition: TriggerCondition?,
+                paymentSource: PaymentSource?
+            ) {
+                val cardId = Cards.insertAndGetId {
+                    it[cardType] = type
+                    it[Cards.cost] = cost
+                    it[Cards.income] = income
+                    it[Cards.establishmentType] = establishmentType
+                    it[Cards.triggerCondition] = triggerCondition
+                    it[Cards.paymentSource] = paymentSource
+                }
+
+                activationNumbers.forEach { number ->
+                    CardActivationNumbers.insertIgnore {
+                        it[CardActivationNumbers.cardId] = cardId
+                        it[CardActivationNumbers.number] = number
+                    }
+                }
             }
-            Cards.insertIgnore {
-                it[Cards.cardType] = CardType.RANCH; it[Cards.cost] = 1; it[Cards.diceMin] = 2; it[Cards.diceMax] =
-                2; it[Cards.income] = 1
-            }
-            Cards.insertIgnore {
-                it[Cards.cardType] = CardType.FOREST; it[Cards.cost] = 3; it[Cards.diceMin] = 5; it[Cards.diceMax] =
-                5; it[Cards.income] = 1
-            }
-            Cards.insertIgnore {
-                it[Cards.cardType] = CardType.MINE; it[Cards.cost] = 6; it[Cards.diceMin] = 9; it[Cards.diceMax] =
-                9; it[Cards.income] = 5
-            }
-            Cards.insertIgnore {
-                it[Cards.cardType] = CardType.APPLE_ORCHARD; it[Cards.cost] = 3; it[Cards.diceMin] =
-                10; it[Cards.diceMax] = 10; it[Cards.income] = 3
-            }
-            Cards.insertIgnore {
-                it[Cards.cardType] = CardType.BAKERY; it[Cards.cost] = 1; it[Cards.diceMin] = 2; it[Cards.diceMax] =
-                3; it[Cards.income] = 1
-            }
-            Cards.insertIgnore {
-                it[Cards.cardType] = CardType.CONVENIENCE_STORE; it[Cards.cost] = 2; it[Cards.diceMin] =
-                4; it[Cards.diceMax] = 4; it[Cards.income] = 3
-            }
-            Cards.insertIgnore {
-                it[Cards.cardType] = CardType.CHEESE_FACTORY; it[Cards.cost] = 5; it[Cards.diceMin] =
-                7; it[Cards.diceMax] = 7; it[Cards.income] = 3
-            }
-            Cards.insertIgnore {
-                it[Cards.cardType] = CardType.FURNITURE_FACTORY; it[Cards.cost] = 3; it[Cards.diceMin] =
-                8; it[Cards.diceMax] = 8; it[Cards.income] = 3
-            }
-            Cards.insertIgnore {
-                it[Cards.cardType] = CardType.FRUIT_AND_VEGETABLE_MARKET; it[Cards.cost] = 2; it[Cards.diceMin] =
-                11; it[Cards.diceMax] = 11; it[Cards.income] = 2
-            }
-            Cards.insertIgnore {
-                it[Cards.cardType] = CardType.CAFE; it[Cards.cost] = 2; it[Cards.diceMin] = 3; it[Cards.diceMax] =
-                3; it[Cards.income] = 1
-            }
-            Cards.insertIgnore {
-                it[Cards.cardType] = CardType.FAMILY_RESTAURANT; it[Cards.cost] = 3; it[Cards.diceMin] =
-                9; it[Cards.diceMax] = 10; it[Cards.income] = 2
-            }
-            Cards.insertIgnore {
-                it[Cards.cardType] = CardType.STADIUM; it[Cards.cost] = 6; it[Cards.diceMin] = 6; it[Cards.diceMax] =
-                6; it[Cards.income] = 2
-            }
-            Cards.insertIgnore {
-                it[Cards.cardType] = CardType.TV_STATION; it[Cards.cost] = 7; it[Cards.diceMin] = 6; it[Cards.diceMax] =
-                6; it[Cards.income] = 0
-            }
-            Cards.insertIgnore {
-                it[Cards.cardType] = CardType.BUSINESS_CENTER; it[Cards.cost] = 8; it[Cards.diceMin] =
-                6; it[Cards.diceMax] = 6; it[Cards.income] = 0
-            }
+
+            insertCard(
+                CardType.WHEAT_FIELD,
+                cost = 1,
+                income = 1,
+                activationNumbers = listOf(1),
+                establishmentType = EstablishmentType.WHEAT,
+                triggerCondition = TriggerCondition.ANY_TURN,
+                paymentSource = PaymentSource.BANK
+            )
+
+            insertCard(
+                CardType.RANCH,
+                cost = 1,
+                income = 1,
+                activationNumbers = listOf(2),
+                establishmentType = EstablishmentType.COW,
+                triggerCondition = TriggerCondition.ANY_TURN,
+                paymentSource = PaymentSource.BANK
+            )
+
+            insertCard(
+                CardType.FOREST,
+                cost = 3,
+                income = 1,
+                activationNumbers = listOf(5),
+                establishmentType = EstablishmentType.GEAR,
+                triggerCondition = TriggerCondition.ANY_TURN,
+                paymentSource = PaymentSource.BANK
+            )
+
+            insertCard(
+                CardType.MINE,
+                cost = 6,
+                income = 5,
+                activationNumbers = listOf(9),
+                establishmentType = EstablishmentType.GEAR,
+                triggerCondition = TriggerCondition.ANY_TURN,
+                paymentSource = PaymentSource.BANK
+            )
+
+            insertCard(
+                CardType.APPLE_ORCHARD,
+                cost = 3,
+                income = 3,
+                activationNumbers = listOf(10),
+                establishmentType = EstablishmentType.FRUIT,
+                triggerCondition = TriggerCondition.ANY_TURN,
+                paymentSource = PaymentSource.BANK
+            )
+
+            insertCard(
+                CardType.BAKERY,
+                cost = 1,
+                income = 1,
+                activationNumbers = listOf(2, 3),
+                establishmentType = EstablishmentType.BREAD,
+                triggerCondition = TriggerCondition.OWN_TURN,
+                paymentSource = PaymentSource.BANK
+            )
+
+            insertCard(
+                CardType.CONVENIENCE_STORE,
+                cost = 2,
+                income = 3,
+                activationNumbers = listOf(4),
+                establishmentType = EstablishmentType.BREAD,
+                triggerCondition = TriggerCondition.OWN_TURN,
+                paymentSource = PaymentSource.BANK
+            )
+
+            insertCard(
+                CardType.CHEESE_FACTORY,
+                cost = 5,
+                income = 3,
+                activationNumbers = listOf(7),
+                establishmentType = EstablishmentType.FACTORY,
+                triggerCondition = TriggerCondition.OWN_TURN,
+                paymentSource = PaymentSource.BANK
+            )
+
+            insertCard(
+                CardType.FURNITURE_FACTORY,
+                cost = 3,
+                income = 3,
+                activationNumbers = listOf(8),
+                establishmentType = EstablishmentType.FACTORY,
+                triggerCondition = TriggerCondition.OWN_TURN,
+                paymentSource = PaymentSource.BANK
+            )
+
+            insertCard(
+                CardType.FRUIT_AND_VEGETABLE_MARKET,
+                cost = 2,
+                income = 2,
+                activationNumbers = listOf(11, 12),
+                establishmentType = EstablishmentType.FRUIT,
+                triggerCondition = TriggerCondition.OWN_TURN,
+                paymentSource = PaymentSource.BANK
+            )
+
+            insertCard(
+                CardType.CAFE,
+                cost = 2,
+                income = 1,
+                activationNumbers = listOf(3),
+                establishmentType = EstablishmentType.CUP,
+                triggerCondition = TriggerCondition.OTHER_TURN,
+                paymentSource = PaymentSource.ACTIVE_PLAYER
+            )
+
+            insertCard(
+                CardType.FAMILY_RESTAURANT,
+                cost = 3,
+                income = 2,
+                activationNumbers = listOf(9, 10),
+                establishmentType = EstablishmentType.CUP,
+                triggerCondition = TriggerCondition.OTHER_TURN,
+                paymentSource = PaymentSource.ACTIVE_PLAYER
+            )
+
+            insertCard(
+                CardType.STADIUM,
+                cost = 6,
+                income = 2,
+                activationNumbers = listOf(6),
+                establishmentType = EstablishmentType.MAJOR,
+                triggerCondition = TriggerCondition.OWN_TURN,
+                paymentSource = PaymentSource.ALL_PLAYERS
+            )
+
+            insertCard(
+                CardType.TV_STATION,
+                cost = 7,
+                income = 0,
+                activationNumbers = listOf(6),
+                establishmentType = EstablishmentType.MAJOR,
+                triggerCondition = TriggerCondition.OWN_TURN,
+                paymentSource = PaymentSource.ACTIVE_PLAYER
+            )
+
+            insertCard(
+                CardType.BUSINESS_CENTER,
+                cost = 8,
+                income = 0,
+                activationNumbers = listOf(6),
+                establishmentType = EstablishmentType.MAJOR,
+                triggerCondition = TriggerCondition.OWN_TURN,
+                paymentSource = PaymentSource.NONE
+            )
         }
+
         val hostId = userDao.create("market_host")
         gameId = gameDao.create(hostId)
     }

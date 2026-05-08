@@ -6,13 +6,17 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.machikoro.server.database.AbstractDBSetup
+import org.machikoro.server.database.CardActivationNumbers
 import org.machikoro.server.database.Cards
 import org.machikoro.server.database.Games
 import org.machikoro.server.database.PlayerCards
 import org.machikoro.server.database.Players
 import org.machikoro.server.database.Users
 import org.machikoro.server.domain.enums.CardType
+import org.machikoro.server.domain.enums.EstablishmentType
 import org.machikoro.server.domain.enums.GameStatus
+import org.machikoro.server.domain.enums.PaymentSource
+import org.machikoro.server.domain.enums.TriggerCondition
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.service.interfaces.EarningsService
 import org.springframework.beans.factory.annotation.Autowired
@@ -39,6 +43,7 @@ class EarningsIntegrationTest : AbstractDBSetup() {
     @BeforeEach
     fun setup() {
         transaction {
+            CardActivationNumbers.deleteAll()
             PlayerCards.deleteAll()
             Players.deleteAll()
             Games.deleteAll()
@@ -47,26 +52,50 @@ class EarningsIntegrationTest : AbstractDBSetup() {
         }
 
         transaction {
-            Cards.insert {
+            val wheatFieldId = Cards.insert {
                 it[cardType] = CardType.WHEAT_FIELD
                 it[cost] = 1
-                it[diceMin] = 1
-                it[diceMax] = 1
                 it[income] = 1
+                it[establishmentType] = EstablishmentType.WHEAT
+                it[triggerCondition] = TriggerCondition.ANY_TURN
+                it[paymentSource] = PaymentSource.BANK
+            } get Cards.id
+
+            CardActivationNumbers.insert {
+                it[cardId] = wheatFieldId
+                it[number] = 1
             }
-            Cards.insert {
+
+            val bakeryId = Cards.insert {
                 it[cardType] = CardType.BAKERY
                 it[cost] = 1
-                it[diceMin] = 2
-                it[diceMax] = 3
                 it[income] = 1
+                it[establishmentType] = EstablishmentType.BREAD
+                it[triggerCondition] = TriggerCondition.OWN_TURN
+                it[paymentSource] = PaymentSource.BANK
+            } get Cards.id
+
+            CardActivationNumbers.insert {
+                it[cardId] = bakeryId
+                it[number] = 2
             }
-            Cards.insert {
+            CardActivationNumbers.insert {
+                it[cardId] = bakeryId
+                it[number] = 3
+            }
+
+            val cafeId = Cards.insert {
                 it[cardType] = CardType.CAFE
                 it[cost] = 2
-                it[diceMin] = 3
-                it[diceMax] = 3
                 it[income] = 1
+                it[establishmentType] = EstablishmentType.CUP
+                it[triggerCondition] = TriggerCondition.OTHER_TURN
+                it[paymentSource] = PaymentSource.ACTIVE_PLAYER
+            } get Cards.id
+
+            CardActivationNumbers.insert {
+                it[cardId] = cafeId
+                it[number] = 3
             }
 
             val user1Id = (Users.insert {
