@@ -7,6 +7,8 @@ import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.machikoro.server.database.Cards
 import org.machikoro.server.domain.enums.CardType
+import org.machikoro.server.domain.enums.EstablishmentType
+import org.machikoro.server.domain.enums.TriggerCondition
 import org.machikoro.server.domain.models.CardModel
 import org.springframework.stereotype.Repository
 
@@ -31,17 +33,10 @@ class CardDao(
         )
     }
 
-    /**
-     * Finds all available card definitions from database
-     */
     fun findAll(): List<CardModel> = transaction {
         Cards.selectAll().map { it.toModel() }
     }
 
-    /**
-     * Find card by its unique CardType
-     * Returns null if no matching card exists
-     */
     fun findByCardType(cardType: CardType): CardModel? = transaction {
         Cards.selectAll()
             .where { Cards.cardType eq cardType }
@@ -50,14 +45,41 @@ class CardDao(
     }
 
     /**
-     * Find cards that activate on a specific dice number
-     * @param diceNumber The dice roll to check
-     * @return List of cards that activate on this number
+     * Efficiently find multiple cards by their types.
+     * Useful for initializing the game marketplace.
      */
+    fun findAllByCardTypes(cardTypes: Collection<CardType>): List<CardModel> = transaction {
+        Cards.selectAll()
+            .where { Cards.cardType inList cardTypes }
+            .map { it.toModel() }
+    }
+
     fun findByActivationNumber(diceNumber: Int): List<CardModel> = transaction {
         val cardIds = cardActivationNumbersDao.findCardsByActivationNumber(diceNumber)
+        if (cardIds.isEmpty()) return@transaction emptyList()
+
         Cards.selectAll()
             .where { Cards.id inList cardIds }
+            .map { it.toModel() }
+    }
+
+    /**
+     * Finds cards by their symbol (EstablishmentType).
+     * Used for cards like "Furniture Factory" (GEAR) or "Cheese Factory" (COW).
+     */
+    fun findByEstablishmentType(type: EstablishmentType): List<CardModel> = transaction {
+        Cards.selectAll()
+            .where { Cards.establishmentType eq type }
+            .map { it.toModel() }
+    }
+
+    /**
+     * Finds cards by their trigger condition.
+     * Useful for resolving logic specific to certain colors (e.g., all Blue cards).
+     */
+    fun findByTriggerCondition(condition: TriggerCondition): List<CardModel> = transaction {
+        Cards.selectAll()
+            .where { Cards.triggerCondition eq condition }
             .map { it.toModel() }
     }
 }
