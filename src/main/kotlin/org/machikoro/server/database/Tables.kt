@@ -3,11 +3,11 @@ package org.machikoro.server.database
 import org.jetbrains.exposed.v1.core.ReferenceOption
 import org.jetbrains.exposed.v1.core.Table
 import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
+import org.machikoro.server.domain.enums.CardColor
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.LandmarkType
-import org.machikoro.server.domain.enums.TriggerCondition
 import org.machikoro.server.domain.enums.PaymentSource
 import org.machikoro.server.domain.enums.EstablishmentType
 
@@ -30,14 +30,14 @@ object Cards : IntIdTable("cards") {
     val cost = integer("cost")
     val income = integer("income")
 
-    // Card symbol/icon (WHEAT, COW, GEAR, BREAD, FACTORY, FRUIT, CUP, MAJOR)
-    val establishmentType = enumerationByName("establishment_type", 20, EstablishmentType::class).nullable()
+    // Card color (GREEN, BLUE, RED, PURPLE)
+    val color = enumerationByName("color", 20, CardColor::class)
 
-    // When the card activates (OWN_TURN, ANY_TURN, OTHER_TURN, NONE)
-    val triggerCondition = enumerationByName("trigger_condition", 20, TriggerCondition::class).nullable()
+    // Card symbol/icon (WHEAT, COW, GEAR, BREAD, FACTORY, FRUIT, CUP, MAJOR)
+    val establishmentType = enumerationByName("establishment_type", 20, EstablishmentType::class)
 
     // Where payment comes from (BANK, ACTIVE_PLAYER, ALL_PLAYERS)
-    val paymentSource = enumerationByName("payment_source", 20, PaymentSource::class).nullable()
+    val paymentSource = enumerationByName("payment_source", 20, PaymentSource::class)
 }
 
 /**
