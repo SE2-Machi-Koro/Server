@@ -14,11 +14,11 @@ import org.machikoro.server.database.Games
 import org.machikoro.server.database.PlayerCards
 import org.machikoro.server.database.Players
 import org.machikoro.server.database.Users
+import org.machikoro.server.domain.enums.CardColor
 import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.EstablishmentType
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.PaymentSource
-import org.machikoro.server.domain.enums.TriggerCondition
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.service.interfaces.EarningsService
 import org.springframework.beans.factory.annotation.Autowired
@@ -60,7 +60,7 @@ class EarningsIntegrationTest : AbstractDBSetup() {
                 it[cost] = 1
                 it[income] = 1
                 it[establishmentType] = EstablishmentType.WHEAT
-                it[triggerCondition] = TriggerCondition.ANY_TURN
+                it[color] = CardColor.BLUE
                 it[paymentSource] = PaymentSource.BANK
             } get Cards.id
 
@@ -73,8 +73,8 @@ class EarningsIntegrationTest : AbstractDBSetup() {
                 it[cardType] = CardType.BAKERY
                 it[cost] = 1
                 it[income] = 1
+                it[color] = CardColor.GREEN
                 it[establishmentType] = EstablishmentType.BREAD
-                it[triggerCondition] = TriggerCondition.OWN_TURN
                 it[paymentSource] = PaymentSource.BANK
             } get Cards.id
 
@@ -91,8 +91,8 @@ class EarningsIntegrationTest : AbstractDBSetup() {
                 it[cardType] = CardType.CAFE
                 it[cost] = 2
                 it[income] = 1
+                it[color] = CardColor.RED
                 it[establishmentType] = EstablishmentType.CUP
-                it[triggerCondition] = TriggerCondition.OTHER_TURN
                 it[paymentSource] = PaymentSource.ACTIVE_PLAYER
             } get Cards.id
 

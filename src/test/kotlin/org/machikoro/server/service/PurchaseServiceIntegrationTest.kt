@@ -29,13 +29,13 @@ import org.machikoro.server.domain.enums.EstablishmentType
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.LandmarkType
 import org.machikoro.server.domain.enums.PaymentSource
-import org.machikoro.server.domain.enums.TriggerCondition
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.dto.PurchaseType
 import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.service.interfaces.EarningsService
 import org.springframework.beans.factory.annotation.Autowired
 import org.jetbrains.exposed.v1.core.eq
+import org.machikoro.server.domain.enums.CardColor
 import kotlin.test.Test
 
 class PurchaseServiceIntegrationTest : AbstractDBSetup() {
@@ -71,8 +71,8 @@ class PurchaseServiceIntegrationTest : AbstractDBSetup() {
                 it[cardType] = CardType.BAKERY
                 it[cost] = 1
                 it[income] = 1
+                it[color] = CardColor.GREEN
                 it[establishmentType] = EstablishmentType.BREAD
-                it[triggerCondition] = TriggerCondition.OWN_TURN
                 it[paymentSource] = PaymentSource.BANK
             } get Cards.id
 
@@ -89,8 +89,8 @@ class PurchaseServiceIntegrationTest : AbstractDBSetup() {
                 it[cardType] = CardType.STADIUM
                 it[cost] = 6
                 it[income] = 2
+                it[color] = CardColor.PURPLE
                 it[establishmentType] = EstablishmentType.MAJOR
-                it[triggerCondition] = TriggerCondition.OWN_TURN
                 it[paymentSource] = PaymentSource.ALL_PLAYERS
             }
 

@@ -10,10 +10,10 @@ import org.machikoro.server.database.AbstractDBSetup
 import org.machikoro.server.database.CardActivationNumbers
 import org.machikoro.server.database.Cards
 import org.machikoro.server.database.PlayerCards
+import org.machikoro.server.domain.enums.CardColor
 import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.EstablishmentType
 import org.machikoro.server.domain.enums.PaymentSource
-import org.machikoro.server.domain.enums.TriggerCondition
 import org.springframework.beans.factory.annotation.Autowired
 import kotlin.test.Test
 
@@ -39,7 +39,7 @@ class CardActivationNumbersDaoTest : AbstractDBSetup() {
                 it[cost] = 1
                 it[income] = 1
                 it[establishmentType] = EstablishmentType.WHEAT
-                it[triggerCondition] = TriggerCondition.ANY_TURN
+                it[color] = CardColor.BLUE
                 it[paymentSource] = PaymentSource.BANK
             } get Cards.id).value
 
@@ -48,7 +48,7 @@ class CardActivationNumbersDaoTest : AbstractDBSetup() {
                 it[cost] = 1
                 it[income] = 1
                 it[establishmentType] = EstablishmentType.BREAD
-                it[triggerCondition] = TriggerCondition.OWN_TURN
+                it[color] = CardColor.GREEN
                 it[paymentSource] = PaymentSource.BANK
             } get Cards.id).value
 
@@ -99,8 +99,8 @@ class CardActivationNumbersDaoTest : AbstractDBSetup() {
                 it[cardType] = CardType.RANCH
                 it[cost] = 1
                 it[income] = 1
+                it[color] = CardColor.BLUE
                 it[establishmentType] = EstablishmentType.COW
-                it[triggerCondition] = TriggerCondition.ANY_TURN
                 it[paymentSource] = PaymentSource.BANK
             } get Cards.id).value
 

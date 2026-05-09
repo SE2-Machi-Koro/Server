@@ -6,10 +6,10 @@ import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.domain.enums.TurnPhase
-import org.machikoro.server.domain.enums.TriggerCondition
 import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.service.interfaces.EarningsService
 import org.springframework.stereotype.Service
+import org.machikoro.server.domain.enums.CardColor
 
 /**
  * Service responsible for core economic of the game
@@ -32,7 +32,10 @@ class EarningsServiceImpl(
 
     /**
      * Processes income for all players based on the current dice roll
-     * Evaluates the trigger conditions to determine who gets paid
+     * Evaluates the card colors to determine who gets paid:
+     * - BLUE (ANY_TURN): all players receive income
+     * - GREEN/PURPLE (OWN_TURN): only the active player receives income
+     * - RED (OTHER_TURN): only opponents receive income
      */
     override fun processEarnings(gameId: Int, diceRoll: Int, activePlayerId: Int) {
         transaction {
@@ -49,19 +52,15 @@ class EarningsServiceImpl(
                 val earned = playerCardDao.findByPlayerId(player.id)
                     // Match the player's owned cards with the ones that trigger on this roll
                     .mapNotNull { playerCard -> activatingCards[playerCard.cardType]?.let { playerCard to it } }
-                    // Apply activation rules based on trigger condition
+                    // Apply activation rules based on card color
                     .filter { (_, card) ->
-                        when (card.triggerCondition) {
-                            // Activates on anyone's turn
-                            TriggerCondition.ANY_TURN -> true
-                            // Activates ONLY on your turn
-                            TriggerCondition.OWN_TURN -> isActive
-                            // Activates ONLY on opponents' turns
-                            TriggerCondition.OTHER_TURN -> !isActive
-                            // Never activates automatically
-                            TriggerCondition.NONE -> false
-                            // Handle nullable case
-                            null -> false
+                        when (card.color) {
+                            // Blue cards activate on anyone's turn
+                            CardColor.BLUE -> true
+                            // Green/Purple cards activate ONLY on your turn
+                            CardColor.GREEN, CardColor.PURPLE -> isActive
+                            // Red cards activate ONLY on opponents' turns
+                            CardColor.RED -> !isActive
                         }
                     }
                     // Extract the quantities and income values to compute the total

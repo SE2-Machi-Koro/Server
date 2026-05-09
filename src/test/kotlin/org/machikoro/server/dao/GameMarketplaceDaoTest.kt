@@ -3,7 +3,6 @@ package org.machikoro.server.dao
 import org.jetbrains.exposed.v1.jdbc.deleteAll
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.insertAndGetId
-import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
@@ -16,10 +15,10 @@ import org.machikoro.server.database.Cards
 import org.machikoro.server.database.GameMarketplace
 import org.machikoro.server.database.Games
 import org.machikoro.server.database.Users
+import org.machikoro.server.domain.enums.CardColor
 import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.EstablishmentType
 import org.machikoro.server.domain.enums.PaymentSource
-import org.machikoro.server.domain.enums.TriggerCondition
 import org.machikoro.server.exception.CardNotFoundException
 
 class GameMarketplaceDaoTest : AbstractDBSetup() {
@@ -47,16 +46,16 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
                 cost: Int,
                 income: Int,
                 activationNumbers: List<Int>,
-                establishmentType: EstablishmentType?,
-                triggerCondition: TriggerCondition?,
-                paymentSource: PaymentSource?
+                color: CardColor,
+                establishmentType: EstablishmentType,
+                paymentSource: PaymentSource
             ) {
                 val cardId = Cards.insertAndGetId {
                     it[cardType] = type
                     it[Cards.cost] = cost
                     it[Cards.income] = income
+                    it[Cards.color] = color
                     it[Cards.establishmentType] = establishmentType
-                    it[Cards.triggerCondition] = triggerCondition
                     it[Cards.paymentSource] = paymentSource
                 }
 
@@ -74,7 +73,7 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
                 income = 1,
                 activationNumbers = listOf(1),
                 establishmentType = EstablishmentType.WHEAT,
-                triggerCondition = TriggerCondition.ANY_TURN,
+                color = CardColor.BLUE,
                 paymentSource = PaymentSource.BANK
             )
 
@@ -84,7 +83,7 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
                 income = 1,
                 activationNumbers = listOf(2),
                 establishmentType = EstablishmentType.COW,
-                triggerCondition = TriggerCondition.ANY_TURN,
+                color = CardColor.BLUE,
                 paymentSource = PaymentSource.BANK
             )
 
@@ -94,7 +93,7 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
                 income = 1,
                 activationNumbers = listOf(5),
                 establishmentType = EstablishmentType.GEAR,
-                triggerCondition = TriggerCondition.ANY_TURN,
+                color = CardColor.BLUE,
                 paymentSource = PaymentSource.BANK
             )
 
@@ -104,7 +103,7 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
                 income = 5,
                 activationNumbers = listOf(9),
                 establishmentType = EstablishmentType.GEAR,
-                triggerCondition = TriggerCondition.ANY_TURN,
+                color = CardColor.BLUE,
                 paymentSource = PaymentSource.BANK
             )
 
@@ -114,7 +113,7 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
                 income = 3,
                 activationNumbers = listOf(10),
                 establishmentType = EstablishmentType.FRUIT,
-                triggerCondition = TriggerCondition.ANY_TURN,
+                color = CardColor.BLUE,
                 paymentSource = PaymentSource.BANK
             )
 
@@ -124,7 +123,7 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
                 income = 1,
                 activationNumbers = listOf(2, 3),
                 establishmentType = EstablishmentType.BREAD,
-                triggerCondition = TriggerCondition.OWN_TURN,
+                color = CardColor.GREEN,
                 paymentSource = PaymentSource.BANK
             )
 
@@ -134,7 +133,7 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
                 income = 3,
                 activationNumbers = listOf(4),
                 establishmentType = EstablishmentType.BREAD,
-                triggerCondition = TriggerCondition.OWN_TURN,
+                color = CardColor.GREEN,
                 paymentSource = PaymentSource.BANK
             )
 
@@ -144,7 +143,7 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
                 income = 3,
                 activationNumbers = listOf(7),
                 establishmentType = EstablishmentType.FACTORY,
-                triggerCondition = TriggerCondition.OWN_TURN,
+                color = CardColor.GREEN,
                 paymentSource = PaymentSource.BANK
             )
 
@@ -154,7 +153,7 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
                 income = 3,
                 activationNumbers = listOf(8),
                 establishmentType = EstablishmentType.FACTORY,
-                triggerCondition = TriggerCondition.OWN_TURN,
+                color = CardColor.GREEN,
                 paymentSource = PaymentSource.BANK
             )
 
@@ -164,7 +163,7 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
                 income = 2,
                 activationNumbers = listOf(11, 12),
                 establishmentType = EstablishmentType.FRUIT,
-                triggerCondition = TriggerCondition.OWN_TURN,
+                color = CardColor.GREEN,
                 paymentSource = PaymentSource.BANK
             )
 
@@ -174,7 +173,7 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
                 income = 1,
                 activationNumbers = listOf(3),
                 establishmentType = EstablishmentType.CUP,
-                triggerCondition = TriggerCondition.OTHER_TURN,
+                color = CardColor.RED,
                 paymentSource = PaymentSource.ACTIVE_PLAYER
             )
 
@@ -184,7 +183,7 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
                 income = 2,
                 activationNumbers = listOf(9, 10),
                 establishmentType = EstablishmentType.CUP,
-                triggerCondition = TriggerCondition.OTHER_TURN,
+                color = CardColor.RED,
                 paymentSource = PaymentSource.ACTIVE_PLAYER
             )
 
@@ -194,7 +193,7 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
                 income = 2,
                 activationNumbers = listOf(6),
                 establishmentType = EstablishmentType.MAJOR,
-                triggerCondition = TriggerCondition.OWN_TURN,
+                color = CardColor.PURPLE,
                 paymentSource = PaymentSource.ALL_PLAYERS
             )
 
@@ -204,7 +203,7 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
                 income = 0,
                 activationNumbers = listOf(6),
                 establishmentType = EstablishmentType.MAJOR,
-                triggerCondition = TriggerCondition.OWN_TURN,
+                color = CardColor.PURPLE,
                 paymentSource = PaymentSource.ACTIVE_PLAYER
             )
 
@@ -214,7 +213,7 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
                 income = 0,
                 activationNumbers = listOf(6),
                 establishmentType = EstablishmentType.MAJOR,
-                triggerCondition = TriggerCondition.OWN_TURN,
+                color = CardColor.PURPLE,
                 paymentSource = PaymentSource.NONE
             )
         }
