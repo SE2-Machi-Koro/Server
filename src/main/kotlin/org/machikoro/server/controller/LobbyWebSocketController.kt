@@ -1,8 +1,9 @@
 package org.machikoro.server.controller
 
-import org.machikoro.server.auth.UserPrincipal
+import org.machikoro.server.auth.userPrincipal
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.WebSocketMessage
+import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.service.LobbyService
 import org.slf4j.LoggerFactory
 import org.springframework.messaging.handler.annotation.MessageMapping
@@ -10,7 +11,6 @@ import org.springframework.messaging.handler.annotation.Payload
 import org.springframework.messaging.handler.annotation.SendTo
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor
 import org.springframework.stereotype.Controller
-import java.security.Principal
 
 @Controller
 class LobbyWebSocketController(
@@ -30,14 +30,16 @@ class LobbyWebSocketController(
      */
     @MessageMapping("/lobby.create")
     @SendTo("/topic/public")
+    @Suppress("UNUSED_PARAMETER") // Spring requires a @Payload parameter to deserialize the STOMP frame body
     fun createLobby(
         @Payload message: WebSocketMessage,
         headerAccessor: SimpMessageHeaderAccessor,
     ): WebSocketMessage {
-        val principal =
-            headerAccessor.user as? UserPrincipal
-                ?: headerAccessor.sessionAttributes?.get("userPrincipal") as? UserPrincipal
-                ?: throw RuntimeException("Authenticated principal not found")
+        val principal = headerAccessor.userPrincipal()
+            ?: throw CustomWebSocketException(
+                errorCode = "UNAUTHENTICATED",
+                message = "Authenticated principal not found — connection may not have completed STOMP handshake",
+            )
 
         logger.info("User '{}' requested lobby creation", principal.username)
 

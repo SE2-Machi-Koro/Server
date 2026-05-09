@@ -2,12 +2,14 @@ package org.machikoro.server.controller
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import org.machikoro.server.auth.USER_PRINCIPAL_KEY
 import org.machikoro.server.auth.UserPrincipal
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.WebSocketMessage
+import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.service.LobbyService
 import org.junit.jupiter.api.assertThrows
 import org.mockito.kotlin.any
@@ -76,7 +78,7 @@ class LobbyWebSocketControllerTest {
         // Accessor with no UserPrincipal — simulates a bypassed STOMP auth
         val accessor = SimpMessageHeaderAccessor.create()
 
-        assertThrows<RuntimeException> {
+        val ex = assertThrows<CustomWebSocketException> {
             controller.createLobby(
                 WebSocketMessage(
                     type = MessageType.JOIN,
@@ -87,6 +89,7 @@ class LobbyWebSocketControllerTest {
             )
         }
 
+        assertEquals("UNAUTHENTICATED", ex.errorCode)
         verify(lobbyService, never()).createLobby(any())
     }
 
@@ -96,7 +99,7 @@ class LobbyWebSocketControllerTest {
 
         val accessor = SimpMessageHeaderAccessor.create().apply {
             sessionAttributes = mutableMapOf(
-                "userPrincipal" to UserPrincipal(userId = 10, username = "Player1")
+                USER_PRINCIPAL_KEY to UserPrincipal(userId = 10, username = "Player1")
             )
         }
 
