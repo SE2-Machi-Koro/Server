@@ -89,4 +89,32 @@ class LobbyWebSocketControllerTest {
 
         verify(lobbyService, never()).createLobby(any())
     }
+
+    @Test
+    fun `createLobby uses principal from session attributes when header user is missing`() {
+        whenever(lobbyService.createLobby(10)).thenReturn(game())
+
+        val accessor = SimpMessageHeaderAccessor.create().apply {
+            sessionAttributes = mutableMapOf(
+                "userPrincipal" to UserPrincipal(userId = 10, username = "Player1")
+            )
+        }
+
+        val result = controller.createLobby(
+            WebSocketMessage(
+                type = MessageType.JOIN,
+                sender = "ignored-by-server",
+                content = "create lobby"
+            ),
+            accessor,
+        )
+
+        val payload = result.payload as? Map<String, Any>
+            ?: throw AssertionError("Payload is not a Map")
+
+        assertEquals(MessageType.LOBBY_CREATED, result.type)
+        assertEquals("ABC1234", payload["lobbyCode"])
+
+        verify(lobbyService).createLobby(10)
+    }
 }
