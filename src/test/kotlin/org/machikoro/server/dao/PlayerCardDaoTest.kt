@@ -9,12 +9,16 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.database.AbstractDBSetup
+import org.machikoro.server.database.CardActivationNumbers
 import org.machikoro.server.database.Cards
 import org.machikoro.server.database.Games
 import org.machikoro.server.database.PlayerCards
 import org.machikoro.server.database.Players
 import org.machikoro.server.database.Users
+import org.machikoro.server.domain.enums.CardColor
 import org.machikoro.server.domain.enums.CardType
+import org.machikoro.server.domain.enums.EstablishmentType
+import org.machikoro.server.domain.enums.PaymentSource
 import org.machikoro.server.exception.CardNotFoundException
 
 class PlayerCardDaoTest : AbstractDBSetup() {
@@ -30,79 +34,124 @@ class PlayerCardDaoTest : AbstractDBSetup() {
     fun seed() {
         transaction {
             Cards.insertIgnore {
-                it[Cards.cardType] = CardType.WHEAT_FIELD
-                it[Cards.cost] = 1
-                it[Cards.income] = 1
+                it[cardType] = CardType.WHEAT_FIELD
+                it[cost] = 1
+                it[income] = 1
+                it[color] = CardColor.BLUE
+                it[establishmentType] = EstablishmentType.WHEAT
+                it[paymentSource] = PaymentSource.BANK
             }
             Cards.insertIgnore {
-                it[Cards.cardType] = CardType.RANCH
-                it[Cards.cost] = 1
-                it[Cards.income] = 1
+                it[cardType] = CardType.RANCH
+                it[cost] = 1
+                it[income] = 1
+                it[color] = CardColor.BLUE
+                it[establishmentType] = EstablishmentType.COW
+                it[paymentSource] = PaymentSource.BANK
             }
             Cards.insertIgnore {
-                it[Cards.cardType] = CardType.FOREST
-                it[Cards.cost] = 3
-                it[Cards.income] = 1
+                it[cardType] = CardType.FOREST
+                it[cost] = 3
+                it[income] = 1
+                it[color] = CardColor.BLUE
+                it[establishmentType] = EstablishmentType.GEAR
+                it[paymentSource] = PaymentSource.BANK
             }
             Cards.insertIgnore {
-                it[Cards.cardType] = CardType.MINE
-                it[Cards.cost] = 6
-                it[Cards.income] = 5
+                it[cardType] = CardType.MINE
+                it[cost] = 6
+                it[income] = 5
+                it[color] = CardColor.BLUE
+                it[establishmentType] = EstablishmentType.GEAR
+                it[paymentSource] = PaymentSource.BANK
             }
             Cards.insertIgnore {
-                it[Cards.cardType] = CardType.APPLE_ORCHARD
-                it[Cards.cost] = 3
-                it[Cards.income] = 3
+                it[cardType] = CardType.APPLE_ORCHARD
+                it[cost] = 3
+                it[income] = 3
+                it[color] = CardColor.BLUE
+                it[establishmentType] = EstablishmentType.WHEAT
+                it[paymentSource] = PaymentSource.BANK
             }
             Cards.insertIgnore {
-                it[Cards.cardType] = CardType.BAKERY
-                it[Cards.cost] = 1
-                it[Cards.income] = 1
+                it[cardType] = CardType.BAKERY
+                it[cost] = 1
+                it[income] = 1
+                it[color] = CardColor.GREEN
+                it[establishmentType] = EstablishmentType.BREAD
+                it[paymentSource] = PaymentSource.BANK
             }
             Cards.insertIgnore {
-                it[Cards.cardType] = CardType.CONVENIENCE_STORE
-                it[Cards.cost] = 2
-                it[Cards.income] = 3
+                it[cardType] = CardType.CONVENIENCE_STORE
+                it[cost] = 2
+                it[income] = 3
+                it[color] = CardColor.GREEN
+                it[establishmentType] = EstablishmentType.BREAD
+                it[paymentSource] = PaymentSource.BANK
             }
             Cards.insertIgnore {
-                it[Cards.cardType] = CardType.CHEESE_FACTORY
-                it[Cards.cost] = 5
-                it[Cards.income] = 3
+                it[cardType] = CardType.CHEESE_FACTORY
+                it[cost] = 5
+                it[income] = 3
+                it[color] = CardColor.GREEN
+                it[establishmentType] = EstablishmentType.FACTORY
+                it[paymentSource] = PaymentSource.BANK
             }
             Cards.insertIgnore {
-                it[Cards.cardType] = CardType.FURNITURE_FACTORY
-                it[Cards.cost] = 3
-                it[Cards.income] = 3
+                it[cardType] = CardType.FURNITURE_FACTORY
+                it[cost] = 3
+                it[income] = 3
+                it[color] = CardColor.GREEN
+                it[establishmentType] = EstablishmentType.FACTORY
+                it[paymentSource] = PaymentSource.BANK
             }
             Cards.insertIgnore {
-                it[Cards.cardType] = CardType.FRUIT_AND_VEGETABLE_MARKET
-                it[Cards.cost] = 2
-                it[Cards.income] = 2
+                it[cardType] = CardType.FRUIT_AND_VEGETABLE_MARKET
+                it[cost] = 2
+                it[income] = 2
+                it[color] = CardColor.GREEN
+                it[establishmentType] = EstablishmentType.FRUIT
+                it[paymentSource] = PaymentSource.BANK
             }
             Cards.insertIgnore {
-                it[Cards.cardType] = CardType.CAFE
-                it[Cards.cost] = 2
-                it[Cards.income] = 1
+                it[cardType] = CardType.CAFE
+                it[cost] = 2
+                it[income] = 1
+                it[color] = CardColor.RED
+                it[establishmentType] = EstablishmentType.CUP
+                it[paymentSource] = PaymentSource.ACTIVE_PLAYER
             }
             Cards.insertIgnore {
-                it[Cards.cardType] = CardType.FAMILY_RESTAURANT
-                it[Cards.cost] = 3
-                it[Cards.income] = 2
+                it[cardType] = CardType.FAMILY_RESTAURANT
+                it[cost] = 3
+                it[income] = 2
+                it[color] = CardColor.RED
+                it[establishmentType] = EstablishmentType.CUP
+                it[paymentSource] = PaymentSource.ACTIVE_PLAYER
             }
             Cards.insertIgnore {
-                it[Cards.cardType] = CardType.STADIUM
-                it[Cards.cost] = 6
-                it[Cards.income] = 2
+                it[cardType] = CardType.STADIUM
+                it[cost] = 6
+                it[income] = 2
+                it[color] = CardColor.PURPLE
+                it[establishmentType] = EstablishmentType.MAJOR
+                it[paymentSource] = PaymentSource.ALL_PLAYERS
             }
             Cards.insertIgnore {
-                it[Cards.cardType] = CardType.TV_STATION
-                it[Cards.cost] = 7
-                it[Cards.income] = 0
+                it[cardType] = CardType.TV_STATION
+                it[cost] = 7
+                it[income] = 0
+                it[color] = CardColor.PURPLE
+                it[establishmentType] = EstablishmentType.MAJOR
+                it[paymentSource] = PaymentSource.CHOSEN_PLAYER
             }
             Cards.insertIgnore {
-                it[Cards.cardType] = CardType.BUSINESS_CENTER
-                it[Cards.cost] = 8
-                it[Cards.income] = 0
+                it[cardType] = CardType.BUSINESS_CENTER
+                it[cost] = 8
+                it[income] = 0
+                it[color] = CardColor.PURPLE
+                it[establishmentType] = EstablishmentType.MAJOR
+                it[paymentSource] = PaymentSource.NONE
             }
         }
         val userId = userDao.create("card_user")
@@ -114,6 +163,7 @@ class PlayerCardDaoTest : AbstractDBSetup() {
     fun cleanup() {
         transaction {
             PlayerCards.deleteAll()
+            CardActivationNumbers.deleteAll()
             Players.deleteAll()
             Games.deleteAll()
             Users.deleteAll()

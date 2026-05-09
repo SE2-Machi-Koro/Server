@@ -6,9 +6,9 @@ import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.machikoro.server.database.Cards
+import org.machikoro.server.domain.enums.CardColor
 import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.EstablishmentType
-import org.machikoro.server.domain.enums.TriggerCondition
 import org.machikoro.server.domain.models.CardModel
 import org.springframework.stereotype.Repository
 
@@ -26,8 +26,8 @@ class CardDao(
             cardType = this[Cards.cardType],
             cost = this[Cards.cost],
             income = this[Cards.income],
+            color = this[Cards.color],
             establishmentType = this[Cards.establishmentType],
-            triggerCondition = this[Cards.triggerCondition],
             paymentSource = this[Cards.paymentSource],
             activationNumbers = activationNumbers
         )
@@ -74,12 +74,12 @@ class CardDao(
     }
 
     /**
-     * Finds cards by their trigger condition.
+     * Finds cards by their color.
      * Useful for resolving logic specific to certain colors (e.g., all Blue cards).
      */
-    fun findByTriggerCondition(condition: TriggerCondition): List<CardModel> = transaction {
+    fun findByColor(color: CardColor): List<CardModel> = transaction {
         Cards.selectAll()
-            .where { Cards.triggerCondition eq condition }
+            .where { Cards.color eq color }
             .map { it.toModel() }
     }
 }

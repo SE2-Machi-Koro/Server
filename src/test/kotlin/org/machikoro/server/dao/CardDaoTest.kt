@@ -10,10 +10,10 @@ import org.junit.jupiter.api.Test
 import org.machikoro.server.database.AbstractDBSetup
 import org.machikoro.server.database.CardActivationNumbers
 import org.machikoro.server.database.Cards
+import org.machikoro.server.domain.enums.CardColor
 import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.EstablishmentType
 import org.machikoro.server.domain.enums.PaymentSource
-import org.machikoro.server.domain.enums.TriggerCondition
 import org.machikoro.server.domain.utils.displayName
 
 class CardDaoTest : AbstractDBSetup() {
@@ -34,7 +34,7 @@ class CardDaoTest : AbstractDBSetup() {
                 it[cost] = 1
                 it[income] = 1
                 it[establishmentType] = EstablishmentType.WHEAT
-                it[triggerCondition] = TriggerCondition.ANY_TURN
+                it[color] = CardColor.BLUE
                 it[paymentSource] = PaymentSource.BANK
             }[Cards.id].value
 
@@ -49,7 +49,7 @@ class CardDaoTest : AbstractDBSetup() {
                 it[cost] = 1
                 it[income] = 1
                 it[establishmentType] = EstablishmentType.BREAD
-                it[triggerCondition] = TriggerCondition.OWN_TURN
+                it[color] = CardColor.GREEN
                 it[paymentSource] = PaymentSource.BANK
             }[Cards.id].value
 
@@ -62,7 +62,7 @@ class CardDaoTest : AbstractDBSetup() {
                 it[cost] = 2
                 it[income] = 1
                 it[establishmentType] = EstablishmentType.CUP
-                it[triggerCondition] = TriggerCondition.OTHER_TURN
+                it[color] = CardColor.RED
                 it[paymentSource] = PaymentSource.ACTIVE_PLAYER
             }[Cards.id].value
 
@@ -77,7 +77,7 @@ class CardDaoTest : AbstractDBSetup() {
                 it[cost] = 6
                 it[income] = 2
                 it[establishmentType] = EstablishmentType.MAJOR
-                it[triggerCondition] = TriggerCondition.OWN_TURN
+                it[color] = CardColor.PURPLE
                 it[paymentSource] = PaymentSource.ALL_PLAYERS
             }[Cards.id].value
 
@@ -119,7 +119,7 @@ class CardDaoTest : AbstractDBSetup() {
         assertEquals("Wheat Field", CardType.WHEAT_FIELD.displayName())
         assertEquals(1, card!!.cost)
         assertEquals(1, card.income)
-        assertEquals(TriggerCondition.ANY_TURN, card.triggerCondition)
+        assertEquals(CardColor.BLUE, card.color)
         assertEquals(EstablishmentType.WHEAT, card.establishmentType)
         assertEquals(listOf(1), card.activationNumbers)
     }
@@ -156,8 +156,8 @@ class CardDaoTest : AbstractDBSetup() {
     }
 
     @Test
-    fun `findByTriggerCondition filters cards by turn logic`() {
-        val redCards = dao.findByTriggerCondition(TriggerCondition.OTHER_TURN)
+    fun `findByColor filters cards by color`() {
+        val redCards = dao.findByColor(CardColor.RED)
 
         assertEquals(1, redCards.size)
         assertEquals(CardType.CAFE, redCards[0].cardType)
