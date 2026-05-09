@@ -10,6 +10,7 @@ import org.springframework.messaging.handler.annotation.Payload
 import org.springframework.messaging.handler.annotation.SendTo
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor
 import org.springframework.stereotype.Controller
+import java.security.Principal
 
 @Controller
 class LobbyWebSocketController(
@@ -29,13 +30,14 @@ class LobbyWebSocketController(
      */
     @MessageMapping("/lobby.create")
     @SendTo("/topic/public")
-    @Suppress("UNUSED_PARAMETER") // Spring requires a @Payload parameter to deserialize the STOMP frame body
     fun createLobby(
         @Payload message: WebSocketMessage,
         headerAccessor: SimpMessageHeaderAccessor,
     ): WebSocketMessage {
-        val principal = headerAccessor.user as? UserPrincipal
-            ?: throw RuntimeException("Authenticated principal not found — connection may not have completed STOMP handshake")
+        val principal =
+            headerAccessor.user as? UserPrincipal
+                ?: headerAccessor.sessionAttributes?.get("userPrincipal") as? UserPrincipal
+                ?: throw RuntimeException("Authenticated principal not found")
 
         logger.info("User '{}' requested lobby creation", principal.username)
 

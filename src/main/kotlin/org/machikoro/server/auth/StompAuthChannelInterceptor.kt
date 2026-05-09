@@ -58,7 +58,11 @@ class StompAuthChannelInterceptor(
             throw InvalidSessionTokenException(GENERIC_AUTH_FAILURE)
         }
 
-        accessor.user = UserPrincipal(userId = user.id, username = user.username)
+        val principal = UserPrincipal(userId = user.id, username = user.username)
+
+        accessor.user = principal
+        accessor.sessionAttributes?.put("userPrincipal", principal)
+
         logger.info("WS CONNECT accepted for user '{}'", sanitizeForLog(user.username))
         // Re-build the message with the mutated accessor's headers so the
         // principal propagates to downstream handlers. The Spring docs example
