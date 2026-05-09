@@ -1,5 +1,6 @@
 package org.machikoro.server.auth
 
+import org.machikoro.server.exception.CustomWebSocketException
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor
 
 /**
@@ -26,3 +27,15 @@ const val USER_PRINCIPAL_KEY = "userPrincipal"
 fun SimpMessageHeaderAccessor.userPrincipal(): UserPrincipal? =
     user as? UserPrincipal
         ?: sessionAttributes?.get(USER_PRINCIPAL_KEY) as? UserPrincipal
+
+/**
+ * Resolve the authenticated [UserPrincipal] or throw
+ * [CustomWebSocketException] with `UNAUTHENTICATED` so it's routed via
+ * `GlobalWebSocketExceptionHandler` like other handled failures. Use this in
+ * any `@MessageMapping` handler that requires an authenticated user.
+ */
+fun SimpMessageHeaderAccessor.requireUserPrincipal(): UserPrincipal =
+    userPrincipal() ?: throw CustomWebSocketException(
+        errorCode = "UNAUTHENTICATED",
+        message = "Authenticated principal not found — connection may not have completed STOMP handshake",
+    )

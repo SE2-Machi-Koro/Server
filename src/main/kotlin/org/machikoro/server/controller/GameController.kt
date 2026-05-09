@@ -1,6 +1,6 @@
 package org.machikoro.server.controller
 
-import java.security.Principal
+import org.machikoro.server.auth.requireUserPrincipal
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.dto.EndTurnOutcome
 import org.machikoro.server.dto.AdvancePhaseRequest
@@ -115,8 +115,8 @@ class GameController(
      * Message is sent to /app/game.advancePhase and broadcast to /topic/game/{gameId}.
      */
     @MessageMapping("/game.advancePhase")
-    fun advancePhase(@Payload request: AdvancePhaseRequest, principal: Principal) {
-        gameStateGuard.ensureSenderIsActivePlayer(request.gameId, principal)
+    fun advancePhase(@Payload request: AdvancePhaseRequest, headerAccessor: SimpMessageHeaderAccessor) {
+        requireActivePlayer(request.gameId, headerAccessor)
         val newPhase = gamePhaseService.advancePhase(request.gameId)
         logger.info("Advanced phase for game ${request.gameId} to $newPhase")
         broadcastPhase(request.gameId, newPhase)
@@ -128,8 +128,8 @@ class GameController(
      * landmark completes the game.
      */
     @MessageMapping("/game.purchase")
-    fun purchase(@Payload request: PurchaseRequest, principal: Principal) {
-        gameStateGuard.ensureSenderIsActivePlayer(request.gameId, principal)
+    fun purchase(@Payload request: PurchaseRequest, headerAccessor: SimpMessageHeaderAccessor) {
+        requireActivePlayer(request.gameId, headerAccessor)
         val result = purchaseService.purchase(
             gameId = request.gameId,
             purchaseType = request.purchaseType,
@@ -142,8 +142,8 @@ class GameController(
     }
 
     @MessageMapping("/game.endTurn")
-    fun endTurn(@Payload request: EndTurnRequest, principal: Principal) {
-        gameStateGuard.ensureSenderIsActivePlayer(request.gameId, principal)
+    fun endTurn(@Payload request: EndTurnRequest, headerAccessor: SimpMessageHeaderAccessor) {
+        requireActivePlayer(request.gameId, headerAccessor)
         when (val result = gamePhaseService.endTurn(request.gameId)) {
             is EndTurnOutcome.Continue -> {
                 logger.info("Ended turn for game ${request.gameId}, new phase ${result.nextPhase}")
@@ -157,8 +157,8 @@ class GameController(
     }
 
     @MessageMapping("/game.leave")
-    fun leaveFinishedGame(@Payload request: LeaveFinishedGameRequest, principal: Principal) {
-        gameStateGuard.ensureSenderOwnsPlayer(request.gameId, request.playerId, principal)
+    fun leaveFinishedGame(@Payload request: LeaveFinishedGameRequest, headerAccessor: SimpMessageHeaderAccessor) {
+        requireOwnerOfPlayer(request.gameId, request.playerId, headerAccessor)
         leaveFinishedGameService.leaveFinishedGame(request.gameId, request.playerId)
         logger.info("${request.playerId} left game ${request.gameId}")
         broadcastPlayerLeftFinishedGame(request.gameId, request.playerId)
@@ -169,8 +169,8 @@ class GameController(
      * Message is sent to /app/game.rollDice and broadcast to /topic/game/{gameId}
      */
     @MessageMapping("/game.rollDice")
-    fun rollDice(@Payload request: RollDiceRequest, principal: Principal) {
-        gameStateGuard.ensureSenderIsActivePlayer(request.gameId, principal)
+    fun rollDice(@Payload request: RollDiceRequest, headerAccessor: SimpMessageHeaderAccessor) {
+        requireActivePlayer(request.gameId, headerAccessor)
         val gameTopic = "/topic/game/${request.gameId}"
         logger.info("Roll dice request from player ${request.playerId} in game ${request.gameId}")
         try {
@@ -248,5 +248,19 @@ class GameController(
                 ),
             ),
         )
+    }
+
+    /**
+     * Resolve the authenticated user from the STOMP session and assert they
+     * are the active player for [gameId]. Throws `UNAUTHENTICATED` /
+     * `NOT_YOUR_TURN` / `NO_ACTIVE_PLAYER` / `GAME_FINISHED` per the helper
+     * and guard contracts.
+     */
+    private fun requireActivePlayer(gameId: Int, headerAccessor: SimpMessageHeaderAccessor) {
+        gameStateGuard.ensureSenderIsActivePlayer(gameId, headerAccessor.requireUserPrincipal())
+    }
+
+    private fun requireOwnerOfPlayer(gameId: Int, playerId: Int, headerAccessor: SimpMessageHeaderAccessor) {
+        gameStateGuard.ensureSenderOwnsPlayer(gameId, playerId, headerAccessor.requireUserPrincipal())
     }
 }
