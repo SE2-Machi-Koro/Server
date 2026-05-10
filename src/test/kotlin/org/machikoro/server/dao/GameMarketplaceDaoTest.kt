@@ -112,7 +112,7 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
                 cost = 3,
                 income = 3,
                 activationNumbers = listOf(10),
-                establishmentType = EstablishmentType.FRUIT,
+                establishmentType = EstablishmentType.WHEAT,
                 color = CardColor.BLUE,
                 paymentSource = PaymentSource.BANK
             )
@@ -204,7 +204,7 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
                 activationNumbers = listOf(6),
                 establishmentType = EstablishmentType.MAJOR,
                 color = CardColor.PURPLE,
-                paymentSource = PaymentSource.ACTIVE_PLAYER
+                paymentSource = PaymentSource.CHOSEN_PLAYER
             )
 
             insertCard(

@@ -45,9 +45,8 @@ class EarningsIntegrationTest : AbstractDBSetup() {
     @BeforeEach
     fun setup() {
         transaction {
-            // Order matters for deletion due to foreign key constraints
             PlayerCards.deleteAll()
-            CardActivationNumbers.deleteAll() // Must be deleted before Cards
+            CardActivationNumbers.deleteAll()
             Players.deleteAll()
             Games.deleteAll()
             Users.deleteAll()
@@ -123,6 +122,8 @@ class EarningsIntegrationTest : AbstractDBSetup() {
             player1Id = playerDao.addPlayer(gameId, user1Id).id
             player2Id = playerDao.addPlayer(gameId, user2Id).id
 
+            // P1: Wheat Field x2
+            // P2: Wheat Field x1, Cafe x1
             playerCardDao.upsert(player1Id, CardType.WHEAT_FIELD, 2)
             playerCardDao.upsert(player2Id, CardType.WHEAT_FIELD, 1)
             playerCardDao.upsert(player2Id, CardType.CAFE, 1)
@@ -131,7 +132,6 @@ class EarningsIntegrationTest : AbstractDBSetup() {
 
     @Test
     fun `resolveEffects distributes correct coins and transitions phase`() {
-        // 1. Update the game to roll a 3
         transaction {
             Games.update({ Games.id eq gameId }) {
                 it[lastDiceRoll] = 3
@@ -143,10 +143,12 @@ class EarningsIntegrationTest : AbstractDBSetup() {
         val p1 = playerDao.findById(player1Id)!!
         val p2 = playerDao.findById(player2Id)!!
 
-        // Logic for roll 3:
-        // P2's Cafe triggers first: P1 pays P2 1 coin (P1=2, P2=4)
-        // P1's Bakery triggers: P1 gets 1 coin from bank (P1=3, P2=4)
-        // Note: Wheat fields don't trigger on a 3
+        // currentTurnIndex=0, so P1 is the active player.
+        // Roll 3: Bakery (Green) - neither player owns one, no payout.
+        // Roll 3: Cafe (Red) activates only for non-active players -> P2 gets 1 coin.
+        // Wheat Field does not activate on 3.
+        // P1: 3 (no activation) = 3
+        // P2: 3 + 1 (Cafe) = 4
         assertEquals(3, p1.coins)
         assertEquals(4, p2.coins)
     }
@@ -190,14 +192,17 @@ class EarningsIntegrationTest : AbstractDBSetup() {
             val rp1 = playerDao.findById(p1)!!
             val rp2 = playerDao.findById(p2)!!
 
+            // currentTurnIndex=0, so P1 (turn order 0) is the active player.
+            // Roll 2: Bakery (Green) activates only for the active player.
+            // P1: 3 + 1 (Bakery) = 4
+            // P2: 3 (no activation) = 3
             assertEquals(4, rp1.coins)
             assertEquals(3, rp2.coins)
         }
     }
 
     @Test
-    fun `red card triggers before blue and green cards`() {
-        // Setup: P1 (Active) has 1 coin. P2 has Cafe (Red, Roll 3). P1 has Bakery (Green, Roll 3).
+    fun `red card only pays non-active player`() {
         transaction {
             Players.update({ Players.id eq player1Id }) { it[coins] = 1 }
             Games.update({ Games.id eq gameId }) { it[lastDiceRoll] = 3 }
@@ -208,8 +213,11 @@ class EarningsIntegrationTest : AbstractDBSetup() {
         val p1 = playerDao.findById(player1Id)!!
         val p2 = playerDao.findById(player2Id)!!
 
-        // 1. Red triggers: P1 pays P2 his only 1 coin. (P1=0, P2=4)
-        // 2. Green triggers: P1 gets 1 coin from bank. (P1=1, P2=4)
+        // currentTurnIndex=0, so P1 is the active player.
+        // Roll 3: Cafe (Red) activates only for non-active players -> P2 gets 1 coin.
+        // P1 owns no Bakery, so gets nothing.
+        // P1: 1 (no activation) = 1
+        // P2: 3 + 1 (Cafe) = 4
         assertEquals(1, p1.coins)
         assertEquals(4, p2.coins)
     }
