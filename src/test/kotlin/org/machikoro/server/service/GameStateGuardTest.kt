@@ -1,6 +1,5 @@
 package org.machikoro.server.service
 
-import java.security.Principal
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -146,18 +145,16 @@ class GameStateGuardTest {
     // ── ensureSenderIsActivePlayer ────────────────────────────────────────────
 
     @Test
-    fun `ensureSenderIsActivePlayer returns the principal when caller is the active player`() {
+    fun `ensureSenderIsActivePlayer succeeds when caller is the active player`() {
         val gameId = 1
         whenever(gameDao.findById(gameId))
             .thenReturn(game(gameId, GameStatus.IN_PROGRESS, currentTurnIndex = 0))
         whenever(playerDao.getPlayers(gameId)).thenReturn(
             listOf(player(id = 10, userId = 7), player(id = 11, userId = 8, turnOrder = 1)),
         )
-        val principal = UserPrincipal(userId = 7, username = "alice")
+        val user = UserPrincipal(userId = 7, username = "alice")
 
-        val result = guard.ensureSenderIsActivePlayer(gameId, principal)
-
-        assertEquals(principal, result)
+        guard.ensureSenderIsActivePlayer(gameId, user)
     }
 
     @Test
@@ -168,33 +165,12 @@ class GameStateGuardTest {
         whenever(playerDao.getPlayers(gameId)).thenReturn(
             listOf(player(id = 10, userId = 7), player(id = 11, userId = 8, turnOrder = 1)),
         )
-        val principal = UserPrincipal(userId = 8, username = "bob")
+        val user = UserPrincipal(userId = 8, username = "bob")
 
         val ex = assertThrows(CustomWebSocketException::class.java) {
-            guard.ensureSenderIsActivePlayer(gameId, principal)
+            guard.ensureSenderIsActivePlayer(gameId, user)
         }
         assertEquals("NOT_YOUR_TURN", ex.errorCode)
-    }
-
-    @Test
-    fun `ensureSenderIsActivePlayer throws UNAUTHENTICATED when principal is not a UserPrincipal`() {
-        val gameId = 1
-        val foreignPrincipal = Principal { "anon" }
-
-        val ex = assertThrows(CustomWebSocketException::class.java) {
-            guard.ensureSenderIsActivePlayer(gameId, foreignPrincipal)
-        }
-        assertEquals("UNAUTHENTICATED", ex.errorCode)
-    }
-
-    @Test
-    fun `ensureSenderIsActivePlayer throws UNAUTHENTICATED when principal is null`() {
-        val gameId = 1
-
-        val ex = assertThrows(CustomWebSocketException::class.java) {
-            guard.ensureSenderIsActivePlayer(gameId, null)
-        }
-        assertEquals("UNAUTHENTICATED", ex.errorCode)
     }
 
     @Test
@@ -203,10 +179,10 @@ class GameStateGuardTest {
         whenever(gameDao.findById(gameId))
             .thenReturn(game(gameId, GameStatus.IN_PROGRESS, currentTurnIndex = 5))
         whenever(playerDao.getPlayers(gameId)).thenReturn(listOf(player(id = 10, userId = 7)))
-        val principal = UserPrincipal(userId = 7, username = "alice")
+        val user = UserPrincipal(userId = 7, username = "alice")
 
         val ex = assertThrows(CustomWebSocketException::class.java) {
-            guard.ensureSenderIsActivePlayer(gameId, principal)
+            guard.ensureSenderIsActivePlayer(gameId, user)
         }
         assertEquals("NO_ACTIVE_PLAYER", ex.errorCode)
     }
@@ -215,10 +191,10 @@ class GameStateGuardTest {
     fun `ensureSenderIsActivePlayer propagates GAME_FINISHED when game has ended`() {
         val gameId = 1
         whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.FINISHED))
-        val principal = UserPrincipal(userId = 7, username = "alice")
+        val user = UserPrincipal(userId = 7, username = "alice")
 
         val ex = assertThrows(CustomWebSocketException::class.java) {
-            guard.ensureSenderIsActivePlayer(gameId, principal)
+            guard.ensureSenderIsActivePlayer(gameId, user)
         }
         assertEquals("GAME_FINISHED", ex.errorCode)
     }
@@ -226,17 +202,15 @@ class GameStateGuardTest {
     // ── ensureSenderOwnsPlayer ────────────────────────────────────────────────
 
     @Test
-    fun `ensureSenderOwnsPlayer returns the principal when caller owns the player`() {
+    fun `ensureSenderOwnsPlayer succeeds when caller owns the player`() {
         val gameId = 1
         val playerId = 10
         whenever(playerDao.getPlayers(gameId)).thenReturn(
             listOf(player(id = playerId, userId = 7), player(id = 11, userId = 8, turnOrder = 1)),
         )
-        val principal = UserPrincipal(userId = 7, username = "alice")
+        val user = UserPrincipal(userId = 7, username = "alice")
 
-        val result = guard.ensureSenderOwnsPlayer(gameId, playerId, principal)
-
-        assertEquals(principal, result)
+        guard.ensureSenderOwnsPlayer(gameId, playerId, user)
     }
 
     @Test
@@ -246,10 +220,10 @@ class GameStateGuardTest {
         whenever(playerDao.getPlayers(gameId)).thenReturn(
             listOf(player(id = playerId, userId = 7), player(id = 11, userId = 8, turnOrder = 1)),
         )
-        val principal = UserPrincipal(userId = 8, username = "bob")
+        val user = UserPrincipal(userId = 8, username = "bob")
 
         val ex = assertThrows(CustomWebSocketException::class.java) {
-            guard.ensureSenderOwnsPlayer(gameId, playerId, principal)
+            guard.ensureSenderOwnsPlayer(gameId, playerId, user)
         }
         assertEquals("NOT_YOUR_PLAYER", ex.errorCode)
     }
@@ -260,22 +234,11 @@ class GameStateGuardTest {
         whenever(playerDao.getPlayers(gameId)).thenReturn(
             listOf(player(id = 11, userId = 8, turnOrder = 1)),
         )
-        val principal = UserPrincipal(userId = 7, username = "alice")
+        val user = UserPrincipal(userId = 7, username = "alice")
 
         val ex = assertThrows(CustomWebSocketException::class.java) {
-            guard.ensureSenderOwnsPlayer(gameId, playerId = 99, principal)
+            guard.ensureSenderOwnsPlayer(gameId, playerId = 99, user)
         }
         assertEquals("PLAYER_NOT_IN_GAME", ex.errorCode)
-    }
-
-    @Test
-    fun `ensureSenderOwnsPlayer throws UNAUTHENTICATED when principal is not a UserPrincipal`() {
-        val gameId = 1
-        val foreignPrincipal = Principal { "anon" }
-
-        val ex = assertThrows(CustomWebSocketException::class.java) {
-            guard.ensureSenderOwnsPlayer(gameId, playerId = 10, foreignPrincipal)
-        }
-        assertEquals("UNAUTHENTICATED", ex.errorCode)
     }
 }
