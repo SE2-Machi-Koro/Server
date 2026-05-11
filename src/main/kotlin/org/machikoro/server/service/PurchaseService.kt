@@ -27,7 +27,6 @@ class PurchaseService(
     private val playerLandmarkDao: PlayerLandmarkDao,
     private val gameStateGuard: GameStateGuard,
 ) {
-
     /**
      * Executes the single allowed purchase during the active player's
      * BUY_OR_BUILD phase.

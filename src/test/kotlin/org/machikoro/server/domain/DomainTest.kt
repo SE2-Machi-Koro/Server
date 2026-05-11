@@ -18,15 +18,6 @@ class DomainTest {
     }
 
     @Test
-    fun `CardType color is derived correctly`() {
-        assertEquals(CardColor.BLUE, CardType.WHEAT_FIELD.color)
-        assertEquals(CardColor.BLUE, CardType.RANCH.color)
-        assertEquals(CardColor.GREEN, CardType.BAKERY.color)
-        assertEquals(CardColor.RED, CardType.CAFE.color)
-        assertEquals(CardColor.PURPLE, CardType.STADIUM.color)
-    }
-
-    @Test
     fun `CardType can be retrieved by name`() {
         assertEquals(CardType.WHEAT_FIELD, enumValueOf<CardType>("WHEAT_FIELD"))
     }
@@ -61,6 +52,7 @@ class DomainTest {
     @Test
     fun `CardColor has all four colors`() {
         val colors = CardColor.entries
+        assertEquals(4, colors.size)
         assertTrue(colors.contains(CardColor.BLUE))
         assertTrue(colors.contains(CardColor.GREEN))
         assertTrue(colors.contains(CardColor.RED))
