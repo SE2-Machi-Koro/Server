@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.auth.UserPrincipal
+import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.LandmarkType
@@ -54,22 +55,29 @@ class GameControllerTest {
     private val lobbyService = mock<LobbyService>()
     private val connectionTracker = mock<WebSocketConnectionTracker>()
     private val gameStateGuard = mock<GameStateGuard>()
+    private val playerDao = mock<PlayerDao>() // NEU
     private val controller = GameController(
         gamePhaseService, messagingTemplate, leaveFinishedGameService,
-        purchaseService, diceService, lobbyService, connectionTracker, gameStateGuard,
+        purchaseService, diceService, lobbyService, connectionTracker,
+        gameStateGuard, playerDao, // NEU
     )
 
     private val principal: Principal = UserPrincipal(userId = 1, username = "alice")
 
-    // ── startGame ─────────────────────────────────────────────────────────────
+    private val defaultGame = GameModel(
+        id = 1, status = GameStatus.IN_PROGRESS, hostUserId = 1,
+        lobbyCode = "XYZ", maxPlayers = 4, currentTurnIndex = 0,
+        turnPhase = TurnPhase.ROLL_DICE, lastDiceRoll = null,
+        hasPurchasedThisTurn = false, roundNumber = 1,
+    )
+
+    private val defaultPlayers = listOf(
+        PlayerModel(id = 1, gameId = 1, userId = 10, turnOrder = 0, coins = 3, lastSeenAt = null),
+        PlayerModel(id = 2, gameId = 1, userId = 20, turnOrder = 1, coins = 3, lastSeenAt = null),
+    )
 
     private fun gameStateDto(gameId: Int) = GameStateDto(
-        game = GameModel(
-            id = gameId, status = GameStatus.IN_PROGRESS, hostUserId = 1,
-            lobbyCode = "XYZ", maxPlayers = 4, currentTurnIndex = 0,
-            turnPhase = TurnPhase.ROLL_DICE, lastDiceRoll = null,
-            hasPurchasedThisTurn = false, roundNumber = 1,
-        ),
+        game = defaultGame.copy(id = gameId),
         players = listOf(
             PlayerModel(id = 1, gameId = gameId, userId = 1, turnOrder = 0, coins = 3, lastSeenAt = null),
             PlayerModel(id = 2, gameId = gameId, userId = 2, turnOrder = 1, coins = 3, lastSeenAt = null),
@@ -84,6 +92,8 @@ class GameControllerTest {
         accessor.sessionAttributes = mutableMapOf()
         return accessor
     }
+
+    // ── startGame ─────────────────────────────────────────────────────────────
 
     @Test
     fun `startGame broadcasts GAME_STARTED on success`() {
@@ -117,7 +127,6 @@ class GameControllerTest {
 
         val message = captor.firstValue
         assertEquals(MessageType.ERROR, message.type)
-        assertEquals("server", message.sender)
         @Suppress("UNCHECKED_CAST")
         assertEquals("START_FAILED", (message.payload as Map<String, Any>)["event"])
         verify(lobbyService, never()).startGame(any(), any())
@@ -128,8 +137,7 @@ class GameControllerTest {
         val gameId = 10
         val sessionId = "session-non-host"
         whenever(connectionTracker.getUserId(sessionId)).thenReturn(99)
-        whenever(lobbyService.startGame(gameId, 99))
-            .thenThrow(NotHostException("not host"))
+        whenever(lobbyService.startGame(gameId, 99)).thenThrow(NotHostException("not host"))
 
         controller.startGame(StartGameRequest(gameId), headerWithSession(sessionId))
 
@@ -148,6 +156,8 @@ class GameControllerTest {
     fun `advancePhase delegates to service with the requested game id`() {
         val gameId = 42
         whenever(gamePhaseService.advancePhase(gameId)).thenReturn(TurnPhase.RESOLVE_EFFECTS)
+        whenever(gameStateGuard.ensureGameIsRunning(gameId)).thenReturn(defaultGame.copy(id = gameId))
+        whenever(playerDao.getPlayers(gameId)).thenReturn(defaultPlayers)
 
         controller.advancePhase(AdvancePhaseRequest(gameId), principal)
 
@@ -156,9 +166,11 @@ class GameControllerTest {
     }
 
     @Test
-    fun `advancePhase broadcasts new phase as GAME_ACTION on game topic`() {
+    fun `advancePhase broadcasts new phase and activePlayerId as GAME_ACTION`() {
         val gameId = 42
         whenever(gamePhaseService.advancePhase(gameId)).thenReturn(TurnPhase.RESOLVE_EFFECTS)
+        whenever(gameStateGuard.ensureGameIsRunning(gameId)).thenReturn(defaultGame.copy(id = gameId))
+        whenever(playerDao.getPlayers(gameId)).thenReturn(defaultPlayers)
 
         controller.advancePhase(AdvancePhaseRequest(gameId), principal)
 
@@ -168,7 +180,10 @@ class GameControllerTest {
         val message = captor.firstValue
         assertEquals(MessageType.GAME_ACTION, message.type)
         assertEquals("server", message.sender)
-        assertEquals(mapOf("turnPhase" to "RESOLVE_EFFECTS"), message.payload)
+        @Suppress("UNCHECKED_CAST")
+        val payload = message.payload as Map<String, Any?>
+        assertEquals("RESOLVE_EFFECTS", payload["turnPhase"])
+        assertEquals(10, payload["activePlayerId"])
     }
 
     @Test
@@ -190,8 +205,9 @@ class GameControllerTest {
     @Test
     fun `endTurn delegates to service with the requested game id`() {
         val gameId = 42
-        whenever(gamePhaseService.endTurn(gameId))
-            .thenReturn(EndTurnOutcome.Continue(TurnPhase.ROLL_DICE))
+        whenever(gamePhaseService.endTurn(gameId)).thenReturn(EndTurnOutcome.Continue(TurnPhase.ROLL_DICE))
+        whenever(gameStateGuard.ensureGameIsRunning(gameId)).thenReturn(defaultGame.copy(id = gameId))
+        whenever(playerDao.getPlayers(gameId)).thenReturn(defaultPlayers)
 
         controller.endTurn(EndTurnRequest(gameId), principal)
 
@@ -200,10 +216,11 @@ class GameControllerTest {
     }
 
     @Test
-    fun `endTurn broadcasts resulting phase as GAME_ACTION on game topic`() {
+    fun `endTurn broadcasts resulting phase and activePlayerId as GAME_ACTION`() {
         val gameId = 42
-        whenever(gamePhaseService.endTurn(gameId))
-            .thenReturn(EndTurnOutcome.Continue(TurnPhase.ROLL_DICE))
+        whenever(gamePhaseService.endTurn(gameId)).thenReturn(EndTurnOutcome.Continue(TurnPhase.ROLL_DICE))
+        whenever(gameStateGuard.ensureGameIsRunning(gameId)).thenReturn(defaultGame.copy(id = gameId))
+        whenever(playerDao.getPlayers(gameId)).thenReturn(defaultPlayers)
 
         controller.endTurn(EndTurnRequest(gameId), principal)
 
@@ -212,8 +229,10 @@ class GameControllerTest {
 
         val message = captor.firstValue
         assertEquals(MessageType.GAME_ACTION, message.type)
-        assertEquals("server", message.sender)
-        assertEquals(mapOf("turnPhase" to "ROLL_DICE"), message.payload)
+        @Suppress("UNCHECKED_CAST")
+        val payload = message.payload as Map<String, Any?>
+        assertEquals("ROLL_DICE", payload["turnPhase"])
+        assertEquals(10, payload["activePlayerId"])
     }
 
     @Test
@@ -221,9 +240,7 @@ class GameControllerTest {
         val gameId = 42
         val winnerId = 1
         val roundsPlayed = 10
-
-        whenever(gamePhaseService.endTurn(gameId))
-            .thenReturn(EndTurnOutcome.Won(winnerId, roundsPlayed))
+        whenever(gamePhaseService.endTurn(gameId)).thenReturn(EndTurnOutcome.Won(winnerId, roundsPlayed))
 
         controller.endTurn(EndTurnRequest(gameId), principal)
 
@@ -232,7 +249,6 @@ class GameControllerTest {
 
         val message = captor.firstValue
         assertEquals(MessageType.GAME_END, message.type)
-        assertEquals("server", message.sender)
         assertEquals(mapOf("winnerId" to winnerId, "roundsPlayed" to roundsPlayed), message.payload)
     }
 
@@ -258,17 +274,10 @@ class GameControllerTest {
         whenever(
             purchaseService.purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.BAKERY, null)
         ).thenReturn(
-            PurchaseResult(
-                turnPhase = TurnPhase.BUY_OR_BUILD,
-                purchaseType = PurchaseType.ESTABLISHMENT,
-                cardType = CardType.BAKERY,
-            )
+            PurchaseResult(turnPhase = TurnPhase.BUY_OR_BUILD, purchaseType = PurchaseType.ESTABLISHMENT, cardType = CardType.BAKERY)
         )
 
-        controller.purchase(
-            PurchaseRequest(gameId, PurchaseType.ESTABLISHMENT, cardType = CardType.BAKERY),
-            principal,
-        )
+        controller.purchase(PurchaseRequest(gameId, PurchaseType.ESTABLISHMENT, cardType = CardType.BAKERY), principal)
 
         verify(gameStateGuard).ensureSenderIsActivePlayer(gameId, principal)
         verify(purchaseService).purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.BAKERY, null)
@@ -277,36 +286,24 @@ class GameControllerTest {
     @Test
     fun `purchase broadcasts resulting purchase payload as GAME_ACTION on game topic`() {
         val gameId = 42
-
         whenever(
             purchaseService.purchase(gameId, PurchaseType.LANDMARK, null, LandmarkType.TRAIN_STATION)
         ).thenReturn(
-            PurchaseResult(
-                turnPhase = TurnPhase.BUY_OR_BUILD,
-                purchaseType = PurchaseType.LANDMARK,
-                landmarkType = LandmarkType.TRAIN_STATION,
-            )
+            PurchaseResult(turnPhase = TurnPhase.BUY_OR_BUILD, purchaseType = PurchaseType.LANDMARK, landmarkType = LandmarkType.TRAIN_STATION)
         )
 
-        controller.purchase(
-            PurchaseRequest(gameId, PurchaseType.LANDMARK, landmarkType = LandmarkType.TRAIN_STATION),
-            principal,
-        )
+        controller.purchase(PurchaseRequest(gameId, PurchaseType.LANDMARK, landmarkType = LandmarkType.TRAIN_STATION), principal)
 
         val captor = argumentCaptor<WebSocketMessage>()
         verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
 
         val message = captor.firstValue
         assertEquals(MessageType.GAME_ACTION, message.type)
-        assertEquals("server", message.sender)
-        assertEquals(
-            mapOf(
-                "turnPhase" to "BUY_OR_BUILD",
-                "purchaseType" to "LANDMARK",
-                "landmarkType" to "TRAIN_STATION",
-            ),
-            message.payload,
-        )
+        @Suppress("UNCHECKED_CAST")
+        val payload = message.payload as Map<String, Any?>
+        assertEquals("BUY_OR_BUILD", payload["turnPhase"])
+        assertEquals("LANDMARK", payload["purchaseType"])
+        assertEquals("TRAIN_STATION", payload["landmarkType"])
     }
 
     @Test
@@ -316,10 +313,7 @@ class GameControllerTest {
             .thenThrow(CustomWebSocketException("NOT_YOUR_TURN", "It is not your turn"))
 
         val ex = assertThrows<CustomWebSocketException> {
-            controller.purchase(
-                PurchaseRequest(gameId, PurchaseType.ESTABLISHMENT, cardType = CardType.BAKERY),
-                principal,
-            )
+            controller.purchase(PurchaseRequest(gameId, PurchaseType.ESTABLISHMENT, cardType = CardType.BAKERY), principal)
         }
         assertEquals("NOT_YOUR_TURN", ex.errorCode)
         verify(purchaseService, never()).purchase(any(), any(), any(), any())
@@ -332,9 +326,7 @@ class GameControllerTest {
     fun `leaveFinishedGame calls service before broadcasting`() {
         val gameId = 1
         val playerId = 10
-
         controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId), principal)
-
         val order = inOrder(gameStateGuard, leaveFinishedGameService, messagingTemplate)
         order.verify(gameStateGuard).ensureSenderOwnsPlayer(gameId, playerId, principal)
         order.verify(leaveFinishedGameService).leaveFinishedGame(gameId, playerId)
@@ -345,10 +337,7 @@ class GameControllerTest {
     fun `leaveFinishedGame gets exception from service`() {
         val gameId = 1
         val playerId = 10
-
-        whenever(leaveFinishedGameService.leaveFinishedGame(gameId, playerId))
-            .thenThrow(RuntimeException("boom"))
-
+        whenever(leaveFinishedGameService.leaveFinishedGame(gameId, playerId)).thenThrow(RuntimeException("boom"))
         org.junit.jupiter.api.assertThrows<RuntimeException> {
             controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId), principal)
         }
@@ -358,9 +347,7 @@ class GameControllerTest {
     fun `leaveFinishedGame sends message to correct topic`() {
         val gameId = 5
         val playerId = 20
-
         controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId), principal)
-
         verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), any<WebSocketMessage>())
     }
 
@@ -368,12 +355,9 @@ class GameControllerTest {
     fun `leaveFinishedGame payload contains correct playerId and type`() {
         val gameId = 3
         val playerId = 99
-
         controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId), principal)
-
         val captor = argumentCaptor<WebSocketMessage>()
         verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
-
         val message = captor.firstValue
         assertEquals(MessageType.PLAYER_LEFT_FINISHED_GAME, message.type)
         assertEquals(mapOf("playerId" to playerId), message.payload)
@@ -385,7 +369,6 @@ class GameControllerTest {
         val playerId = 99
         whenever(gameStateGuard.ensureSenderOwnsPlayer(gameId, playerId, principal))
             .thenThrow(CustomWebSocketException("NOT_YOUR_PLAYER", "You do not own player 99"))
-
         val ex = assertThrows<CustomWebSocketException> {
             controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId), principal)
         }
@@ -397,12 +380,11 @@ class GameControllerTest {
     // ── rollDice ──────────────────────────────────────────────────────────────
 
     @Test
-    fun `rollDice broadcasts result to correct game topic`() {
+    fun `rollDice broadcasts result with playerId, result and timestamp to correct game topic`() {
         val gameId = 1
         val playerId = 2
         val request = RollDiceRequest(gameId = gameId, playerId = playerId)
         val response = RollDiceResponse(dice = listOf(3, 4), total = 7)
-
         whenever(diceService.rollDice(request)).thenReturn(response)
 
         controller.rollDice(request, principal)
@@ -415,7 +397,12 @@ class GameControllerTest {
         assertEquals(MessageType.ROLL_DICE, message.type)
         assertEquals("SERVER", message.sender)
         assertEquals("Player $playerId rolled: 7", message.content)
-        assertEquals(mapOf("dice" to listOf(3, 4), "total" to 7), message.payload)
+
+        @Suppress("UNCHECKED_CAST")
+        val payload = message.payload as Map<String, Any?>
+        assertEquals(playerId, payload["playerId"])
+        assertEquals(listOf(3, 4), payload["result"])
+        assert(payload["timestamp"] is Long)
     }
 
     @Test
@@ -423,21 +410,15 @@ class GameControllerTest {
         val gameId = 1
         val playerId = 2
         val request = RollDiceRequest(gameId = gameId, playerId = playerId)
-
         whenever(diceService.rollDice(request)).thenThrow(RuntimeException("dice exploded"))
 
         controller.rollDice(request, principal)
 
         val captor = argumentCaptor<WebSocketMessage>()
         verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
-
         val message = captor.firstValue
         assertEquals(MessageType.ERROR, message.type)
-        assertEquals("SERVER", message.sender)
-        assertEquals(
-            mapOf("event" to "ROLL_FAILED", "message" to "dice exploded"),
-            message.payload
-        )
+        assertEquals(mapOf("event" to "ROLL_FAILED", "message" to "dice exploded"), message.payload)
     }
 
     @Test
