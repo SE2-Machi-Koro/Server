@@ -187,6 +187,25 @@ class GameDaoTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `findByLobbyCode returns game when code exists`() {
+        val id = gameDao.create(hostId)
+
+        val expected = gameDao.findById(id)
+        val code = expected!!.lobbyCode
+
+        val result = gameDao.findByLobbyCode(code)
+
+        assertNotNull(result)
+        assertEquals(id, result!!.id)
+        assertEquals(code, result.lobbyCode)
+    }
+
+    @Test
+    fun `findByLobbyCode returns null for unknown code`() {
+        assertNull(gameDao.findByLobbyCode("INVALID"))
+    }
+
+    @Test
     fun `delete removes game from db`() {
         val id = gameDao.create(hostId)
         gameDao.delete(id)
