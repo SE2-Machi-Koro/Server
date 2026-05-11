@@ -133,4 +133,27 @@ class LobbyServiceTest {
         }
     }
 
+    @Test
+    fun `validateLobbyCode returns game when lobby code exists`() {
+        val expected = game(1, GameStatus.WAITING)
+
+        whenever(gameDao.findByLobbyCode("ABC123")).thenReturn(expected)
+
+        val result = lobbyService.validateLobbyCode("ABC123")
+
+        kotlin.test.assertEquals(expected, result)
+        verify(gameDao).findByLobbyCode("ABC123")
+    }
+
+    @Test
+    fun `validateLobbyCode throws GameNotFoundException when lobby code does not exist`() {
+        whenever(gameDao.findByLobbyCode("WRONG")).thenReturn(null)
+
+        assertThrows<GameNotFoundException> {
+            lobbyService.validateLobbyCode("WRONG")
+        }
+
+        verify(gameDao).findByLobbyCode("WRONG")
+    }
+
 }

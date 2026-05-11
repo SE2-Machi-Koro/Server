@@ -59,6 +59,16 @@ open class LobbyService(
     }
 
     /**
+     * Validates whether a lobby code exists.
+     *
+     * @throws GameNotFoundException if no lobby with the given code exists.
+     */
+    fun validateLobbyCode(lobbyCode: String): GameModel = runInTransaction {
+        gameDao.findByLobbyCode(lobbyCode)
+            ?: throw GameNotFoundException("Lobby with code $lobbyCode not found")
+    }
+
+    /**
      * Adds [userId] to the lobby for [gameId] if the game exists, is still in the
      * WAITING state and has not yet reached its player cap.
      *
