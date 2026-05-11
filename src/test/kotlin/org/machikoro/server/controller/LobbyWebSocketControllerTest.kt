@@ -2,12 +2,14 @@ package org.machikoro.server.controller
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import org.machikoro.server.auth.USER_PRINCIPAL_KEY
 import org.machikoro.server.auth.UserPrincipal
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.WebSocketMessage
+import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.service.LobbyService
 import org.junit.jupiter.api.assertThrows
 import org.mockito.kotlin.any
@@ -76,7 +78,7 @@ class LobbyWebSocketControllerTest {
         // Accessor with no UserPrincipal — simulates a bypassed STOMP auth
         val accessor = SimpMessageHeaderAccessor.create()
 
-        assertThrows<RuntimeException> {
+        val ex = assertThrows<CustomWebSocketException> {
             controller.createLobby(
                 WebSocketMessage(
                     type = MessageType.JOIN,
@@ -87,6 +89,35 @@ class LobbyWebSocketControllerTest {
             )
         }
 
+        assertEquals("UNAUTHENTICATED", ex.errorCode)
         verify(lobbyService, never()).createLobby(any())
+    }
+
+    @Test
+    fun `createLobby uses principal from session attributes when header user is missing`() {
+        whenever(lobbyService.createLobby(10)).thenReturn(game())
+
+        val accessor = SimpMessageHeaderAccessor.create().apply {
+            sessionAttributes = mutableMapOf(
+                USER_PRINCIPAL_KEY to UserPrincipal(userId = 10, username = "Player1")
+            )
+        }
+
+        val result = controller.createLobby(
+            WebSocketMessage(
+                type = MessageType.JOIN,
+                sender = "ignored-by-server",
+                content = "create lobby"
+            ),
+            accessor,
+        )
+
+        val payload = result.payload as? Map<String, Any>
+            ?: throw AssertionError("Payload is not a Map")
+
+        assertEquals(MessageType.LOBBY_CREATED, result.type)
+        assertEquals("ABC1234", payload["lobbyCode"])
+
+        verify(lobbyService).createLobby(10)
     }
 }
