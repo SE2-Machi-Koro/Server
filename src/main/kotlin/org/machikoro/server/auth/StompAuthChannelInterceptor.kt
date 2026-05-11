@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component
 /**
  * Validates the session token on every STOMP CONNECT frame and attaches a
  * [UserPrincipal] to the WS session so downstream `@MessageMapping` handlers
- * can read the authenticated identity.
+ * can read the authenticated identity via [userPrincipal].
  *
  * Connections without a valid token are rejected — no anonymous WebSocket
  * sessions. Non-CONNECT frames pass through untouched; they inherit the
@@ -25,6 +25,14 @@ import org.springframework.stereotype.Component
  * distinguish "no header" from "invalid token" via the STOMP ERROR frame
  * body. Internal server logs keep the distinction at WARN level for
  * debugging.
+ *
+ * Why we persist into [SimpMessageHeaderAccessor.sessionAttributes] in
+ * addition to [SimpMessageHeaderAccessor.user]: Spring's `accessor.user`
+ * does not propagate from CONNECT to subsequent SEND frames in a setup that
+ * authenticates via a token in the STOMP CONNECT body (no
+ * `WebSocketSession.principal`, no Spring Security WebSocket integration).
+ * Session attributes do propagate. See [USER_PRINCIPAL_KEY] for the full
+ * reasoning.
  */
 @Component
 class StompAuthChannelInterceptor(
@@ -58,7 +66,21 @@ class StompAuthChannelInterceptor(
             throw InvalidSessionTokenException(GENERIC_AUTH_FAILURE)
         }
 
-        accessor.user = UserPrincipal(userId = user.id, username = user.username)
+        val principal = UserPrincipal(userId = user.id, username = user.username)
+
+        accessor.user = principal
+        // Session attributes are the durable propagation channel; warn loudly
+        // if they're missing so the failure mode is visible rather than silent.
+        val attrs = accessor.sessionAttributes
+        if (attrs == null) {
+            logger.warn(
+                "WS CONNECT: sessionAttributes is null on session {} — principal will not propagate to SEND frames",
+                accessor.sessionId,
+            )
+        } else {
+            attrs[USER_PRINCIPAL_KEY] = principal
+        }
+
         logger.info("WS CONNECT accepted for user '{}'", sanitizeForLog(user.username))
         // Re-build the message with the mutated accessor's headers so the
         // principal propagates to downstream handlers. The Spring docs example

@@ -1,6 +1,5 @@
 package org.machikoro.server.controller
 
-import java.security.Principal
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.auth.UserPrincipal
@@ -19,6 +18,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.springframework.messaging.simp.SimpMessageHeaderAccessor
 import org.springframework.messaging.simp.SimpMessagingTemplate
 import kotlin.test.assertEquals
 
@@ -29,15 +29,18 @@ class EarningsControllerTest {
     private val gameStateGuard: GameStateGuard = mock()
     private val controller = EarningsController(earningsService, messagingTemplate, gameStateGuard)
 
-    private val principal: Principal = UserPrincipal(userId = 1, username = "alice")
+    private val alice = UserPrincipal(userId = 1, username = "alice")
+
+    private fun authedAccessor(): SimpMessageHeaderAccessor =
+        SimpMessageHeaderAccessor.create().apply { user = alice }
 
     @Test
     fun `resolveEffects calls service and broadcasts success`() {
         val request = ResolveEffectsRequest(gameId = 1)
 
-        controller.resolveEffects(request, principal)
+        controller.resolveEffects(request, authedAccessor())
 
-        verify(gameStateGuard).ensureSenderIsActivePlayer(1, principal)
+        verify(gameStateGuard).ensureSenderIsActivePlayer(1, alice)
         verify(earningsService).resolveEffects(1)
 
         val captor = argumentCaptor<WebSocketMessage>()
@@ -55,7 +58,7 @@ class EarningsControllerTest {
         val request = ResolveEffectsRequest(gameId = 1)
         doThrow(GameNotFoundException("Game 1 not found")).whenever(earningsService).resolveEffects(1)
 
-        controller.resolveEffects(request, principal)
+        controller.resolveEffects(request, authedAccessor())
 
         val captor = argumentCaptor<WebSocketMessage>()
         verify(messagingTemplate).convertAndSend(eq("/topic/game/1"), captor.capture())
@@ -70,14 +73,27 @@ class EarningsControllerTest {
     @Test
     fun `resolveEffects propagates NOT_YOUR_TURN and does not call service or broadcast`() {
         val request = ResolveEffectsRequest(gameId = 1)
-        whenever(gameStateGuard.ensureSenderIsActivePlayer(1, principal))
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(1, alice))
             .thenThrow(CustomWebSocketException("NOT_YOUR_TURN", "It is not your turn"))
 
         val ex = assertThrows<CustomWebSocketException> {
-            controller.resolveEffects(request, principal)
+            controller.resolveEffects(request, authedAccessor())
         }
         assertEquals("NOT_YOUR_TURN", ex.errorCode)
         verify(earningsService, never()).resolveEffects(any())
         verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+    }
+
+    @Test
+    fun `resolveEffects throws UNAUTHENTICATED when accessor has no principal`() {
+        val request = ResolveEffectsRequest(gameId = 1)
+        val unauthed = SimpMessageHeaderAccessor.create()
+
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.resolveEffects(request, unauthed)
+        }
+        assertEquals("UNAUTHENTICATED", ex.errorCode)
+        verify(gameStateGuard, never()).ensureSenderIsActivePlayer(any(), any())
+        verify(earningsService, never()).resolveEffects(any())
     }
 }

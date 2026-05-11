@@ -1,8 +1,9 @@
 package org.machikoro.server.controller
 
-import org.machikoro.server.auth.UserPrincipal
+import org.machikoro.server.auth.userPrincipal
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.WebSocketMessage
+import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.service.LobbyService
 import org.slf4j.LoggerFactory
 import org.springframework.messaging.handler.annotation.MessageMapping
@@ -34,8 +35,11 @@ class LobbyWebSocketController(
         @Payload message: WebSocketMessage,
         headerAccessor: SimpMessageHeaderAccessor,
     ): WebSocketMessage {
-        val principal = headerAccessor.user as? UserPrincipal
-            ?: throw RuntimeException("Authenticated principal not found — connection may not have completed STOMP handshake")
+        val principal = headerAccessor.userPrincipal()
+            ?: throw CustomWebSocketException(
+                errorCode = "UNAUTHENTICATED",
+                message = "Authenticated principal not found — connection may not have completed STOMP handshake",
+            )
 
         logger.info("User '{}' requested lobby creation", principal.username)
 
