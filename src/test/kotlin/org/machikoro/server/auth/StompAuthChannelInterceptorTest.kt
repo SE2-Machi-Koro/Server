@@ -42,14 +42,23 @@ class StompAuthChannelInterceptorTest {
         val user = userModel(id = 7, username = "alice", sessionToken = token)
         whenever(userDao.findBySessionToken(token)).thenReturn(user)
 
+        val sessionAttrs = mutableMapOf<String, Any>()
         val result = interceptor.preSend(
-            stompMessage(StompCommand.CONNECT, headers = mapOf("Authorization" to "Bearer $token")),
+            stompMessage(
+                StompCommand.CONNECT,
+                headers = mapOf("Authorization" to "Bearer $token"),
+                sessionAttributes = sessionAttrs,
+            ),
             mock(),
         )
 
         assertNotNull(result)
         val accessor = StompHeaderAccessor.wrap(result!!)
-        assertEquals(UserPrincipal(userId = 7, username = "alice"), accessor.user)
+        val expected = UserPrincipal(userId = 7, username = "alice")
+        // Session attributes are the durable propagation channel; accessor.user
+        // is set as well but doesn't survive across STOMP frames in our setup.
+        assertEquals(expected, accessor.user)
+        assertEquals(expected, sessionAttrs[USER_PRINCIPAL_KEY])
     }
 
     @Test
@@ -115,6 +124,29 @@ class StompAuthChannelInterceptorTest {
     }
 
     @Test
+    fun `CONNECT without sessionAttributes still attaches accessor user and does not crash`() {
+        // Defensive: in production sessionAttributes is always non-null at CONNECT
+        // because Spring's WebSocket plumbing initialises it during the handshake,
+        // but the interceptor must not NPE if that contract ever changes.
+        val token = "valid-token"
+        val user = userModel(id = 1, username = "bob", sessionToken = token)
+        whenever(userDao.findBySessionToken(token)).thenReturn(user)
+
+        val result = interceptor.preSend(
+            stompMessage(
+                StompCommand.CONNECT,
+                headers = mapOf("Authorization" to "Bearer $token"),
+                // sessionAttributes intentionally null
+            ),
+            mock(),
+        )
+
+        assertNotNull(result)
+        val accessor = StompHeaderAccessor.wrap(result!!)
+        assertEquals(UserPrincipal(userId = 1, username = "bob"), accessor.user)
+    }
+
+    @Test
     fun `non-CONNECT frame is returned without invoking UserDao even when an Authorization header is present`() {
         // Defensive: SUBSCRIBE / SEND frames inherit the principal attached at CONNECT
         // time. The interceptor MUST NOT re-validate per-frame, otherwise every frame
@@ -129,9 +161,14 @@ class StompAuthChannelInterceptorTest {
         verify(userDao, never()).findBySessionToken(any())
     }
 
-    private fun stompMessage(command: StompCommand, headers: Map<String, String>): Message<ByteArray> {
+    private fun stompMessage(
+        command: StompCommand,
+        headers: Map<String, String>,
+        sessionAttributes: MutableMap<String, Any>? = null,
+    ): Message<ByteArray> {
         val accessor = StompHeaderAccessor.create(command)
         headers.forEach { (k, v) -> accessor.addNativeHeader(k, v) }
+        if (sessionAttributes != null) accessor.sessionAttributes = sessionAttributes
         return MessageBuilder.createMessage(ByteArray(0), accessor.messageHeaders)
     }
 
