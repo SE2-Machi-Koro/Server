@@ -27,6 +27,7 @@ import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.LandmarkType
 import org.machikoro.server.domain.enums.PaymentSource
 import org.machikoro.server.exception.GameNotFoundException
+import org.machikoro.server.exception.NotHostException
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.mock
@@ -53,6 +54,8 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
     private var gameId: Int = 0
     private var firstPlayerId: Int = 0
     private var secondPlayerId: Int = 0
+    private var hostUserId: Int = 0
+    private var guestUserId: Int = 0
 
     @BeforeEach
     fun setup() {
@@ -92,9 +95,11 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
             user1Id to user2Id
         }
 
-        gameId = gameDao.create(userIds.first)
-        firstPlayerId = playerDao.addPlayer(gameId, userIds.first).id
-        secondPlayerId = playerDao.addPlayer(gameId, userIds.second).id
+        hostUserId = userIds.first
+        guestUserId = userIds.second
+        gameId = gameDao.create(hostUserId)
+        firstPlayerId = playerDao.addPlayer(gameId, hostUserId).id
+        secondPlayerId = playerDao.addPlayer(gameId, guestUserId).id
     }
 
     @Test
@@ -112,6 +117,20 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
         assertThrows<GameNotFoundException> {
             lobbyService.startGame(999999)
         }
+    }
+
+    @Test
+    fun `startGame throws NotHostException when requesting user is not the host`() {
+        assertThrows<NotHostException> {
+            lobbyService.startGame(gameId, requestingUserId = guestUserId)
+        }
+    }
+
+    @Test
+    fun `startGame succeeds when requesting user is the host`() {
+        val result = lobbyService.startGame(gameId, requestingUserId = hostUserId)
+
+        assertEquals(GameStatus.IN_PROGRESS, result.game.status)
     }
 
     @Test
