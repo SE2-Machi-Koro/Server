@@ -3,10 +3,13 @@ package org.machikoro.server.database
 import org.jetbrains.exposed.v1.core.ReferenceOption
 import org.jetbrains.exposed.v1.core.Table
 import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
+import org.machikoro.server.domain.enums.CardColor
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.LandmarkType
+import org.machikoro.server.domain.enums.PaymentSource
+import org.machikoro.server.domain.enums.EstablishmentType
 
 // STATIC CLASSES -----------------------------
 
@@ -25,11 +28,28 @@ object Cards : IntIdTable("cards") {
     // Unique ensures exactly one definition per card type
     val cardType = enumerationByName("card_type", 50, CardType::class).uniqueIndex()
     val cost = integer("cost")
-
-    // Activation ranges
-    val diceMin = integer("dice_min")
-    val diceMax = integer("dice_max")
     val income = integer("income")
+
+    // Card color (GREEN, BLUE, RED, PURPLE)
+    val color = enumerationByName("color", 20, CardColor::class)
+
+    // Card symbol/icon (WHEAT, COW, GEAR, BREAD, FACTORY, FRUIT, CUP, MAJOR)
+    val establishmentType = enumerationByName("establishment_type", 20, EstablishmentType::class)
+
+    // Where payment comes from (BANK, ACTIVE_PLAYER, ALL_PLAYERS)
+    val paymentSource = enumerationByName("payment_source", 20, PaymentSource::class)
+}
+
+/**
+ * Represents the dice activation numbers for each card
+ * Replaces diceMin/diceMax to support non-contiguous ranges
+ * Example: A card activating on [1, 9, 10] has three rows
+ */
+object CardActivationNumbers : Table("card_activation_numbers") {
+    val cardId = reference("card_id", Cards, onDelete = ReferenceOption.CASCADE)
+    val number = integer("number")
+
+    override val primaryKey = PrimaryKey(cardId, number)
 }
 
 /**

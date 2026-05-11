@@ -6,10 +6,10 @@ import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.domain.enums.TurnPhase
-import org.machikoro.server.domain.enums.CardColor
 import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.service.interfaces.EarningsService
 import org.springframework.stereotype.Service
+import org.machikoro.server.domain.enums.CardColor
 
 /**
  * Service responsible for core economic of the game
@@ -32,13 +32,15 @@ class EarningsServiceImpl(
 
     /**
      * Processes income for all players based on the current dice roll
-     * Evaluates the color-coded rules to determine who gets paid
+     * Evaluates the card colors to determine who gets paid:
+     * - BLUE (ANY_TURN): all players receive income
+     * - GREEN/PURPLE (OWN_TURN): only the active player receives income
+     * - RED (OTHER_TURN): only opponents receive income
      */
     override fun processEarnings(gameId: Int, diceRoll: Int, activePlayerId: Int) {
         transaction {
-            // Find all establishment cards in the game that activate on this specific dice roll
-            val allCards = cardDao.findAll()
-                .filter { it.diceMin <= diceRoll && it.diceMax >= diceRoll }
+            // Find all establishment cards that activate on this specific dice roll
+            val activatingCards = cardDao.findByActivationNumber(diceRoll)
                 .associateBy { it.cardType }
 
             val players = playerDao.getPlayers(gameId)
@@ -49,20 +51,15 @@ class EarningsServiceImpl(
 
                 val earned = playerCardDao.findByPlayerId(player.id)
                     // Match the player's owned cards with the ones that trigger on this roll
-                    .mapNotNull { playerCard -> allCards[playerCard.cardType]?.let { playerCard to it } }
+                    .mapNotNull { playerCard -> activatingCards[playerCard.cardType]?.let { playerCard to it } }
                     // Apply activation rules based on card color
-                    .filter { (playerCard, _) ->
-                        when (playerCard.cardType.color) {
-                            // Primary Industry (Blue): Activates on ANY player's turn
+                    .filter { (_, card) ->
+                        when (card.color) {
+                            // Blue cards activate on anyone's turn
                             CardColor.BLUE -> true
-                            // Secondary Industry (Green): Activates ONLY on your turn
-                            CardColor.GREEN -> isActive
-                            // Major Establishment (Purple): Activates ONLY on your turn
-                            CardColor.PURPLE -> isActive
-                            // Restaurants (Red): Activates ONLY on opponents' turns
-                            // Note: Red card logic usually requires stealing from the active player
-                            // Currently, this just grants coins from the bank
-                            // Stealing logic may need to be expanded here
+                            // Green/Purple cards activate ONLY on your turn
+                            CardColor.GREEN, CardColor.PURPLE -> isActive
+                            // Red cards activate ONLY on opponents' turns
                             CardColor.RED -> !isActive
                         }
                     }
