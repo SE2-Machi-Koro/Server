@@ -16,6 +16,7 @@ import org.machikoro.server.exception.LobbyFullException
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 
@@ -56,10 +57,17 @@ class LobbyServiceTest {
     private fun player(id: Int) =
         PlayerModel(id = id, gameId = 1, userId = id, turnOrder = 0, coins = 3, lastSeenAt = null)
 
+    // Ensures playerDao.findByGameIdAndUserId returns null by default (new player, not a reconnect).
+    // Called before each addUserToLobby test that should not hit the reconnect fast-path.
+    private fun noExistingPlayer(gameId: Int, userId: Int) {
+        whenever(playerDao.findByGameIdAndUserId(gameId, userId)).thenReturn(null)
+    }
+
     @Test
     fun `addUserToLobby adds player successfully`() {
         val gameId = 1
         val userId = 10
+        noExistingPlayer(gameId, userId)
         whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING))
         whenever(playerDao.getPlayers(gameId)).thenReturn(emptyList())
         whenever(playerDao.addPlayer(gameId, userId)).thenReturn(player(1))
@@ -71,34 +79,59 @@ class LobbyServiceTest {
     }
 
     @Test
+    fun `addUserToLobby returns existing player immediately on reconnect`() {
+        val gameId = 1
+        val userId = 10
+        val existing = player(userId)
+        // Both the pre-lock and in-lock checks should short-circuit here.
+        whenever(playerDao.findByGameIdAndUserId(gameId, userId)).thenReturn(existing)
+
+        val result = lobbyService.addUserToLobby(gameId, userId)
+
+        kotlin.test.assertEquals(existing, result)
+        // No DB write should occur and no game fetch is needed.
+        verify(playerDao, never()).addPlayer(any(), any())
+        verify(gameDao, never()).findById(any())
+    }
+
+    @Test
     fun `addUserToLobby throws GameNotFoundException`() {
-        whenever(gameDao.findById(any())).thenReturn(null)
+        val gameId = 1
+        val userId = 10
+        noExistingPlayer(gameId, userId)
+        // gameDao.findById is now called inside the lock, so null here still triggers the exception.
+        whenever(gameDao.findById(gameId)).thenReturn(null)
 
         assertThrows<GameNotFoundException> {
-            lobbyService.addUserToLobby(1, 10)
+            lobbyService.addUserToLobby(gameId, userId)
         }
     }
 
     @Test
     fun `addUserToLobby throws GameStartedException`() {
         val gameId = 2
+        val userId = 10
+        noExistingPlayer(gameId, userId)
+        // Status check now happens inside the lock against a fresh DB read.
         whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.IN_PROGRESS))
 
         assertThrows<GameStartedException> {
-            lobbyService.addUserToLobby(gameId, 10)
+            lobbyService.addUserToLobby(gameId, userId)
         }
     }
 
     @Test
     fun `addUserToLobby throws LobbyFullException`() {
         val gameId = 3
+        val userId = 10
+        noExistingPlayer(gameId, userId)
         whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING))
         whenever(playerDao.getPlayers(gameId)).thenReturn(
             listOf(player(1), player(2), player(3), player(4))
         )
 
         assertThrows<LobbyFullException> {
-            lobbyService.addUserToLobby(gameId, 10)
+            lobbyService.addUserToLobby(gameId, userId)
         }
     }
 
@@ -155,5 +188,4 @@ class LobbyServiceTest {
 
         verify(gameDao).findByLobbyCode("WRONG")
     }
-
 }

@@ -72,29 +72,39 @@ open class LobbyService(
      * Adds [userId] to the lobby for [gameId] if the game exists, is still in the
      * WAITING state and has not yet reached its player cap.
      *
+     * The status check, capacity check, and insert all occur inside the same
+     * lock and re-fetch from the DB, ensuring no other thread can sneak in a
+     * concurrent join or a game-start transition between the checks and the insert.
+     *
      * @throws GameNotFoundException  if no game with [gameId] exists.
      * @throws GameStartedException   if the game has already moved to IN_PROGRESS.
      * @throws LobbyFullException     if the lobby already has reached its player cap.
      */
     fun addUserToLobby(gameId: Int, userId: Int): PlayerModel {
-        val game = gameDao.findById(gameId)
-            ?: throw GameNotFoundException("Game $gameId not found")
-
-        // Reconnect path: player already belongs to this game, so do not re-insert.
+        // Early reconnect check outside the lock: if the player is already in the
+        // game there is nothing to do and no need to contend on the lock.
         playerDao.findByGameIdAndUserId(gameId, userId)?.let { return it }
 
-        if (game.status == GameStatus.IN_PROGRESS) {
-            throw GameStartedException("Game $gameId has already started")
-        }
-
         synchronized(lobbyLocks.getOrPut(gameId) { Any() }) {
-            // Protect against duplicate inserts on concurrent reconnect/join attempts.
+            // Re-check inside the lock: another thread may have inserted this player
+            // or started the game between the pre-lock check above and acquiring the lock.
             playerDao.findByGameIdAndUserId(gameId, userId)?.let { return it }
+
+            // Re-fetch game state inside the lock so the status and maxPlayers values
+            // reflect any transition (e.g. startGame) that completed just before we
+            // acquired the lock.
+            val game = gameDao.findById(gameId)
+                ?: throw GameNotFoundException("Game $gameId not found")
+
+            if (game.status == GameStatus.IN_PROGRESS) {
+                throw GameStartedException("Game $gameId has already started")
+            }
 
             val players = playerDao.getPlayers(gameId)
             if (players.size >= game.maxPlayers) {
                 throw LobbyFullException("Game $gameId is full (max ${game.maxPlayers} players)")
             }
+
             return playerDao.addPlayer(gameId, userId)
         }
     }

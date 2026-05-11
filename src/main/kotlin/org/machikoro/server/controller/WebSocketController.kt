@@ -88,10 +88,7 @@ class WebSocketController(
                 // Attempt to re-map to the now-active game so the player receives the
                 // correct state snapshot.  If no active game can be found after the race,
                 // the exception is re-thrown and the client must retry.
-                val remappedInProgressGameId = gameSyncService.findActiveInProgressGameId(principal.userId)
-                if (remappedInProgressGameId == null) {
-                    throw e
-                }
+                val remappedInProgressGameId = gameSyncService.findActiveInProgressGameId(principal.userId) ?: throw e
                 gameIdToJoin = remappedInProgressGameId
             }
 
