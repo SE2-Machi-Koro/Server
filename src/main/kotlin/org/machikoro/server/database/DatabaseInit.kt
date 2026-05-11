@@ -46,6 +46,7 @@ fun initDatabase(dataSource: DataSource) {
     transaction {
         SchemaUtils.create(
             Cards,
+            CardActivationNumbers,
             Landmarks,
             Users,
             Games,
