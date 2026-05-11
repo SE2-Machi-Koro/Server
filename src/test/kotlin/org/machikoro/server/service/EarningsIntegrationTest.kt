@@ -223,4 +223,38 @@ class EarningsIntegrationTest : AbstractDBSetup() {
         assertEquals(0, p1.coins)
         assertEquals(4, p2.coins)
     }
+
+    @Test
+    fun `blue card pays all players regardless of whose turn it is`() {
+        // Roll 1: Wheat Field (Blue) — activates for every player on any turn.
+        // P1 owns 2x Wheat Field -> +2 coins
+        // P2 owns 1x Wheat Field -> +1 coin
+        // P1: 3 + 2 = 5, P2: 3 + 1 = 4
+        earningsService.resolveEffects(gameId)
+
+        val p1 = playerDao.findById(player1Id)!!
+        val p2 = playerDao.findById(player2Id)!!
+
+        assertEquals(5, p1.coins)
+        assertEquals(4, p2.coins)
+    }
+
+    @Test
+    fun `red card clamps active player coins to zero when they cannot cover the full payment`() {
+        transaction {
+            Players.update({ Players.id eq player1Id }) { it[coins] = 0 }
+            Games.update({ Games.id eq gameId }) { it[lastDiceRoll] = 3 }
+        }
+
+        earningsService.resolveEffects(gameId)
+
+        val p1 = playerDao.findById(player1Id)!!
+        val p2 = playerDao.findById(player2Id)!!
+
+        // Roll 3: Cafe (Red) owned by P2 triggers against active player P1.
+        // P1 has 0 coins — delta would be -1 but clamp keeps it at 0.
+        // P2 still receives the 1 coin income regardless.
+        assertEquals(0, p1.coins)
+        assertEquals(4, p2.coins)
+    }
 }
