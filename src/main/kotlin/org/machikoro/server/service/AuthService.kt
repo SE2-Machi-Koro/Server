@@ -75,7 +75,11 @@ class AuthService(
 
         val token = UUID.randomUUID().toString()
         userDao.updateSessionToken(user.id, token)
-        return LoginResponse(sessionToken = token, username = user.username)
+        return LoginResponse(
+            sessionToken = token,
+            username = user.username,
+            userId = user.id, // NEU
+        )
     }
 
     /**

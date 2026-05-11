@@ -8,4 +8,6 @@ data class LoginResponse(
     val sessionToken: String,
     @Schema(description = "Canonical (trimmed and lower-cased) username of the authenticated user", example = "alice")
     val username: String,
+    @Schema(description = "Unique ID of the authenticated user", example = "42")
+    val userId: Int, // NEU
 )
