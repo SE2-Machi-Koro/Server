@@ -82,6 +82,12 @@ tasks.withType<Test> {
     finalizedBy(tasks.jacocoTestReport)
 }
 
+tasks.bootJar {
+    layered {
+        enabled.set(true)
+    }
+}
+
 tasks.jacocoTestReport {
     dependsOn(tasks.test)
     reports {

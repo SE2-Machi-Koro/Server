@@ -209,6 +209,19 @@ Run the server locally:
 
 The backend will be available at: `http://localhost:8080`
 
+### Local Docker build
+
+For an end-to-end local run that mirrors the production container, use the compose
+override that builds the backend image from source:
+
+```bash
+docker compose -f compose.yaml -f compose.local-test.yaml --env-file .env.test up -d --build
+```
+
+This local Docker path keeps the source-based fallback in the `Dockerfile`, while
+the GitHub publish workflow uses a faster CI-only path that builds the Spring Boot
+jar once and reuses it for the multi-architecture image push.
+
 ## Testing
 
 Run the full test suite (unit + integration):
@@ -257,15 +270,23 @@ repository's `compose.yaml` on every push to `main`.
 ### Pipeline overview
 
 1. A push to `main` triggers the [`Publish Docker image to GHCR`](.github/workflows/docker-publish.yml)
-   workflow, which builds the backend image and pushes it to
+  workflow.
+2. The workflow first runs a `build-jar` job on `ubuntu-latest`, sets up JDK 21 with
+  Gradle dependency caching, and executes `./gradlew bootJar -x test` exactly once.
+  The resulting application jar is uploaded as a short-lived workflow artifact.
+3. The `build-and-push` job downloads that artifact and uses Docker Buildx to package
+  and push the multi-architecture runtime image for `linux/amd64` and `linux/arm64`
+  without recompiling the application per architecture. This avoids the slow Gradle
+  build under QEMU emulation on `arm64`.
+4. The published image is pushed to
    `ghcr.io/se2-machi-koro/server` with the tags:
    - `latest` (only on `main`)
    - `sha-<short-commit>` (every build, used for rollback)
    - `v*` (when a Git tag matching `v*` is pushed)
-2. doco-cd on the AAU server detects the change, pulls the new image (`pull_policy: always`),
+5. doco-cd on the AAU server detects the change, pulls the new image (`pull_policy: always`),
    and restarts the `backend` service defined in [compose.yaml](compose.yaml), when the
    course deployment config contains a stack entry for this repository.
-3. The Postgres service runs alongside the backend on the internal compose network and is
+6. The Postgres service runs alongside the backend on the internal compose network and is
    **not exposed to the host** — only the backend is published on `PUBLIC_PORT` (`53210`).
 
 ### Live endpoints
