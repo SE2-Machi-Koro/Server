@@ -7,6 +7,7 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.database.AbstractDBSetup
 import org.machikoro.server.database.CardActivationNumbers
 import org.machikoro.server.database.Cards
@@ -20,6 +21,7 @@ import org.machikoro.server.domain.enums.EstablishmentType
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.PaymentSource
 import org.machikoro.server.domain.enums.TurnPhase
+import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.service.interfaces.EarningsService
 import org.springframework.beans.factory.annotation.Autowired
 import kotlin.test.Test
@@ -100,6 +102,48 @@ class EarningsIntegrationTest : AbstractDBSetup() {
                 it[number] = 3
             }
 
+            val stadiumId = Cards.insert {
+                it[cardType] = CardType.STADIUM
+                it[cost] = 6
+                it[income] = 2
+                it[color] = CardColor.PURPLE
+                it[establishmentType] = EstablishmentType.MAJOR
+                it[paymentSource] = PaymentSource.ALL_PLAYERS
+            } get Cards.id
+
+            CardActivationNumbers.insert {
+                it[cardId] = stadiumId
+                it[number] = 6
+            }
+
+            val tvStationId = Cards.insert {
+                it[cardType] = CardType.TV_STATION
+                it[cost] = 7
+                it[income] = 5
+                it[color] = CardColor.PURPLE
+                it[establishmentType] = EstablishmentType.MAJOR
+                it[paymentSource] = PaymentSource.CHOSEN_PLAYER
+            } get Cards.id
+
+            CardActivationNumbers.insert {
+                it[cardId] = tvStationId
+                it[number] = 6
+            }
+
+            val businessCenterId = Cards.insert {
+                it[cardType] = CardType.BUSINESS_CENTER
+                it[cost] = 8
+                it[income] = 0
+                it[color] = CardColor.PURPLE
+                it[establishmentType] = EstablishmentType.MAJOR
+                it[paymentSource] = PaymentSource.NONE
+            } get Cards.id
+
+            CardActivationNumbers.insert {
+                it[cardId] = businessCenterId
+                it[number] = 6
+            }
+
             val user1Id = (Users.insert {
                 it[username] = "player1"
             } get Users.id).value
@@ -130,131 +174,178 @@ class EarningsIntegrationTest : AbstractDBSetup() {
         }
     }
 
+    // --- resolveEffects guard branches ---
+
     @Test
-    fun `resolveEffects distributes correct coins and transitions phase`() {
+    fun `resolveEffects throws GameNotFoundException for unknown game`() {
+        assertThrows<GameNotFoundException> {
+            earningsService.resolveEffects(999999)
+        }
+    }
+
+    @Test
+    fun `resolveEffects throws IllegalStateException when phase is not RESOLVE_EFFECTS`() {
         transaction {
-            Games.update({ Games.id eq gameId }) {
-                it[lastDiceRoll] = 3
-            }
+            Games.update({ Games.id eq gameId }) { it[turnPhase] = TurnPhase.BUY_OR_BUILD }
         }
 
+        assertThrows<IllegalStateException> {
+            earningsService.resolveEffects(gameId)
+        }
+    }
+
+    @Test
+    fun `resolveEffects throws IllegalStateException when lastDiceRoll is null`() {
+        transaction {
+            Games.update({ Games.id eq gameId }) { it[lastDiceRoll] = null }
+        }
+
+        assertThrows<IllegalStateException> {
+            earningsService.resolveEffects(gameId)
+        }
+    }
+
+    // --- card color activation rules ---
+
+    @Test
+    fun `blue card pays all players regardless of whose turn it is`() {
+        // Roll 1: Wheat Field (Blue) activates for every player on any turn.
+        // P1 owns 2x -> +2, P2 owns 1x -> +1
         earningsService.resolveEffects(gameId)
 
-        val p1 = playerDao.findById(player1Id)!!
-        val p2 = playerDao.findById(player2Id)!!
-
-        // currentTurnIndex=0, so P1 is the active player.
-        // Roll 3: Bakery (Green) - neither player owns one, no payout.
-        // Roll 3: Cafe (Red, PaymentSource.ACTIVE_PLAYER) activates only for non-active players
-        //   -> P2 owns Cafe, payment comes FROM active player (P1)
-        //   -> P1 loses 1 coin, P2 gains 1 coin
-        // P1: 3 (starting) - 1 (Cafe payment) = 2
-        // P2: 3 (starting) + 1 (Cafe income) = 4
-        assertEquals(2, p1.coins)
-        assertEquals(4, p2.coins)
+        assertEquals(5, playerDao.findById(player1Id)!!.coins)
+        assertEquals(4, playerDao.findById(player2Id)!!.coins)
     }
 
     @Test
     fun `green card only pays active player`() {
         transaction {
-            Games.deleteAll()
-            PlayerCards.deleteAll()
-            Players.deleteAll()
+            Games.update({ Games.id eq gameId }) { it[lastDiceRoll] = 2 }
+            playerCardDao.upsert(player1Id, CardType.BAKERY, 1)
+            playerCardDao.upsert(player2Id, CardType.BAKERY, 1)
         }
 
-        transaction {
-            val user1Id = (Users.insert {
-                it[username] = "p1green"
-            } get Users.id).value
+        // Roll 2: Bakery (Green) — only active player (P1, currentTurnIndex=0) gets paid.
+        // Roll 2 does not activate Wheat Field, so only Bakery matters here.
+        // P1: 3 + 1 = 4, P2: 3 (no activation)
+        earningsService.resolveEffects(gameId)
 
-            val user2Id = (Users.insert {
-                it[username] = "p2green"
-            } get Users.id).value
-
-            val gId = (Games.insert {
-                it[status] = GameStatus.IN_PROGRESS
-                it[hostUserId] = user1Id
-                it[lobbyCode] = (1000000..9999999).random().toString()
-                it[maxPlayers] = 4
-                it[currentTurnIndex] = 0
-                it[turnPhase] = TurnPhase.RESOLVE_EFFECTS
-                it[lastDiceRoll] = 2
-                it[roundNumber] = 1
-            } get Games.id).value
-
-            val p1 = playerDao.addPlayer(gId, user1Id).id
-            val p2 = playerDao.addPlayer(gId, user2Id).id
-
-            playerCardDao.upsert(p1, CardType.BAKERY, 1)
-            playerCardDao.upsert(p2, CardType.BAKERY, 1)
-
-            earningsService.resolveEffects(gId)
-
-            val rp1 = playerDao.findById(p1)!!
-            val rp2 = playerDao.findById(p2)!!
-
-            // currentTurnIndex=0, so P1 (turn order 0) is the active player.
-            // Roll 2: Bakery (Green) activates only for the active player.
-            // P1: 3 + 1 (Bakery) = 4
-            // P2: 3 (no activation) = 3
-            assertEquals(4, rp1.coins)
-            assertEquals(3, rp2.coins)
-        }
+        assertEquals(4, playerDao.findById(player1Id)!!.coins)
+        assertEquals(3, playerDao.findById(player2Id)!!.coins)
     }
 
     @Test
-    fun `red card only pays non-active player`() {
+    fun `red card only activates on opponents turn and steals from active player`() {
         transaction {
-            Players.update({ Players.id eq player1Id }) { it[coins] = 1 }
             Games.update({ Games.id eq gameId }) { it[lastDiceRoll] = 3 }
         }
 
+        // Roll 3: Cafe (Red) owned by P2 triggers only because P1 is active.
+        // P1: 3 - 1 = 2, P2: 3 + 1 = 4
         earningsService.resolveEffects(gameId)
 
-        val p1 = playerDao.findById(player1Id)!!
-        val p2 = playerDao.findById(player2Id)!!
-
-        // currentTurnIndex=0, so P1 is the active player.
-        // Roll 3: Cafe (Red, PaymentSource.ACTIVE_PLAYER) activates only for non-active players
-        //   -> P2 owns Cafe, payment comes FROM active player (P1)
-        //   -> P1 loses 1 coin, P2 gains 1 coin
-        // P1: 1 (starting) - 1 (Cafe payment) = 0
-        // P2: 3 (starting) + 1 (Cafe income) = 4
-        assertEquals(0, p1.coins)
-        assertEquals(4, p2.coins)
+        assertEquals(2, playerDao.findById(player1Id)!!.coins)
+        assertEquals(4, playerDao.findById(player2Id)!!.coins)
     }
 
     @Test
-    fun `blue card pays all players regardless of whose turn it is`() {
-        // Roll 1: Wheat Field (Blue) — activates for every player on any turn.
-        // P1 owns 2x Wheat Field -> +2 coins
-        // P2 owns 1x Wheat Field -> +1 coin
-        // P1: 3 + 2 = 5, P2: 3 + 1 = 4
-        earningsService.resolveEffects(gameId)
-
-        val p1 = playerDao.findById(player1Id)!!
-        val p2 = playerDao.findById(player2Id)!!
-
-        assertEquals(5, p1.coins)
-        assertEquals(4, p2.coins)
-    }
-
-    @Test
-    fun `red card clamps active player coins to zero when they cannot cover the full payment`() {
+    fun `red card clamps active player coins to zero when they cannot cover the payment`() {
         transaction {
             Players.update({ Players.id eq player1Id }) { it[coins] = 0 }
             Games.update({ Games.id eq gameId }) { it[lastDiceRoll] = 3 }
         }
 
+        // P1 has 0 coins — delta would be -1 but clamp keeps it at 0.
+        // P2 still receives the full income.
         earningsService.resolveEffects(gameId)
 
-        val p1 = playerDao.findById(player1Id)!!
-        val p2 = playerDao.findById(player2Id)!!
+        assertEquals(0, playerDao.findById(player1Id)!!.coins)
+        assertEquals(4, playerDao.findById(player2Id)!!.coins)
+    }
 
-        // Roll 3: Cafe (Red) owned by P2 triggers against active player P1.
-        // P1 has 0 coins — delta would be -1 but clamp keeps it at 0.
-        // P2 still receives the 1 coin income regardless.
-        assertEquals(0, p1.coins)
-        assertEquals(4, p2.coins)
+    // --- PaymentSource branches ---
+
+    @Test
+    fun `ALL_PLAYERS payment source deducts from every other player and pays card owner`() {
+        transaction {
+            Games.update({ Games.id eq gameId }) { it[lastDiceRoll] = 6 }
+            // P1 owns Stadium (Purple, ALL_PLAYERS, income=2, activates on 6)
+            // With 2 players, perPlayerAmount = 2 / (2-1) = 2
+            playerCardDao.upsert(player1Id, CardType.STADIUM, 1)
+        }
+
+        // Roll 6: Stadium (Purple) activates only on active player's turn (P1).
+        // P2 contributes 2 coins to P1.
+        // P1: 3 + 2 = 5, P2: 3 - 2 = 1
+        earningsService.resolveEffects(gameId)
+
+        assertEquals(5, playerDao.findById(player1Id)!!.coins)
+        assertEquals(1, playerDao.findById(player2Id)!!.coins)
+    }
+
+    @Test
+    fun `CHOSEN_PLAYER payment source does not automatically move coins`() {
+        transaction {
+            Games.update({ Games.id eq gameId }) { it[lastDiceRoll] = 6 }
+            playerCardDao.upsert(player1Id, CardType.TV_STATION, 1)
+        }
+
+        // Roll 6: TV Station (Purple, CHOSEN_PLAYER) — no automatic payment.
+        // Coins unchanged for both players.
+        earningsService.resolveEffects(gameId)
+
+        assertEquals(3, playerDao.findById(player1Id)!!.coins)
+        assertEquals(3, playerDao.findById(player2Id)!!.coins)
+    }
+
+    @Test
+    fun `NONE payment source does not move any coins`() {
+        transaction {
+            Games.update({ Games.id eq gameId }) { it[lastDiceRoll] = 6 }
+            playerCardDao.upsert(player1Id, CardType.BUSINESS_CENTER, 1)
+        }
+
+        // Roll 6: Business Center (Purple, NONE, income=0) — no payment of any kind.
+        // Coins unchanged for both players.
+        earningsService.resolveEffects(gameId)
+
+        assertEquals(3, playerDao.findById(player1Id)!!.coins)
+        assertEquals(3, playerDao.findById(player2Id)!!.coins)
+    }
+
+    @Test
+    fun `card with zero income does not update coins`() {
+        transaction {
+            Games.update({ Games.id eq gameId }) { it[lastDiceRoll] = 6 }
+            // Business Center has income=0, so totalEarnings <= 0 guard fires.
+            playerCardDao.upsert(player1Id, CardType.BUSINESS_CENTER, 1)
+        }
+
+        earningsService.resolveEffects(gameId)
+
+        // No delta applied — both players keep their starting coins.
+        assertEquals(3, playerDao.findById(player1Id)!!.coins)
+        assertEquals(3, playerDao.findById(player2Id)!!.coins)
+    }
+
+    @Test
+    fun `processEarnings called directly distributes coins without phase transition`() {
+        // Directly exercise the public processEarnings method.
+        // Roll 1: Wheat Field (Blue), P1 owns 2x, P2 owns 1x.
+        earningsService.processEarnings(gameId, diceRoll = 1, activePlayerId = player1Id)
+
+        assertEquals(5, playerDao.findById(player1Id)!!.coins)
+        assertEquals(4, playerDao.findById(player2Id)!!.coins)
+
+        // Phase must remain unchanged since processEarnings does not touch it.
+        val game = gameDao.findById(gameId)!!
+        assertEquals(TurnPhase.RESOLVE_EFFECTS, game.turnPhase)
+    }
+
+    @Test
+    fun `processEarningsInTransaction throws GameNotFoundException when active player not in game`() {
+        assertThrows<GameNotFoundException> {
+            earningsService.processEarnings(gameId, diceRoll = 1, activePlayerId = 999999)
+        }
     }
 }
