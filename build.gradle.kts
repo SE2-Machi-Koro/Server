@@ -45,6 +45,20 @@ sonar {
         property("sonar.coverage.exclusions", "src/main/kotlin/**/dto/**,src/main/kotlin/**/config/**,src/main/kotlin/**/ServerApplication.kt")
         property("sonar.newCode.referenceBranch", "main")
         property("sonar.qualitygate.wait", "true")
+
+        // Suppress S1192 (duplicated string literals) on the V1 Flyway baseline.
+        // The repeated color / establishment_type / payment_source literals (and
+        // repeated card_type literals in the activation-number seed block) are
+        // intrinsic to the immutable V1 baseline. Refactoring or normalizing
+        // them would change the V1 file checksum and break Flyway validation on
+        // databases that have already applied V1. If a future schema/data change
+        // is required, introduce a V2 migration instead.
+        property("sonar.issue.ignore.multicriteria", "e1")
+        property("sonar.issue.ignore.multicriteria.e1.ruleKey", "sql:S1192")
+        property(
+            "sonar.issue.ignore.multicriteria.e1.resourceKey",
+            "src/main/resources/db/migration/V1__init_schema.sql",
+        )
     }
 }
 
