@@ -249,6 +249,22 @@ Generate a coverage report:
 
 HTML report: `build/reports/jacoco/test/html/index.html`
 
+Run SonarCloud analysis (requires `SONAR_TOKEN` in your shell):
+
+```bash
+SONAR_PROJECT_KEY="$(grep '^sonar.projectKey=' sonar-project.properties | cut -d= -f2-)"
+SONAR_ORGANIZATION="$(grep '^sonar.organization=' sonar-project.properties | cut -d= -f2-)"
+SONAR_HOST_URL="$(grep '^sonar.host.url=' sonar-project.properties | cut -d= -f2-)"
+
+SONAR_TOKEN=<your-token> \
+./gradlew --no-daemon clean check jacocoTestReport sonar \
+  -Dsonar.projectKey="$SONAR_PROJECT_KEY" \
+  -Dsonar.organization="$SONAR_ORGANIZATION" \
+  -Dsonar.host.url="$SONAR_HOST_URL"
+```
+
+The CI workflow resolves the same values from `sonar-project.properties` to keep local and CI Sonar settings aligned.
+
 ## API & WebSocket Documentation
 
 For detailed REST and WebSocket API documentation, see the `docs/` directory or access Swagger UI at `/swagger-ui.html`
