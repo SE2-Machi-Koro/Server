@@ -17,7 +17,7 @@ val mockitoKotlinVersion = "5.2.1"
 val exposedVersion = "1.0.0"
 val testcontainersVersion = "1.20.4"
 
-sonar {
+sonarqube {
     properties {
         property("sonar.projectKey", "SE2-Machi-Koro_Server")
         property("sonar.organization", "se2-machi-koro")
