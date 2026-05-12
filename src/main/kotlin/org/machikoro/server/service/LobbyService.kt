@@ -59,6 +59,33 @@ open class LobbyService(
     }
 
     /**
+     * Validates whether a lobby code exists.
+     *
+     * @throws GameNotFoundException if no lobby with the given code exists.
+     */
+    fun validateLobbyCode(lobbyCode: String): GameModel = runInTransaction {
+        gameDao.findByLobbyCode(lobbyCode)
+            ?: throw GameNotFoundException("Lobby with code $lobbyCode not found")
+    }
+
+    /**
+     * Adds [userId] to the lobby identified by [lobbyCode].
+     *
+     * The lobby code is first resolved to the corresponding game. Then the existing
+     * addUserToLobby logic is reused so all validation rules stay in one place.
+     *
+     * @throws GameNotFoundException if no lobby with [lobbyCode] exists.
+     * @throws GameStartedException  if the game has already started.
+     * @throws LobbyFullException    if the lobby has already reached its player cap.
+     */
+    fun joinLobby(lobbyCode: String, userId: Int): PlayerModel = runInTransaction {
+        val game = gameDao.findByLobbyCode(lobbyCode)
+            ?: throw GameNotFoundException("Lobby with code $lobbyCode not found")
+
+        addUserToLobby(game.id, userId)
+    }
+
+    /**
      * Adds [userId] to the lobby for [gameId] if the game exists, is still in the
      * WAITING state and has not yet reached its player cap.
      *

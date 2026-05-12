@@ -1,11 +1,9 @@
 package org.machikoro.server.controller
 
-import java.security.Principal
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.auth.UserPrincipal
-import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.LandmarkType
@@ -55,29 +53,26 @@ class GameControllerTest {
     private val lobbyService = mock<LobbyService>()
     private val connectionTracker = mock<WebSocketConnectionTracker>()
     private val gameStateGuard = mock<GameStateGuard>()
-    private val playerDao = mock<PlayerDao>() // NEU
     private val controller = GameController(
         gamePhaseService, messagingTemplate, leaveFinishedGameService,
-        purchaseService, diceService, lobbyService, connectionTracker,
-        gameStateGuard, playerDao, // NEU
+        purchaseService, diceService, lobbyService, connectionTracker, gameStateGuard,
     )
 
-    private val principal: Principal = UserPrincipal(userId = 1, username = "alice")
+    private val alice = UserPrincipal(userId = 1, username = "alice")
 
-    private val defaultGame = GameModel(
-        id = 1, status = GameStatus.IN_PROGRESS, hostUserId = 1,
-        lobbyCode = "XYZ", maxPlayers = 4, currentTurnIndex = 0,
-        turnPhase = TurnPhase.ROLL_DICE, lastDiceRoll = null,
-        hasPurchasedThisTurn = false, roundNumber = 1,
-    )
+    /** Authenticated accessor with [alice] resolvable via the helper. */
+    private fun authedAccessor(): SimpMessageHeaderAccessor =
+        SimpMessageHeaderAccessor.create().apply { user = alice }
 
-    private val defaultPlayers = listOf(
-        PlayerModel(id = 1, gameId = 1, userId = 10, turnOrder = 0, coins = 3, lastSeenAt = null),
-        PlayerModel(id = 2, gameId = 1, userId = 20, turnOrder = 1, coins = 3, lastSeenAt = null),
-    )
+    // ── startGame ─────────────────────────────────────────────────────────────
 
     private fun gameStateDto(gameId: Int) = GameStateDto(
-        game = defaultGame.copy(id = gameId),
+        game = GameModel(
+            id = gameId, status = GameStatus.IN_PROGRESS, hostUserId = 1,
+            lobbyCode = "XYZ", maxPlayers = 4, currentTurnIndex = 0,
+            turnPhase = TurnPhase.ROLL_DICE, lastDiceRoll = null,
+            hasPurchasedThisTurn = false, roundNumber = 1,
+        ),
         players = listOf(
             PlayerModel(id = 1, gameId = gameId, userId = 1, turnOrder = 0, coins = 3, lastSeenAt = null),
             PlayerModel(id = 2, gameId = gameId, userId = 2, turnOrder = 1, coins = 3, lastSeenAt = null),
@@ -92,8 +87,6 @@ class GameControllerTest {
         accessor.sessionAttributes = mutableMapOf()
         return accessor
     }
-
-    // ── startGame ─────────────────────────────────────────────────────────────
 
     @Test
     fun `startGame broadcasts GAME_STARTED on success`() {
@@ -127,6 +120,7 @@ class GameControllerTest {
 
         val message = captor.firstValue
         assertEquals(MessageType.ERROR, message.type)
+        assertEquals("server", message.sender)
         @Suppress("UNCHECKED_CAST")
         assertEquals("START_FAILED", (message.payload as Map<String, Any>)["event"])
         verify(lobbyService, never()).startGame(any(), any())
@@ -137,7 +131,8 @@ class GameControllerTest {
         val gameId = 10
         val sessionId = "session-non-host"
         whenever(connectionTracker.getUserId(sessionId)).thenReturn(99)
-        whenever(lobbyService.startGame(gameId, 99)).thenThrow(NotHostException("not host"))
+        whenever(lobbyService.startGame(gameId, 99))
+            .thenThrow(NotHostException("not host"))
 
         controller.startGame(StartGameRequest(gameId), headerWithSession(sessionId))
 
@@ -156,23 +151,19 @@ class GameControllerTest {
     fun `advancePhase delegates to service with the requested game id`() {
         val gameId = 42
         whenever(gamePhaseService.advancePhase(gameId)).thenReturn(TurnPhase.RESOLVE_EFFECTS)
-        whenever(gameStateGuard.ensureGameIsRunning(gameId)).thenReturn(defaultGame.copy(id = gameId))
-        whenever(playerDao.getPlayers(gameId)).thenReturn(defaultPlayers)
 
-        controller.advancePhase(AdvancePhaseRequest(gameId), principal)
+        controller.advancePhase(AdvancePhaseRequest(gameId), authedAccessor())
 
-        verify(gameStateGuard).ensureSenderIsActivePlayer(gameId, principal)
+        verify(gameStateGuard).ensureSenderIsActivePlayer(gameId, alice)
         verify(gamePhaseService).advancePhase(gameId)
     }
 
     @Test
-    fun `advancePhase broadcasts new phase and activePlayerId as GAME_ACTION`() {
+    fun `advancePhase broadcasts new phase as GAME_ACTION on game topic`() {
         val gameId = 42
         whenever(gamePhaseService.advancePhase(gameId)).thenReturn(TurnPhase.RESOLVE_EFFECTS)
-        whenever(gameStateGuard.ensureGameIsRunning(gameId)).thenReturn(defaultGame.copy(id = gameId))
-        whenever(playerDao.getPlayers(gameId)).thenReturn(defaultPlayers)
 
-        controller.advancePhase(AdvancePhaseRequest(gameId), principal)
+        controller.advancePhase(AdvancePhaseRequest(gameId), authedAccessor())
 
         val captor = argumentCaptor<WebSocketMessage>()
         verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
@@ -180,20 +171,17 @@ class GameControllerTest {
         val message = captor.firstValue
         assertEquals(MessageType.GAME_ACTION, message.type)
         assertEquals("server", message.sender)
-        @Suppress("UNCHECKED_CAST")
-        val payload = message.payload as Map<String, Any?>
-        assertEquals("RESOLVE_EFFECTS", payload["turnPhase"])
-        assertEquals(10, payload["activePlayerId"]) // userId von defaultPlayers[0]
+        assertEquals(mapOf("turnPhase" to "RESOLVE_EFFECTS"), message.payload)
     }
 
     @Test
     fun `advancePhase propagates NOT_YOUR_TURN and does not call service`() {
         val gameId = 42
-        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, principal))
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice))
             .thenThrow(CustomWebSocketException("NOT_YOUR_TURN", "It is not your turn"))
 
         val ex = assertThrows<CustomWebSocketException> {
-            controller.advancePhase(AdvancePhaseRequest(gameId), principal)
+            controller.advancePhase(AdvancePhaseRequest(gameId), authedAccessor())
         }
         assertEquals("NOT_YOUR_TURN", ex.errorCode)
         verify(gamePhaseService, never()).advancePhase(any())
@@ -205,34 +193,30 @@ class GameControllerTest {
     @Test
     fun `endTurn delegates to service with the requested game id`() {
         val gameId = 42
-        whenever(gamePhaseService.endTurn(gameId)).thenReturn(EndTurnOutcome.Continue(TurnPhase.ROLL_DICE))
-        whenever(gameStateGuard.ensureGameIsRunning(gameId)).thenReturn(defaultGame.copy(id = gameId))
-        whenever(playerDao.getPlayers(gameId)).thenReturn(defaultPlayers)
+        whenever(gamePhaseService.endTurn(gameId))
+            .thenReturn(EndTurnOutcome.Continue(TurnPhase.ROLL_DICE))
 
-        controller.endTurn(EndTurnRequest(gameId), principal)
+        controller.endTurn(EndTurnRequest(gameId), authedAccessor())
 
-        verify(gameStateGuard).ensureSenderIsActivePlayer(gameId, principal)
+        verify(gameStateGuard).ensureSenderIsActivePlayer(gameId, alice)
         verify(gamePhaseService).endTurn(gameId)
     }
 
     @Test
-    fun `endTurn broadcasts resulting phase and activePlayerId as GAME_ACTION`() {
+    fun `endTurn broadcasts resulting phase as GAME_ACTION on game topic`() {
         val gameId = 42
-        whenever(gamePhaseService.endTurn(gameId)).thenReturn(EndTurnOutcome.Continue(TurnPhase.ROLL_DICE))
-        whenever(gameStateGuard.ensureGameIsRunning(gameId)).thenReturn(defaultGame.copy(id = gameId))
-        whenever(playerDao.getPlayers(gameId)).thenReturn(defaultPlayers)
+        whenever(gamePhaseService.endTurn(gameId))
+            .thenReturn(EndTurnOutcome.Continue(TurnPhase.ROLL_DICE))
 
-        controller.endTurn(EndTurnRequest(gameId), principal)
+        controller.endTurn(EndTurnRequest(gameId), authedAccessor())
 
         val captor = argumentCaptor<WebSocketMessage>()
         verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
 
         val message = captor.firstValue
         assertEquals(MessageType.GAME_ACTION, message.type)
-        @Suppress("UNCHECKED_CAST")
-        val payload = message.payload as Map<String, Any?>
-        assertEquals("ROLL_DICE", payload["turnPhase"])
-        assertEquals(10, payload["activePlayerId"])
+        assertEquals("server", message.sender)
+        assertEquals(mapOf("turnPhase" to "ROLL_DICE"), message.payload)
     }
 
     @Test
@@ -240,26 +224,29 @@ class GameControllerTest {
         val gameId = 42
         val winnerId = 1
         val roundsPlayed = 10
-        whenever(gamePhaseService.endTurn(gameId)).thenReturn(EndTurnOutcome.Won(winnerId, roundsPlayed))
 
-        controller.endTurn(EndTurnRequest(gameId), principal)
+        whenever(gamePhaseService.endTurn(gameId))
+            .thenReturn(EndTurnOutcome.Won(winnerId, roundsPlayed))
+
+        controller.endTurn(EndTurnRequest(gameId), authedAccessor())
 
         val captor = argumentCaptor<WebSocketMessage>()
         verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
 
         val message = captor.firstValue
         assertEquals(MessageType.GAME_END, message.type)
+        assertEquals("server", message.sender)
         assertEquals(mapOf("winnerId" to winnerId, "roundsPlayed" to roundsPlayed), message.payload)
     }
 
     @Test
     fun `endTurn propagates NOT_YOUR_TURN and does not call service`() {
         val gameId = 42
-        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, principal))
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice))
             .thenThrow(CustomWebSocketException("NOT_YOUR_TURN", "It is not your turn"))
 
         val ex = assertThrows<CustomWebSocketException> {
-            controller.endTurn(EndTurnRequest(gameId), principal)
+            controller.endTurn(EndTurnRequest(gameId), authedAccessor())
         }
         assertEquals("NOT_YOUR_TURN", ex.errorCode)
         verify(gamePhaseService, never()).endTurn(any())
@@ -274,46 +261,68 @@ class GameControllerTest {
         whenever(
             purchaseService.purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.BAKERY, null)
         ).thenReturn(
-            PurchaseResult(turnPhase = TurnPhase.BUY_OR_BUILD, purchaseType = PurchaseType.ESTABLISHMENT, cardType = CardType.BAKERY)
+            PurchaseResult(
+                turnPhase = TurnPhase.BUY_OR_BUILD,
+                purchaseType = PurchaseType.ESTABLISHMENT,
+                cardType = CardType.BAKERY,
+            )
         )
 
-        controller.purchase(PurchaseRequest(gameId, PurchaseType.ESTABLISHMENT, cardType = CardType.BAKERY), principal)
+        controller.purchase(
+            PurchaseRequest(gameId, PurchaseType.ESTABLISHMENT, cardType = CardType.BAKERY),
+            authedAccessor(),
+        )
 
-        verify(gameStateGuard).ensureSenderIsActivePlayer(gameId, principal)
+        verify(gameStateGuard).ensureSenderIsActivePlayer(gameId, alice)
         verify(purchaseService).purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.BAKERY, null)
     }
 
     @Test
     fun `purchase broadcasts resulting purchase payload as GAME_ACTION on game topic`() {
         val gameId = 42
+
         whenever(
             purchaseService.purchase(gameId, PurchaseType.LANDMARK, null, LandmarkType.TRAIN_STATION)
         ).thenReturn(
-            PurchaseResult(turnPhase = TurnPhase.BUY_OR_BUILD, purchaseType = PurchaseType.LANDMARK, landmarkType = LandmarkType.TRAIN_STATION)
+            PurchaseResult(
+                turnPhase = TurnPhase.BUY_OR_BUILD,
+                purchaseType = PurchaseType.LANDMARK,
+                landmarkType = LandmarkType.TRAIN_STATION,
+            )
         )
 
-        controller.purchase(PurchaseRequest(gameId, PurchaseType.LANDMARK, landmarkType = LandmarkType.TRAIN_STATION), principal)
+        controller.purchase(
+            PurchaseRequest(gameId, PurchaseType.LANDMARK, landmarkType = LandmarkType.TRAIN_STATION),
+            authedAccessor(),
+        )
 
         val captor = argumentCaptor<WebSocketMessage>()
         verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
 
         val message = captor.firstValue
         assertEquals(MessageType.GAME_ACTION, message.type)
-        @Suppress("UNCHECKED_CAST")
-        val payload = message.payload as Map<String, Any?>
-        assertEquals("BUY_OR_BUILD", payload["turnPhase"])
-        assertEquals("LANDMARK", payload["purchaseType"])
-        assertEquals("TRAIN_STATION", payload["landmarkType"])
+        assertEquals("server", message.sender)
+        assertEquals(
+            mapOf(
+                "turnPhase" to "BUY_OR_BUILD",
+                "purchaseType" to "LANDMARK",
+                "landmarkType" to "TRAIN_STATION",
+            ),
+            message.payload,
+        )
     }
 
     @Test
     fun `purchase propagates NOT_YOUR_TURN and does not call service`() {
         val gameId = 42
-        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, principal))
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice))
             .thenThrow(CustomWebSocketException("NOT_YOUR_TURN", "It is not your turn"))
 
         val ex = assertThrows<CustomWebSocketException> {
-            controller.purchase(PurchaseRequest(gameId, PurchaseType.ESTABLISHMENT, cardType = CardType.BAKERY), principal)
+            controller.purchase(
+                PurchaseRequest(gameId, PurchaseType.ESTABLISHMENT, cardType = CardType.BAKERY),
+                authedAccessor(),
+            )
         }
         assertEquals("NOT_YOUR_TURN", ex.errorCode)
         verify(purchaseService, never()).purchase(any(), any(), any(), any())
@@ -326,9 +335,11 @@ class GameControllerTest {
     fun `leaveFinishedGame calls service before broadcasting`() {
         val gameId = 1
         val playerId = 10
-        controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId), principal)
+
+        controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId), authedAccessor())
+
         val order = inOrder(gameStateGuard, leaveFinishedGameService, messagingTemplate)
-        order.verify(gameStateGuard).ensureSenderOwnsPlayer(gameId, playerId, principal)
+        order.verify(gameStateGuard).ensureSenderOwnsPlayer(gameId, playerId, alice)
         order.verify(leaveFinishedGameService).leaveFinishedGame(gameId, playerId)
         order.verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), any<WebSocketMessage>())
     }
@@ -337,9 +348,12 @@ class GameControllerTest {
     fun `leaveFinishedGame gets exception from service`() {
         val gameId = 1
         val playerId = 10
-        whenever(leaveFinishedGameService.leaveFinishedGame(gameId, playerId)).thenThrow(RuntimeException("boom"))
+
+        whenever(leaveFinishedGameService.leaveFinishedGame(gameId, playerId))
+            .thenThrow(RuntimeException("boom"))
+
         org.junit.jupiter.api.assertThrows<RuntimeException> {
-            controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId), principal)
+            controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId), authedAccessor())
         }
     }
 
@@ -347,7 +361,9 @@ class GameControllerTest {
     fun `leaveFinishedGame sends message to correct topic`() {
         val gameId = 5
         val playerId = 20
-        controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId), principal)
+
+        controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId), authedAccessor())
+
         verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), any<WebSocketMessage>())
     }
 
@@ -355,9 +371,12 @@ class GameControllerTest {
     fun `leaveFinishedGame payload contains correct playerId and type`() {
         val gameId = 3
         val playerId = 99
-        controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId), principal)
+
+        controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId), authedAccessor())
+
         val captor = argumentCaptor<WebSocketMessage>()
         verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+
         val message = captor.firstValue
         assertEquals(MessageType.PLAYER_LEFT_FINISHED_GAME, message.type)
         assertEquals(mapOf("playerId" to playerId), message.payload)
@@ -367,10 +386,11 @@ class GameControllerTest {
     fun `leaveFinishedGame propagates NOT_YOUR_PLAYER and does not call service`() {
         val gameId = 3
         val playerId = 99
-        whenever(gameStateGuard.ensureSenderOwnsPlayer(gameId, playerId, principal))
+        whenever(gameStateGuard.ensureSenderOwnsPlayer(gameId, playerId, alice))
             .thenThrow(CustomWebSocketException("NOT_YOUR_PLAYER", "You do not own player 99"))
+
         val ex = assertThrows<CustomWebSocketException> {
-            controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId), principal)
+            controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId), authedAccessor())
         }
         assertEquals("NOT_YOUR_PLAYER", ex.errorCode)
         verify(leaveFinishedGameService, never()).leaveFinishedGame(any(), any())
@@ -385,13 +405,15 @@ class GameControllerTest {
         val playerId = 2
         val request = RollDiceRequest(gameId = gameId, playerId = playerId)
         val response = RollDiceResponse(dice = listOf(3, 4), total = 7)
+
         whenever(diceService.rollDice(request)).thenReturn(response)
 
-        controller.rollDice(request, principal)
+        controller.rollDice(request, authedAccessor())
 
-        verify(gameStateGuard).ensureSenderIsActivePlayer(gameId, principal)
+        verify(gameStateGuard).ensureSenderIsActivePlayer(gameId, alice)
         val captor = argumentCaptor<WebSocketMessage>()
         verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+
         val message = captor.firstValue
         assertEquals(MessageType.ROLL_DICE, message.type)
         assertEquals("SERVER", message.sender)
@@ -404,15 +426,21 @@ class GameControllerTest {
         val gameId = 1
         val playerId = 2
         val request = RollDiceRequest(gameId = gameId, playerId = playerId)
+
         whenever(diceService.rollDice(request)).thenThrow(RuntimeException("dice exploded"))
 
-        controller.rollDice(request, principal)
+        controller.rollDice(request, authedAccessor())
 
         val captor = argumentCaptor<WebSocketMessage>()
         verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+
         val message = captor.firstValue
         assertEquals(MessageType.ERROR, message.type)
-        assertEquals(mapOf("event" to "ROLL_FAILED", "message" to "dice exploded"), message.payload)
+        assertEquals("SERVER", message.sender)
+        assertEquals(
+            mapOf("event" to "ROLL_FAILED", "message" to "dice exploded"),
+            message.payload
+        )
     }
 
     @Test
@@ -420,14 +448,63 @@ class GameControllerTest {
         val gameId = 1
         val playerId = 2
         val request = RollDiceRequest(gameId = gameId, playerId = playerId)
-        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, principal))
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice))
             .thenThrow(CustomWebSocketException("NOT_YOUR_TURN", "It is not your turn"))
 
         val ex = assertThrows<CustomWebSocketException> {
-            controller.rollDice(request, principal)
+            controller.rollDice(request, authedAccessor())
         }
         assertEquals("NOT_YOUR_TURN", ex.errorCode)
         verify(diceService, never()).rollDice(any())
         verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+    }
+
+    // ── UNAUTHENTICATED at the controller boundary ────────────────────────────
+    // The full helper is tested in UserPrincipalAccessorTest; these confirm
+    // that every endpoint short-circuits before reaching the guard or
+    // downstream service, so a missed `requireUserPrincipal()` wiring would
+    // not slip through.
+
+    private fun assertUnauthenticated(call: (SimpMessageHeaderAccessor) -> Unit) {
+        val unauthed = SimpMessageHeaderAccessor.create()
+        val ex = assertThrows<CustomWebSocketException> { call(unauthed) }
+        assertEquals("UNAUTHENTICATED", ex.errorCode)
+        verify(gameStateGuard, never()).ensureSenderIsActivePlayer(any(), any())
+        verify(gameStateGuard, never()).ensureSenderOwnsPlayer(any(), any(), any())
+    }
+
+    @Test
+    fun `advancePhase throws UNAUTHENTICATED when accessor has no principal`() {
+        assertUnauthenticated { controller.advancePhase(AdvancePhaseRequest(42), it) }
+        verify(gamePhaseService, never()).advancePhase(any())
+    }
+
+    @Test
+    fun `purchase throws UNAUTHENTICATED when accessor has no principal`() {
+        assertUnauthenticated {
+            controller.purchase(
+                PurchaseRequest(42, PurchaseType.ESTABLISHMENT, cardType = CardType.BAKERY),
+                it,
+            )
+        }
+        verify(purchaseService, never()).purchase(any(), any(), any(), any())
+    }
+
+    @Test
+    fun `endTurn throws UNAUTHENTICATED when accessor has no principal`() {
+        assertUnauthenticated { controller.endTurn(EndTurnRequest(42), it) }
+        verify(gamePhaseService, never()).endTurn(any())
+    }
+
+    @Test
+    fun `rollDice throws UNAUTHENTICATED when accessor has no principal`() {
+        assertUnauthenticated { controller.rollDice(RollDiceRequest(gameId = 42, playerId = 1), it) }
+        verify(diceService, never()).rollDice(any())
+    }
+
+    @Test
+    fun `leaveFinishedGame throws UNAUTHENTICATED when accessor has no principal`() {
+        assertUnauthenticated { controller.leaveFinishedGame(LeaveFinishedGameRequest(42, 99), it) }
+        verify(leaveFinishedGameService, never()).leaveFinishedGame(any(), any())
     }
 }

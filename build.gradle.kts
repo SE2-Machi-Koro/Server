@@ -17,15 +17,6 @@ val mockitoKotlinVersion = "5.2.1"
 val exposedVersion = "1.0.0"
 val testcontainersVersion = "1.20.4"
 
-sonar {
-    properties {
-        property("sonar.projectKey", "SE2-Machi-Koro_Server")
-        property("sonar.organization", "se2-machi-koro")
-        property("sonar.host.url", "https://sonarcloud.io")
-        property("sonar.coverage.jacoco.xmlReportPaths", "build/reports/jacoco/test/jacocoTestReport.xml")
-        property("sonar.qualitygate.wait", "true")
-    }
-}
 
 java {
     toolchain {
@@ -41,8 +32,39 @@ dependencyLocking {
     lockAllConfigurations()
 }
 
+sonar {
+    properties {
+        property("sonar.projectKey", "SE2-Machi-Koro_Server")
+        property("sonar.organization", "se2-machi-koro")
+        property("sonar.host.url", "https://sonarcloud.io")
+        property("sonar.sourceEncoding", "UTF-8")
+        property("sonar.sources", "src/main/kotlin,src/main/resources")
+        property("sonar.tests", "src/test/kotlin")
+        property("sonar.test.inclusions", "src/test/kotlin/**/*.kt")
+        property("sonar.coverage.jacoco.xmlReportPaths", "build/reports/jacoco/test/jacocoTestReport.xml")
+        property("sonar.coverage.exclusions", "src/main/kotlin/**/dto/**,src/main/kotlin/**/config/**,src/main/kotlin/**/ServerApplication.kt")
+        property("sonar.newCode.referenceBranch", "main")
+        property("sonar.qualitygate.wait", "true")
+
+        // Suppress S1192 (duplicated string literals) on the V1 Flyway baseline.
+        // The repeated color / establishment_type / payment_source literals (and
+        // repeated card_type literals in the activation-number seed block) are
+        // intrinsic to the immutable V1 baseline. Refactoring or normalizing
+        // them would change the V1 file checksum and break Flyway validation on
+        // databases that have already applied V1. If a future schema/data change
+        // is required, introduce a V2 migration instead.
+        property("sonar.issue.ignore.multicriteria", "e1")
+        property("sonar.issue.ignore.multicriteria.e1.ruleKey", "sql:S1192")
+        property(
+            "sonar.issue.ignore.multicriteria.e1.resourceKey",
+            "src/main/resources/db/migration/V1__init_schema.sql",
+        )
+    }
+}
+
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("org.flywaydb:flyway-core")
     implementation("org.springframework.boot:spring-boot-starter-restclient")
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
@@ -80,6 +102,12 @@ tasks.withType<Test> {
     useJUnitPlatform()
     jvmArgs("-XX:+EnableDynamicAgentLoading")
     finalizedBy(tasks.jacocoTestReport)
+}
+
+tasks.bootJar {
+    layered {
+        enabled.set(true)
+    }
 }
 
 tasks.jacocoTestReport {
