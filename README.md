@@ -388,3 +388,23 @@ To roll back to a previous image, edit the production `.env` on the server and s
 `IMAGE_TAG=sha-<short-commit>` (or any other tag published to GHCR), then trigger a
 manual `docker compose up -d` or a doco-cd reconcile. The `compose.yaml` resolves the image as
 `ghcr.io/se2-machi-koro/server:${IMAGE_TAG:-latest}`.
+
+## Frontend dependencies (Subresource Integrity)
+
+The static landing page at [`src/main/resources/static/index.html`](src/main/resources/static/index.html)
+loads three pinned assets from the cdnjs CDN (Bootstrap 4.6.0, SockJS-client 1.1.4,
+stomp.js 2.3.3). Each `<link>`/`<script>` tag includes a `sha512` Subresource Integrity
+(SRI) hash plus `crossorigin="anonymous"` and `referrerpolicy="no-referrer"`, so the
+browser refuses to execute any payload that does not match the pinned hash. This
+satisfies SonarCloud rule *"Make sure not using resource integrity feature is safe here"*
+(CWE / former-hotspot) and protects users if the CDN is ever compromised.
+
+When bumping any of these CDN versions, regenerate the matching hash:
+
+```bash
+curl -sSL <new-cdn-url> | openssl dgst -sha512 -binary | openssl base64 -A
+```
+
+Replace the `integrity="sha512-..."` value on the same tag and verify in the browser
+DevTools console that no *"Failed to find a valid digest in the 'integrity' attribute"*
+error is logged.
