@@ -17,15 +17,6 @@ val mockitoKotlinVersion = "5.2.1"
 val exposedVersion = "1.0.0"
 val testcontainersVersion = "1.20.4"
 
-sonar {
-    properties {
-        property("sonar.projectKey", "SE2-Machi-Koro_Server")
-        property("sonar.organization", "se2-machi-koro")
-        property("sonar.host.url", "https://sonarcloud.io")
-        property("sonar.coverage.jacoco.xmlReportPaths", "build/reports/jacoco/test/jacocoTestReport.xml")
-        property("sonar.qualitygate.wait", "true")
-    }
-}
 
 java {
     toolchain {
@@ -41,8 +32,25 @@ dependencyLocking {
     lockAllConfigurations()
 }
 
+sonar {
+    properties {
+        property("sonar.projectKey", "SE2-Machi-Koro_Server")
+        property("sonar.organization", "se2-machi-koro")
+        property("sonar.host.url", "https://sonarcloud.io")
+        property("sonar.sourceEncoding", "UTF-8")
+        property("sonar.sources", "src/main/kotlin,src/main/resources")
+        property("sonar.tests", "src/test/kotlin")
+        property("sonar.test.inclusions", "src/test/kotlin/**/*.kt")
+        property("sonar.coverage.jacoco.xmlReportPaths", "build/reports/jacoco/test/jacocoTestReport.xml")
+        property("sonar.coverage.exclusions", "src/main/kotlin/**/dto/**,src/main/kotlin/**/config/**,src/main/kotlin/**/ServerApplication.kt")
+        property("sonar.newCode.referenceBranch", "main")
+        property("sonar.qualitygate.wait", "true")
+    }
+}
+
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("org.flywaydb:flyway-core")
     implementation("org.springframework.boot:spring-boot-starter-restclient")
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
