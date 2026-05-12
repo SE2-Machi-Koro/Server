@@ -16,8 +16,6 @@ val dotenvVersion = "5.2.2"
 val mockitoKotlinVersion = "5.2.1"
 val exposedVersion = "1.0.0"
 val testcontainersVersion = "1.20.4"
-val waitForSonarQualityGate =
-    (System.getenv("SONAR_QUALITY_GATE_WAIT") ?: System.getenv("CI") ?: "false").toBoolean()
 
 
 java {
