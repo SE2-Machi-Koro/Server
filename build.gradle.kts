@@ -16,6 +16,9 @@ val dotenvVersion = "5.2.2"
 val mockitoKotlinVersion = "5.2.1"
 val exposedVersion = "1.0.0"
 val testcontainersVersion = "1.20.4"
+val waitForSonarQualityGate =
+    (System.getenv("SONAR_QUALITY_GATE_WAIT") ?: System.getenv("CI") ?: "false").toBoolean()
+
 
 java {
     toolchain {
@@ -33,6 +36,7 @@ dependencyLocking {
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("org.flywaydb:flyway-core")
     implementation("org.springframework.boot:spring-boot-starter-restclient")
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
