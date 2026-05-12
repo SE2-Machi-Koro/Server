@@ -256,6 +256,16 @@ Generate a coverage report:
 
 HTML report: `build/reports/jacoco/test/html/index.html`
 
+Run SonarCloud analysis (requires `SONAR_TOKEN` in your shell):
+
+```bash
+SONAR_TOKEN=<your-token> \
+./gradlew --no-daemon clean check jacocoTestReport sonar \
+  --info --stacktrace
+```
+
+Sonar analysis settings are defined in `build.gradle.kts` under the Gradle `sonar { properties { ... } }` block, so local and CI use the same configuration path.
+
 ## API & WebSocket Documentation
 
 For detailed REST and WebSocket API documentation, see the `docs/` directory or access Swagger UI at `/swagger-ui.html`

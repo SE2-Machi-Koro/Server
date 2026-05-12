@@ -16,18 +16,7 @@ val dotenvVersion = "5.2.2"
 val mockitoKotlinVersion = "5.2.1"
 val exposedVersion = "1.0.0"
 val testcontainersVersion = "1.20.4"
-val waitForSonarQualityGate =
-    (System.getenv("SONAR_QUALITY_GATE_WAIT") ?: System.getenv("CI") ?: "false").toBoolean()
 
-sonarqube {
-    properties {
-        property("sonar.projectKey", "SE2-Machi-Koro_Server")
-        property("sonar.organization", "se2-machi-koro")
-        property("sonar.host.url", "https://sonarcloud.io")
-        property("sonar.coverage.jacoco.xmlReportPaths", "build/reports/jacoco/test/jacocoTestReport.xml")
-        property("sonar.qualitygate.wait", waitForSonarQualityGate.toString())
-    }
-}
 
 java {
     toolchain {
@@ -41,6 +30,22 @@ repositories {
 
 dependencyLocking {
     lockAllConfigurations()
+}
+
+sonar {
+    properties {
+        property("sonar.projectKey", "SE2-Machi-Koro_Server")
+        property("sonar.organization", "se2-machi-koro")
+        property("sonar.host.url", "https://sonarcloud.io")
+        property("sonar.sourceEncoding", "UTF-8")
+        property("sonar.sources", "src/main/kotlin,src/main/resources")
+        property("sonar.tests", "src/test/kotlin")
+        property("sonar.test.inclusions", "src/test/kotlin/**/*.kt")
+        property("sonar.coverage.jacoco.xmlReportPaths", "build/reports/jacoco/test/jacocoTestReport.xml")
+        property("sonar.coverage.exclusions", "src/main/kotlin/**/dto/**,src/main/kotlin/**/config/**,src/main/kotlin/**/ServerApplication.kt")
+        property("sonar.newCode.referenceBranch", "main")
+        property("sonar.qualitygate.wait", "true")
+    }
 }
 
 dependencies {
