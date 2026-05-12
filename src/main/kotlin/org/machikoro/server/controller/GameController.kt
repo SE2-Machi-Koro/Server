@@ -1,6 +1,7 @@
 package org.machikoro.server.controller
 
 import org.machikoro.server.auth.requireUserPrincipal
+import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.dto.EndTurnOutcome
 import org.machikoro.server.dto.AdvancePhaseRequest
@@ -37,6 +38,7 @@ class GameController(
     private val lobbyService: LobbyService,
     private val connectionTracker: WebSocketConnectionTracker,
     private val gameStateGuard: GameStateGuard,
+    private val playerDao: PlayerDao,
 ) {
     private val logger = LoggerFactory.getLogger(GameController::class.java)
 
@@ -137,10 +139,15 @@ class GameController(
             landmarkType = request.landmarkType,
         )
         logger.info("Processed {} purchase for game {}", result.purchaseType, request.gameId)
-
         broadcastPurchase(request.gameId, result)
     }
 
+    /**
+     * Ends the active player's turn, checks for a winner, and either finishes
+     * the game or advances to the next player's turn.
+     *
+     * Message is sent to /app/game.endTurn and broadcast to /topic/game/{gameId}.
+     */
     @MessageMapping("/game.endTurn")
     fun endTurn(@Payload request: EndTurnRequest, headerAccessor: SimpMessageHeaderAccessor) {
         requireActivePlayer(request.gameId, headerAccessor)
@@ -156,6 +163,11 @@ class GameController(
         }
     }
 
+    /**
+     * Removes a player from a finished game.
+     *
+     * Message is sent to /app/game.leave and broadcast to /topic/game/{gameId}.
+     */
     @MessageMapping("/game.leave")
     fun leaveFinishedGame(@Payload request: LeaveFinishedGameRequest, headerAccessor: SimpMessageHeaderAccessor) {
         requireOwnerOfPlayer(request.gameId, request.playerId, headerAccessor)
@@ -166,7 +178,10 @@ class GameController(
 
     /**
      * Handle dice roll requests and broadcast result to the specific game topic.
-     * Message is sent to /app/game.rollDice and broadcast to /topic/game/{gameId}
+     *
+     * Message is sent to /app/game.rollDice and broadcast to /topic/game/{gameId}.
+     * The result payload contains the player ID, the individual dice values, and
+     * a server-side timestamp so all clients see the same result simultaneously.
      */
     @MessageMapping("/game.rollDice")
     fun rollDice(@Payload request: RollDiceRequest, headerAccessor: SimpMessageHeaderAccessor) {
@@ -181,7 +196,11 @@ class GameController(
                     type = MessageType.ROLL_DICE,
                     sender = "SERVER",
                     content = "Player ${request.playerId} rolled: ${result.total}",
-                    payload = mapOf("dice" to result.dice, "total" to result.total)
+                    payload = mapOf(
+                        "playerId" to request.playerId,
+                        "result" to result.dice,
+                        "timestamp" to System.currentTimeMillis()
+                    )
                 )
             )
         } catch (e: Exception) {
@@ -197,19 +216,31 @@ class GameController(
         }
     }
 
-    private fun broadcastPhase(gameId: Int, newPhase : TurnPhase) {
+    /**
+     * Broadcasts the new turn phase and the active user ID to all subscribers
+     * of the game topic. The [activeUserId] identifies the user whose turn it
+     * is so clients can compare it against their own user ID.
+     */
+    private fun broadcastPhase(gameId: Int, newPhase: TurnPhase) {
+        val game = gameStateGuard.ensureGameIsRunning(gameId)
+        val players = playerDao.getPlayers(gameId)
+        val activeUserId = players.getOrNull(game.currentTurnIndex)?.userId
+
         messagingTemplate.convertAndSend(
             "/topic/game/$gameId",
             WebSocketMessage(
                 type = MessageType.GAME_ACTION,
                 sender = "server",
-                payload = mapOf("turnPhase" to newPhase.name),
+                payload = mapOf(
+                    "turnPhase" to newPhase.name,
+                    "activeUserId" to activeUserId,
+                ),
             ),
         )
     }
 
     private fun broadcastPurchase(gameId: Int, result: PurchaseResult) {
-        val payload = linkedMapOf<String, String>(
+        val payload = linkedMapOf<String, Any?>(
             "turnPhase" to result.turnPhase.name,
             "purchaseType" to result.purchaseType.name,
         )
