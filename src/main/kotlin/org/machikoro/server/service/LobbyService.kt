@@ -9,6 +9,7 @@ import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.dto.GameStateDto
+import org.machikoro.server.exception.GameFinishedException
 import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.exception.LobbyFullException
@@ -76,6 +77,7 @@ open class LobbyService(
      *
      * @throws GameNotFoundException if no lobby with [lobbyCode] exists.
      * @throws GameStartedException  if the game has already started.
+     * @throws GameFinishedException if the game has already ended.
      * @throws LobbyFullException    if the lobby has already reached its player cap.
      */
     fun joinLobby(lobbyCode: String, userId: Int): PlayerModel = runInTransaction {
@@ -89,19 +91,31 @@ open class LobbyService(
      * Adds [userId] to the lobby for [gameId] if the game exists, is still in the
      * WAITING state and has not yet reached its player cap.
      *
-     * @throws GameNotFoundException  if no game with [gameId] exists.
-     * @throws GameStartedException   if the game has already moved to IN_PROGRESS.
-     * @throws LobbyFullException     if the lobby already has reached its player cap.
+     * Existing players in the game can rejoin regardless of status (including
+     * FINISHED) — the reconnect short-circuit returns their record without any
+     * status check or DB write. New joins are rejected for both IN_PROGRESS and
+     * FINISHED games.
+     *
+     * @throws GameNotFoundException        if no game with [gameId] exists.
+     * @throws GameStartedException         if the game has already moved to IN_PROGRESS.
+     * @throws GameFinishedException        if the game has already ended.
+     * @throws LobbyFullException           if the lobby already has reached its player cap.
      */
     fun addUserToLobby(gameId: Int, userId: Int): PlayerModel {
         val game = gameDao.findById(gameId)
             ?: throw GameNotFoundException("Game $gameId not found")
 
         // Reconnect path: player already belongs to this game, so do not re-insert.
+        // Allowed regardless of game status — a player rejoining a FINISHED game
+        // can still pull their final state via the same record.
         playerDao.findByGameIdAndUserId(gameId, userId)?.let { return it }
 
         if (game.status == GameStatus.IN_PROGRESS) {
             throw GameStartedException("Game $gameId has already started")
+        }
+
+        if (game.status == GameStatus.FINISHED) {
+            throw GameFinishedException("Game $gameId has already finished")
         }
 
         synchronized(lobbyLocks.getOrPut(gameId) { Any() }) {
