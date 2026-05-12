@@ -45,6 +45,14 @@ open class LobbyService(
     }
 
     /**
+     * Returns the lock object for [gameId], creating it if absent.
+     * Extracted so both [addUserToLobby] and [startGame] share the exact same lock instance.
+     */
+    private fun lockFor(gameId: Int): Any = synchronized(lobbyLocks) {
+        lobbyLocks.getOrPut(gameId) { Any() }
+    }
+
+    /**
      * Creates a new lobby owned by [hostUserId] and returns the persisted
      * [GameModel]. The host is registered on the game record but is NOT
      * automatically added to the player roster — callers go through
@@ -69,29 +77,12 @@ open class LobbyService(
     }
 
     /**
-     * Adds [userId] to the lobby identified by [lobbyCode].
-     *
-     * The lobby code is first resolved to the corresponding game. Then the existing
-     * addUserToLobby logic is reused so all validation rules stay in one place.
-     *
-     * @throws GameNotFoundException if no lobby with [lobbyCode] exists.
-     * @throws GameStartedException  if the game has already started.
-     * @throws LobbyFullException    if the lobby has already reached its player cap.
-     */
-    fun joinLobby(lobbyCode: String, userId: Int): PlayerModel = runInTransaction {
-        val game = gameDao.findByLobbyCode(lobbyCode)
-            ?: throw GameNotFoundException("Lobby with code $lobbyCode not found")
-
-        addUserToLobby(game.id, userId)
-    }
-
-    /**
      * Adds [userId] to the lobby for [gameId] if the game exists, is still in the
      * WAITING state and has not yet reached its player cap.
      *
      * The status check, capacity check, and insert all occur inside the same
-     * lock and re-fetch from the DB, ensuring no other thread can sneak in a
-     * concurrent join or a game-start transition between the checks and the insert.
+     * lock as [startGame], ensuring the game cannot transition to IN_PROGRESS
+     * between the status check and the player insertion.
      *
      * @throws GameNotFoundException  if no game with [gameId] exists.
      * @throws GameStartedException   if the game has already moved to IN_PROGRESS.
@@ -102,7 +93,7 @@ open class LobbyService(
         // game there is nothing to do and no need to contend on the lock.
         playerDao.findByGameIdAndUserId(gameId, userId)?.let { return it }
 
-        synchronized(lobbyLocks.getOrPut(gameId) { Any() }) {
+        synchronized(lockFor(gameId)) {
             // Re-check inside the lock: another thread may have inserted this player
             // or started the game between the pre-lock check above and acquiring the lock.
             playerDao.findByGameIdAndUserId(gameId, userId)?.let { return it }
@@ -129,6 +120,10 @@ open class LobbyService(
     /**
      * Starts the game identified by [gameId].
      *
+     * Holds the per-lobby lock for the duration of the status transition so that
+     * a concurrent [addUserToLobby] call cannot slip a player in after the join
+     * flow's status check but before the IN_PROGRESS flip.
+     *
      * When [requestingUserId] is provided, the caller must be the lobby host —
      * otherwise [NotHostException] is thrown.
      *
@@ -143,37 +138,40 @@ open class LobbyService(
      * @throws GameNotFoundException if no game with [gameId] exists.
      * @throws NotHostException      if [requestingUserId] is provided but is not the host.
      */
-    fun startGame(gameId: Int, requestingUserId: Int? = null): GameStateDto = runInTransaction {
-        val game = gameDao.findById(gameId)
-            ?: throw GameNotFoundException("Game $gameId not found")
+    fun startGame(gameId: Int, requestingUserId: Int? = null): GameStateDto =
+        synchronized(lockFor(gameId)) {
+            runInTransaction {
+                val game = gameDao.findById(gameId)
+                    ?: throw GameNotFoundException("Game $gameId not found")
 
-        if (requestingUserId != null && game.hostUserId != requestingUserId) {
-            throw NotHostException("User $requestingUserId is not the host of game $gameId")
+                if (requestingUserId != null && game.hostUserId != requestingUserId) {
+                    throw NotHostException("User $requestingUserId is not the host of game $gameId")
+                }
+
+                val players = playerDao.getPlayers(gameId)
+                val shuffled = players.shuffled()
+
+                // Two-pass update to avoid unique (gameId, turnOrder) constraint violations
+                // while reassigning turn orders.
+                shuffled.forEachIndexed { index, player ->
+                    playerDao.updateTurnOrder(player.id, index + TEMP_TURN_ORDER_OFFSET)
+                }
+                shuffled.forEachIndexed { index, player ->
+                    playerDao.updateTurnOrder(player.id, index)
+                }
+
+                gameMarketplaceDao.initForGame(gameId)
+                shuffled.forEach { player -> playerLandmarkDao.initForPlayer(player.id) }
+
+                gameDao.updateStatus(gameId, GameStatus.IN_PROGRESS)
+                val updatedGame = gameDao.findById(gameId)!!
+
+                GameStateDto(
+                    game = updatedGame,
+                    players = shuffled,
+                    playerCards = emptyMap(),
+                    turnOrder = shuffled.map { it.id },
+                )
+            }
         }
-
-        val players = playerDao.getPlayers(gameId)
-        val shuffled = players.shuffled()
-
-        // Two-pass update to avoid unique (gameId, turnOrder) constraint violations
-        // while reassigning turn orders.
-        shuffled.forEachIndexed { index, player ->
-            playerDao.updateTurnOrder(player.id, index + TEMP_TURN_ORDER_OFFSET)
-        }
-        shuffled.forEachIndexed { index, player ->
-            playerDao.updateTurnOrder(player.id, index)
-        }
-
-        gameMarketplaceDao.initForGame(gameId)
-        shuffled.forEach { player -> playerLandmarkDao.initForPlayer(player.id) }
-
-        gameDao.updateStatus(gameId, GameStatus.IN_PROGRESS)
-        val updatedGame = gameDao.findById(gameId)!!
-
-        GameStateDto(
-            game = updatedGame,
-            players = shuffled,
-            playerCards = emptyMap(),
-            turnOrder = shuffled.map { it.id },
-        )
-    }
 }

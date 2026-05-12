@@ -88,14 +88,13 @@ class EarningsServiceImpl(
                         coinDeltas[player.id] = coinDeltas.getValue(player.id) + actualTransfer
                     }
                     PaymentSource.ALL_PLAYERS -> {
-                        // Each other player contributes an equal share (e.g. Stadium).
-                        // Each contributor is capped at what they can actually pay after
-                        // previous deltas — the owner receives the sum of actual payments.
-                        val perPlayerAmount = totalEarnings / (players.size - 1)
+                        // Stadium-style: each other player pays the full card income amount
+                        // (not income split across players), capped by what they can actually pay.
+                        // The card owner receives the sum of actual payments made.
                         var actualTotal = 0
                         players.filter { it.id != player.id }.forEach { contributor ->
                             val available = contributor.coins + coinDeltas.getValue(contributor.id)
-                            val actualPayment = minOf(perPlayerAmount, maxOf(0, available))
+                            val actualPayment = minOf(totalEarnings, maxOf(0, available))
                             coinDeltas[contributor.id] = coinDeltas.getValue(contributor.id) - actualPayment
                             actualTotal += actualPayment
                         }
