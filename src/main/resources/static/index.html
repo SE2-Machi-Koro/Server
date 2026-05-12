@@ -107,7 +107,7 @@
             flex: 1;
         }
         .primary {
-            background-color: #007bff;
+            background-color: #0062cc;
             color: #fff;
             border: none;
             padding: 10px 20px;
@@ -116,11 +116,11 @@
             font-weight: 500;
         }
         .primary:hover {
-            background-color: #0056b3;
+            background-color: #004a99;
         }
         .username-submit {
             width: 100%;
-            background-color: #28a745;
+            background-color: #19692c;
             color: #fff;
             border: none;
             padding: 12px;
@@ -130,7 +130,7 @@
             font-size: 16px;
         }
         .username-submit:hover {
-            background-color: #218838;
+            background-color: #14532b;
         }
     </style>
 </head>
@@ -285,8 +285,8 @@
 
     function getAvatarColor(messageSender) {
         var hash = 0;
-        for (var i = 0; i < messageSender.length; i++) {
-            hash = 31 * hash + messageSender.charCodeAt(i);
+        for (const ch of messageSender) {
+            hash = 31 * hash + ch.codePointAt(0);
         }
         var index = Math.abs(hash % colors.length);
         return colors[index];
