@@ -79,17 +79,27 @@ class EarningsServiceImpl(
                         coinDeltas[player.id] = coinDeltas.getValue(player.id) + totalEarnings
                     }
                     PaymentSource.ACTIVE_PLAYER -> {
-                        // Red cards: steal from active player, give to card owner
-                        coinDeltas[activePlayer.id] = coinDeltas.getValue(activePlayer.id) - totalEarnings
-                        coinDeltas[player.id] = coinDeltas.getValue(player.id) + totalEarnings
+                        // Red cards: steal from active player, give to card owner.
+                        // Cap the transfer to what the active player can actually pay after
+                        // previous deltas — no coins are created out of thin air.
+                        val available = activePlayer.coins + coinDeltas.getValue(activePlayer.id)
+                        val actualTransfer = minOf(totalEarnings, maxOf(0, available))
+                        coinDeltas[activePlayer.id] = coinDeltas.getValue(activePlayer.id) - actualTransfer
+                        coinDeltas[player.id] = coinDeltas.getValue(player.id) + actualTransfer
                     }
                     PaymentSource.ALL_PLAYERS -> {
-                        // Each other player contributes an equal share (e.g. Stadium)
+                        // Each other player contributes an equal share (e.g. Stadium).
+                        // Each contributor is capped at what they can actually pay after
+                        // previous deltas — the owner receives the sum of actual payments.
                         val perPlayerAmount = totalEarnings / (players.size - 1)
-                        players.filter { it.id != player.id }.forEach {
-                            coinDeltas[it.id] = coinDeltas.getValue(it.id) - perPlayerAmount
+                        var actualTotal = 0
+                        players.filter { it.id != player.id }.forEach { contributor ->
+                            val available = contributor.coins + coinDeltas.getValue(contributor.id)
+                            val actualPayment = minOf(perPlayerAmount, maxOf(0, available))
+                            coinDeltas[contributor.id] = coinDeltas.getValue(contributor.id) - actualPayment
+                            actualTotal += actualPayment
                         }
-                        coinDeltas[player.id] = coinDeltas.getValue(player.id) + totalEarnings
+                        coinDeltas[player.id] = coinDeltas.getValue(player.id) + actualTotal
                     }
                     PaymentSource.CHOSEN_PLAYER, PaymentSource.NONE -> {
                         // CHOSEN_PLAYER: handled separately by client interaction (TV Station)

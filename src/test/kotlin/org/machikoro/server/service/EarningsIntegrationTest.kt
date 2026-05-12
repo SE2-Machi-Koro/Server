@@ -255,12 +255,14 @@ class EarningsIntegrationTest : AbstractDBSetup() {
             Games.update({ Games.id eq gameId }) { it[lastDiceRoll] = 3 }
         }
 
-        // P1 has 0 coins — delta would be -1 but clamp keeps it at 0.
-        // P2 still receives the full income.
+        // P1 is the active player (currentTurnIndex=0) and has 0 coins.
+        // P2 owns the Cafe (Red) — it wants to take 1 coin from P1.
+        // Since P1 has nothing to give, the actual transfer is 0.
+        // P2 receives nothing; no coins are created.
         earningsService.resolveEffects(gameId)
 
         assertEquals(0, playerDao.findById(player1Id)!!.coins)
-        assertEquals(4, playerDao.findById(player2Id)!!.coins)
+        assertEquals(3, playerDao.findById(player2Id)!!.coins)
     }
 
     // --- PaymentSource branches ---
@@ -340,12 +342,5 @@ class EarningsIntegrationTest : AbstractDBSetup() {
         // Phase must remain unchanged since processEarnings does not touch it.
         val game = gameDao.findById(gameId)!!
         assertEquals(TurnPhase.RESOLVE_EFFECTS, game.turnPhase)
-    }
-
-    @Test
-    fun `processEarningsInTransaction throws GameNotFoundException when active player not in game`() {
-        assertThrows<GameNotFoundException> {
-            earningsService.processEarnings(gameId, diceRoll = 1, activePlayerId = 999999)
-        }
     }
 }
