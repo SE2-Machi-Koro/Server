@@ -92,6 +92,11 @@ VALUES
     ('RADIO_TOWER', 22)
 ON CONFLICT (landmark_type) DO NOTHING;
 
+-- Sonar sql:S1192 (duplicated string literals) is suppressed for this file via
+-- build.gradle.kts (sonar.issue.ignore.multicriteria). The repeated color,
+-- establishment_type and payment_source literals below are intrinsic to the
+-- immutable seed data of the V1 baseline; normalizing them into lookup tables
+-- would alter the V1 schema (a Flyway anti-pattern) and is deferred.
 INSERT INTO cards (card_type, cost, income, color, establishment_type, payment_source)
 VALUES
     ('WHEAT_FIELD', 1, 1, 'BLUE', 'WHEAT', 'BANK'),
@@ -111,74 +116,31 @@ VALUES
     ('BUSINESS_CENTER', 8, 0, 'PURPLE', 'MAJOR', 'NONE')
 ON CONFLICT (card_type) DO NOTHING;
 
+-- Seed activation numbers in a single statement: each (card_type, number) pair
+-- below maps to one row in card_activation_numbers via a join on cards.card_type.
+-- Idempotent thanks to ON CONFLICT DO NOTHING on the composite PK.
 INSERT INTO card_activation_numbers (card_id, number)
-SELECT id, 1 FROM cards WHERE card_type = 'WHEAT_FIELD'
-ON CONFLICT (card_id, number) DO NOTHING;
-
-INSERT INTO card_activation_numbers (card_id, number)
-SELECT id, 2 FROM cards WHERE card_type = 'RANCH'
-ON CONFLICT (card_id, number) DO NOTHING;
-
-INSERT INTO card_activation_numbers (card_id, number)
-SELECT id, 5 FROM cards WHERE card_type = 'FOREST'
-ON CONFLICT (card_id, number) DO NOTHING;
-
-INSERT INTO card_activation_numbers (card_id, number)
-SELECT id, 9 FROM cards WHERE card_type = 'MINE'
-ON CONFLICT (card_id, number) DO NOTHING;
-
-INSERT INTO card_activation_numbers (card_id, number)
-SELECT id, 10 FROM cards WHERE card_type = 'APPLE_ORCHARD'
-ON CONFLICT (card_id, number) DO NOTHING;
-
-INSERT INTO card_activation_numbers (card_id, number)
-SELECT id, 2 FROM cards WHERE card_type = 'BAKERY'
-ON CONFLICT (card_id, number) DO NOTHING;
-
-INSERT INTO card_activation_numbers (card_id, number)
-SELECT id, 3 FROM cards WHERE card_type = 'BAKERY'
-ON CONFLICT (card_id, number) DO NOTHING;
-
-INSERT INTO card_activation_numbers (card_id, number)
-SELECT id, 4 FROM cards WHERE card_type = 'CONVENIENCE_STORE'
-ON CONFLICT (card_id, number) DO NOTHING;
-
-INSERT INTO card_activation_numbers (card_id, number)
-SELECT id, 7 FROM cards WHERE card_type = 'CHEESE_FACTORY'
-ON CONFLICT (card_id, number) DO NOTHING;
-
-INSERT INTO card_activation_numbers (card_id, number)
-SELECT id, 8 FROM cards WHERE card_type = 'FURNITURE_FACTORY'
-ON CONFLICT (card_id, number) DO NOTHING;
-
-INSERT INTO card_activation_numbers (card_id, number)
-SELECT id, 11 FROM cards WHERE card_type = 'FRUIT_AND_VEGETABLE_MARKET'
-ON CONFLICT (card_id, number) DO NOTHING;
-
-INSERT INTO card_activation_numbers (card_id, number)
-SELECT id, 12 FROM cards WHERE card_type = 'FRUIT_AND_VEGETABLE_MARKET'
-ON CONFLICT (card_id, number) DO NOTHING;
-
-INSERT INTO card_activation_numbers (card_id, number)
-SELECT id, 3 FROM cards WHERE card_type = 'CAFE'
-ON CONFLICT (card_id, number) DO NOTHING;
-
-INSERT INTO card_activation_numbers (card_id, number)
-SELECT id, 9 FROM cards WHERE card_type = 'FAMILY_RESTAURANT'
-ON CONFLICT (card_id, number) DO NOTHING;
-
-INSERT INTO card_activation_numbers (card_id, number)
-SELECT id, 10 FROM cards WHERE card_type = 'FAMILY_RESTAURANT'
-ON CONFLICT (card_id, number) DO NOTHING;
-
-INSERT INTO card_activation_numbers (card_id, number)
-SELECT id, 6 FROM cards WHERE card_type = 'STADIUM'
-ON CONFLICT (card_id, number) DO NOTHING;
-
-INSERT INTO card_activation_numbers (card_id, number)
-SELECT id, 6 FROM cards WHERE card_type = 'TV_STATION'
-ON CONFLICT (card_id, number) DO NOTHING;
-
-INSERT INTO card_activation_numbers (card_id, number)
-SELECT id, 6 FROM cards WHERE card_type = 'BUSINESS_CENTER'
+SELECT c.id, v.number
+FROM cards c
+JOIN (
+    VALUES
+        ('WHEAT_FIELD', 1),
+        ('RANCH', 2),
+        ('FOREST', 5),
+        ('MINE', 9),
+        ('APPLE_ORCHARD', 10),
+        ('BAKERY', 2),
+        ('BAKERY', 3),
+        ('CONVENIENCE_STORE', 4),
+        ('CHEESE_FACTORY', 7),
+        ('FURNITURE_FACTORY', 8),
+        ('FRUIT_AND_VEGETABLE_MARKET', 11),
+        ('FRUIT_AND_VEGETABLE_MARKET', 12),
+        ('CAFE', 3),
+        ('FAMILY_RESTAURANT', 9),
+        ('FAMILY_RESTAURANT', 10),
+        ('STADIUM', 6),
+        ('TV_STATION', 6),
+        ('BUSINESS_CENTER', 6)
+) AS v(card_type, number) ON c.card_type = v.card_type
 ON CONFLICT (card_id, number) DO NOTHING;
