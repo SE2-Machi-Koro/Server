@@ -150,6 +150,13 @@ internal `GameModel` may hold additional state used purely for server-side logic
 
 ## Environment Configuration
 
+### Database Initialization
+
+- Flyway is the authoritative source for schema creation in runtime environments.
+- Initial schema and required reference data are defined in `src/main/resources/db/migration/V1__init_schema.sql`.
+- `machikoro.db.init.enabled` is disabled by default in runtime config to prevent Exposed-based schema auto-creation from drifting away from migrations.
+- Tests can still override `machikoro.db.init.enabled=true` while the suite transitions to a fully migration-driven setup.
+
 1. Copy the example environment file and adjust as needed:
 
 ```bash

@@ -37,4 +37,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: ./gradlew build jacocoTestReport sonar --info
+        run: >
+          ./gradlew --no-daemon clean check jacocoTestReport sonar --info --stacktrace
+          -Dsonar.organization=se2-machi-koro
+          -Dsonar.projectKey=SE2-Machi-Koro_Server
+          -Dsonar.host.url=https://sonarcloud.io
