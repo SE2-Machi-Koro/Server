@@ -201,6 +201,17 @@ Build the project:
 ./gradlew build
 ```
 
+Gradle dependency verification is enabled via [gradle/verification-metadata.xml](gradle/verification-metadata.xml).
+If you add or update dependencies, refresh both generated dependency files before committing:
+
+```bash
+./gradlew dependencies --write-locks
+./gradlew --write-verification-metadata sha256 build
+```
+
+Review the updated verification metadata before committing it. Bootstrapping records the artifacts currently resolved by
+your configured repositories, so it should be treated as generated security-sensitive state rather than an opaque cache.
+
 Run the server locally:
 
 ```bash
