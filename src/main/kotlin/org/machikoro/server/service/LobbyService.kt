@@ -133,7 +133,6 @@ open class LobbyService(
             return playerDao.addPlayer(gameId, userId)
         }
     }
-
     /**
      * Starts the game identified by [gameId].
      *
