@@ -259,18 +259,12 @@ HTML report: `build/reports/jacoco/test/html/index.html`
 Run SonarCloud analysis (requires `SONAR_TOKEN` in your shell):
 
 ```bash
-SONAR_PROJECT_KEY="$(grep '^sonar.projectKey=' sonar-project.properties | cut -d= -f2-)"
-SONAR_ORGANIZATION="$(grep '^sonar.organization=' sonar-project.properties | cut -d= -f2-)"
-SONAR_HOST_URL="$(grep '^sonar.host.url=' sonar-project.properties | cut -d= -f2-)"
-
 SONAR_TOKEN=<your-token> \
 ./gradlew --no-daemon clean check jacocoTestReport sonar \
-  -Dsonar.projectKey="$SONAR_PROJECT_KEY" \
-  -Dsonar.organization="$SONAR_ORGANIZATION" \
-  -Dsonar.host.url="$SONAR_HOST_URL"
+  --info --stacktrace
 ```
 
-The CI workflow resolves the same values from `sonar-project.properties` to keep local and CI Sonar settings aligned.
+Sonar analysis settings are defined in `build.gradle.kts` under the Gradle `sonar { properties { ... } }` block, so local and CI use the same configuration path.
 
 ## API & WebSocket Documentation
 
