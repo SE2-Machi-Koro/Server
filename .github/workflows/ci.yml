@@ -46,7 +46,7 @@ jobs:
         run: |
           ./gradlew dependencies --write-locks --quiet
           if ! git diff --exit-code -- gradle.lockfile; then
-            echo "::error::gradle.lockfile is out of date. Run './gradlew dependencies --write-locks' locally and commit the updated lockfile."
+            echo "::error::gradle.lockfile is out of date. Run './gradlew dependencies --write-locks' locally and commit the updated lockfile. If you changed dependencies or versions, also refresh and commit 'gradle/verification-metadata.xml' via './gradlew --write-verification-metadata sha256 build'."
             exit 1
           fi
 
