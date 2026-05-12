@@ -47,9 +47,12 @@ sonar {
         property("sonar.qualitygate.wait", "true")
 
         // Suppress S1192 (duplicated string literals) on the V1 Flyway baseline.
-        // The repeated color / establishment_type / payment_source literals in the
-        // cards seed are intrinsic to the immutable V1 baseline; normalizing them
-        // into lookup tables would alter the V1 schema (a Flyway anti-pattern).
+        // The repeated color / establishment_type / payment_source literals (and
+        // repeated card_type literals in the activation-number seed block) are
+        // intrinsic to the immutable V1 baseline. Refactoring or normalizing
+        // them would change the V1 file checksum and break Flyway validation on
+        // databases that have already applied V1. If a future schema/data change
+        // is required, introduce a V2 migration instead.
         property("sonar.issue.ignore.multicriteria", "e1")
         property("sonar.issue.ignore.multicriteria.e1.ruleKey", "sql:S1192")
         property(
