@@ -16,18 +16,7 @@ val dotenvVersion = "5.2.2"
 val mockitoKotlinVersion = "5.2.1"
 val exposedVersion = "1.0.0"
 val testcontainersVersion = "1.20.4"
-val waitForSonarQualityGate =
-    (System.getenv("SONAR_QUALITY_GATE_WAIT") ?: System.getenv("CI") ?: "false").toBoolean()
 
-sonarqube {
-    properties {
-        property("sonar.projectKey", "SE2-Machi-Koro_Server")
-        property("sonar.organization", "se2-machi-koro")
-        property("sonar.host.url", "https://sonarcloud.io")
-        property("sonar.coverage.jacoco.xmlReportPaths", "build/reports/jacoco/test/jacocoTestReport.xml")
-        property("sonar.qualitygate.wait", waitForSonarQualityGate.toString())
-    }
-}
 
 java {
     toolchain {
@@ -41,6 +30,36 @@ repositories {
 
 dependencyLocking {
     lockAllConfigurations()
+}
+
+sonar {
+    properties {
+        property("sonar.projectKey", "SE2-Machi-Koro_Server")
+        property("sonar.organization", "se2-machi-koro")
+        property("sonar.host.url", "https://sonarcloud.io")
+        property("sonar.sourceEncoding", "UTF-8")
+        property("sonar.sources", "src/main/kotlin,src/main/resources")
+        property("sonar.tests", "src/test/kotlin")
+        property("sonar.test.inclusions", "src/test/kotlin/**/*.kt")
+        property("sonar.coverage.jacoco.xmlReportPaths", "build/reports/jacoco/test/jacocoTestReport.xml")
+        property("sonar.coverage.exclusions", "src/main/kotlin/**/dto/**,src/main/kotlin/**/config/**,src/main/kotlin/**/ServerApplication.kt")
+        property("sonar.newCode.referenceBranch", "main")
+        property("sonar.qualitygate.wait", "true")
+
+        // Suppress S1192 (duplicated string literals) on the V1 Flyway baseline.
+        // The repeated color / establishment_type / payment_source literals (and
+        // repeated card_type literals in the activation-number seed block) are
+        // intrinsic to the immutable V1 baseline. Refactoring or normalizing
+        // them would change the V1 file checksum and break Flyway validation on
+        // databases that have already applied V1. If a future schema/data change
+        // is required, introduce a V2 migration instead.
+        property("sonar.issue.ignore.multicriteria", "e1")
+        property("sonar.issue.ignore.multicriteria.e1.ruleKey", "sql:S1192")
+        property(
+            "sonar.issue.ignore.multicriteria.e1.resourceKey",
+            "src/main/resources/db/migration/V1__init_schema.sql",
+        )
+    }
 }
 
 dependencies {
