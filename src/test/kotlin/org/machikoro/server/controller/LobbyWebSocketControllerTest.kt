@@ -12,6 +12,7 @@ import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.service.LobbyService
 import org.junit.jupiter.api.assertThrows
+import org.machikoro.server.domain.models.PlayerModel
 import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -41,6 +42,15 @@ class LobbyWebSocketControllerTest {
         lastDiceRoll = null,
         roundNumber = 1,
         hasPurchasedThisTurn = false
+    )
+
+    private fun player() = PlayerModel(
+        id = 5,
+        gameId = 1,
+        userId = 20,
+        turnOrder = 1,
+        coins = 3,
+        lastSeenAt = null
     )
 
     @Test
@@ -119,5 +129,35 @@ class LobbyWebSocketControllerTest {
         assertEquals("ABC1234", payload["lobbyCode"])
 
         verify(lobbyService).createLobby(10)
+    }
+
+    @Test
+    fun `joinLobby joins lobby for authenticated user and returns LOBBY_JOINED message`() {
+        whenever(lobbyService.joinLobby("ABC1234", 20)).thenReturn(player())
+
+        val accessor = authenticatedAccessor(userId = 20, username = "Player2")
+
+        val result = controller.joinLobby(
+            WebSocketMessage(
+                type = MessageType.JOIN,
+                sender = "ignored-by-server",
+                payload = mapOf("lobbyCode" to "ABC1234")
+            ),
+            accessor,
+        )
+
+        val payload = result.payload as? Map<String, Any>
+            ?: throw AssertionError("Payload is not a Map")
+
+        assertEquals(MessageType.LOBBY_JOINED, result.type)
+        assertEquals("SERVER", result.sender)
+        assertEquals("Player joined lobby", result.content)
+        assertEquals(1, result.gameId)
+        assertEquals(5, payload["playerId"])
+        assertEquals(20, payload["userId"])
+        assertEquals(1, payload["gameId"])
+        assertEquals(3, payload["coins"])
+
+        verify(lobbyService).joinLobby("ABC1234", 20)
     }
 }
