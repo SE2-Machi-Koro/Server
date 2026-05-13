@@ -160,4 +160,42 @@ class LobbyWebSocketControllerTest {
 
         verify(lobbyService).joinLobby("ABC1234", 20)
     }
+
+    @Test
+    fun `joinLobby throws when no authenticated principal is present`() {
+        val accessor = SimpMessageHeaderAccessor.create()
+
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.joinLobby(
+                WebSocketMessage(
+                    type = MessageType.JOIN,
+                    sender = "ghost",
+                    payload = mapOf("lobbyCode" to "ABC1234")
+                ),
+                accessor,
+            )
+        }
+
+        assertEquals("UNAUTHENTICATED", ex.errorCode)
+        verify(lobbyService, never()).joinLobby(any(), any())
+    }
+
+    @Test
+    fun `joinLobby throws when lobby code is missing`() {
+        val accessor = authenticatedAccessor(userId = 20, username = "Player2")
+
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.joinLobby(
+                WebSocketMessage(
+                    type = MessageType.JOIN,
+                    sender = "ignored-by-server",
+                    payload = emptyMap<String, Any>()
+                ),
+                accessor,
+            )
+        }
+
+        assertEquals("INVALID_LOBBY_CODE", ex.errorCode)
+        verify(lobbyService, never()).joinLobby(any(), any())
+    }
 }
