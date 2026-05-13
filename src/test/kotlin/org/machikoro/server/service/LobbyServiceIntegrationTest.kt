@@ -105,6 +105,13 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
         assertTrue(gameMarketplaceDao.findByGameId(gameId).isNotEmpty())
         assertTrue(playerLandmarkDao.findByPlayerId(firstPlayerId).isNotEmpty())
         assertTrue(playerLandmarkDao.findByPlayerId(secondPlayerId).isNotEmpty())
+        // Snapshot must include the freshly-initialized landmarks so the
+        // client renders the build grid without an extra round-trip — see
+        // SE2-Machi-Koro/Server#247.
+        assertTrue(result.playerLandmarks[firstPlayerId]?.isNotEmpty() == true)
+        assertTrue(result.playerLandmarks[secondPlayerId]?.isNotEmpty() == true)
+        // All landmarks start unbuilt at game start.
+        assertTrue(result.playerLandmarks.values.flatten().all { !it.isBuilt })
     }
 
     @Test

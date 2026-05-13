@@ -78,6 +78,7 @@ class GameControllerTest {
             PlayerModel(id = 2, gameId = gameId, userId = 2, turnOrder = 1, coins = 3, lastSeenAt = null),
         ),
         playerCards = emptyMap(),
+        playerLandmarks = emptyMap(),
         turnOrder = listOf(1, 2),
     )
 
