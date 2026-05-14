@@ -171,6 +171,7 @@ class GameController(
             is EndTurnOutcome.Won -> {
                 logger.info("Game ${request.gameId} finished, winner=${result.winnerId}")
                 broadcastWin(request.gameId, result.winnerId, result.roundsPlayed)
+                gamePhaseService.cleanupFinishedGameData(request.gameId)
             }
         }
     }

@@ -56,7 +56,8 @@ class GamePhaseService(
 
         winConditionService.detectWinner(gameId)?.let { winner ->
             userDao.incrementWins(winner.userId)
-            finishGame(gameId)
+            playerDao.getPlayers(gameId).forEach { userDao.incrementGamesPlayed(it.userId) }
+            gameDao.updateStatus(gameId, GameStatus.FINISHED)
             return EndTurnOutcome.Won(winner.id, game.roundNumber)
         }
 
@@ -75,12 +76,6 @@ class GamePhaseService(
 
         gameDao.advanceTurn(gameId, nextTurnIndex, nextRoundNumber)
         return TurnPhase.ROLL_DICE
-    }
-
-    private fun finishGame(gameId: Int) {
-        cleanupFinishedGameData(gameId)
-        playerDao.getPlayers(gameId).forEach { userDao.incrementGamesPlayed(it.userId) }
-        gameDao.updateStatus(gameId, GameStatus.FINISHED)
     }
 
     /**
