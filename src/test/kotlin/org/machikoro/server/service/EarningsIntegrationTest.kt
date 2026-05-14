@@ -145,11 +145,11 @@ class EarningsIntegrationTest : AbstractDBSetup() {
 
         // currentTurnIndex=0, so P1 is the active player.
         // Roll 3: Bakery (Green) - neither player owns one, no payout.
-        // Roll 3: Cafe (Red) activates only for non-active players -> P2 gets 1 coin.
+        // Roll 3: Cafe (Red) activates for P2 (non-active) -> P2 takes 1 coin FROM P1.
         // Wheat Field does not activate on 3.
-        // P1: 3 (no activation) = 3
-        // P2: 3 + 1 (Cafe) = 4
-        assertEquals(3, p1.coins)
+        // P1: 3 - 1 (paid to P2's Cafe) = 2
+        // P2: 3 + 1 (Cafe, from P1) = 4
+        assertEquals(2, p1.coins)
         assertEquals(4, p2.coins)
     }
 
@@ -214,11 +214,11 @@ class EarningsIntegrationTest : AbstractDBSetup() {
         val p2 = playerDao.findById(player2Id)!!
 
         // currentTurnIndex=0, so P1 is the active player.
-        // Roll 3: Cafe (Red) activates only for non-active players -> P2 gets 1 coin.
-        // P1 owns no Bakery, so gets nothing.
-        // P1: 1 (no activation) = 1
-        // P2: 3 + 1 (Cafe) = 4
-        assertEquals(1, p1.coins)
+        // Roll 3: Cafe (Red) activates for P2 (non-active) -> P2 takes 1 coin FROM P1.
+        // P1 has 1 coin so transfer = min(1, 1) = 1.
+        // P1: 1 - 1 (paid to P2's Cafe) = 0
+        // P2: 3 + 1 (Cafe, from P1) = 4
+        assertEquals(0, p1.coins)
         assertEquals(4, p2.coins)
     }
 }

@@ -102,7 +102,7 @@ open class LobbyService(
      * @throws LobbyFullException           if the lobby already has reached its player cap.
      */
     fun addUserToLobby(gameId: Int, userId: Int): PlayerModel {
-        val game = gameDao.findById(gameId)
+        gameDao.findById(gameId)
             ?: throw GameNotFoundException("Game $gameId not found")
 
         // Reconnect path: player already belongs to this game, so do not re-insert.
@@ -110,17 +110,20 @@ open class LobbyService(
         // can still pull their final state via the same record.
         playerDao.findByGameIdAndUserId(gameId, userId)?.let { return it }
 
-        if (game.status == GameStatus.IN_PROGRESS) {
-            throw GameStartedException("Game $gameId has already started")
-        }
-
-        if (game.status == GameStatus.FINISHED) {
-            throw GameFinishedException("Game $gameId has already finished")
-        }
-
         synchronized(lobbyLocks.getOrPut(gameId) { Any() }) {
             // Protect against duplicate inserts on concurrent reconnect/join attempts.
             playerDao.findByGameIdAndUserId(gameId, userId)?.let { return it }
+
+            val game = gameDao.findById(gameId)
+                ?: throw GameNotFoundException("Game $gameId not found")
+
+            if (game.status == GameStatus.IN_PROGRESS) {
+                throw GameStartedException("Game $gameId has already started")
+            }
+
+            if (game.status == GameStatus.FINISHED) {
+                throw GameFinishedException("Game $gameId has already finished")
+            }
 
             val players = playerDao.getPlayers(gameId)
             if (players.size >= game.maxPlayers) {
@@ -147,45 +150,48 @@ open class LobbyService(
      * @throws GameNotFoundException if no game with [gameId] exists.
      * @throws NotHostException      if [requestingUserId] is provided but is not the host.
      */
-    fun startGame(gameId: Int, requestingUserId: Int? = null): GameStateDto = runInTransaction {
-        val game = gameDao.findById(gameId)
-            ?: throw GameNotFoundException("Game $gameId not found")
+    fun startGame(gameId: Int, requestingUserId: Int? = null): GameStateDto =
+        synchronized(lobbyLocks.getOrPut(gameId) { Any() }) {
+            runInTransaction {
+                val game = gameDao.findById(gameId)
+                    ?: throw GameNotFoundException("Game $gameId not found")
 
-        if (requestingUserId != null && game.hostUserId != requestingUserId) {
-            throw NotHostException("User $requestingUserId is not the host of game $gameId")
+                if (requestingUserId != null && game.hostUserId != requestingUserId) {
+                    throw NotHostException("User $requestingUserId is not the host of game $gameId")
+                }
+
+                val players = playerDao.getPlayers(gameId)
+                val shuffled = players.shuffled()
+
+                // Two-pass update to avoid unique (gameId, turnOrder) constraint violations
+                // while reassigning turn orders.
+                shuffled.forEachIndexed { index, player ->
+                    playerDao.updateTurnOrder(player.id, index + TEMP_TURN_ORDER_OFFSET)
+                }
+                shuffled.forEachIndexed { index, player ->
+                    playerDao.updateTurnOrder(player.id, index)
+                }
+
+                gameMarketplaceDao.initForGame(gameId)
+                shuffled.forEach { player -> playerLandmarkDao.initForPlayer(player.id) }
+
+                gameDao.updateStatus(gameId, GameStatus.IN_PROGRESS)
+                val updatedGame = gameDao.findById(gameId)!!
+
+                // After initForPlayer each player has all landmarks as unbuilt rows.
+                // Include them in the initial snapshot so clients can render the build
+                // grid immediately, without an extra round-trip.
+                val playerLandmarks = shuffled.associate { player ->
+                    player.id to playerLandmarkDao.findByPlayerId(player.id)
+                }
+
+                GameStateDto(
+                    game = updatedGame,
+                    players = shuffled,
+                    playerCards = emptyMap(),
+                    playerLandmarks = playerLandmarks,
+                    turnOrder = shuffled.map { it.id },
+                )
+            }
         }
-
-        val players = playerDao.getPlayers(gameId)
-        val shuffled = players.shuffled()
-
-        // Two-pass update to avoid unique (gameId, turnOrder) constraint violations
-        // while reassigning turn orders.
-        shuffled.forEachIndexed { index, player ->
-            playerDao.updateTurnOrder(player.id, index + TEMP_TURN_ORDER_OFFSET)
-        }
-        shuffled.forEachIndexed { index, player ->
-            playerDao.updateTurnOrder(player.id, index)
-        }
-
-        gameMarketplaceDao.initForGame(gameId)
-        shuffled.forEach { player -> playerLandmarkDao.initForPlayer(player.id) }
-
-        gameDao.updateStatus(gameId, GameStatus.IN_PROGRESS)
-        val updatedGame = gameDao.findById(gameId)!!
-
-        // After initForPlayer each player has all landmarks as unbuilt rows.
-        // Include them in the initial snapshot so clients can render the build
-        // grid immediately, without an extra round-trip.
-        val playerLandmarks = shuffled.associate { player ->
-            player.id to playerLandmarkDao.findByPlayerId(player.id)
-        }
-
-        GameStateDto(
-            game = updatedGame,
-            players = shuffled,
-            playerCards = emptyMap(),
-            playerLandmarks = playerLandmarks,
-            turnOrder = shuffled.map { it.id },
-        )
-    }
 }
