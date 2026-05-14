@@ -40,13 +40,15 @@ class GameSyncService(
         }
         val marketplace = gameMarketplaceDao.findByGameIdAsMap(gameId)
 
+        val sortedPlayers = players.sortedBy { it.turnOrder }
         return GameStateDto(
             game = game,
             players = players,
             playerCards = playerCards,
             playerLandmarks = playerLandmarks,
             marketplace = marketplace,
-            turnOrder = players.sortedBy { it.turnOrder }.map { it.id },
+            turnOrder = sortedPlayers.map { it.id },
+            activePlayerId = sortedPlayers.getOrNull(game.currentTurnIndex)?.userId,
         )
     }
 
@@ -56,4 +58,3 @@ class GameSyncService(
     fun isUserInGame(userId: Int, gameId: Int): Boolean =
         playerDao.findByGameIdAndUserId(gameId, userId) != null
 }
-

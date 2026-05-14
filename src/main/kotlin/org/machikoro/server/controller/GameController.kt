@@ -97,6 +97,21 @@ class GameController(
                     gameId = request.gameId,
                 )
             )
+
+            // Immediately broadcast a GAME_ACTION so clients that only parse
+            // activePlayerId from GAME_ACTION frames know whose turn it is
+            // without waiting for the first advancePhase or endTurn call.
+            messagingTemplate.convertAndSend(
+                gameTopic,
+                WebSocketMessage(
+                    type = MessageType.GAME_ACTION,
+                    sender = "server",
+                    payload = mapOf(
+                        "turnPhase" to gameState.game.turnPhase.name,
+                        "activePlayerId" to gameState.activePlayerId,
+                    ),
+                )
+            )
         } catch (e: Exception) {
             logger.error("START_GAME failed for gameId=${request.gameId}", e)
             messagingTemplate.convertAndSend(
@@ -217,14 +232,14 @@ class GameController(
     }
 
     /**
-     * Broadcasts the new turn phase and the active user ID to all subscribers
-     * of the game topic. The [activeUserId] identifies the user whose turn it
-     * is so clients can compare it against their own user ID.
+     * Broadcasts the new turn phase and the active player's user ID to all
+     * subscribers of the game topic. The [activePlayerId] identifies the user
+     * whose turn it is so clients can compare it against their own user ID.
      */
     private fun broadcastPhase(gameId: Int, newPhase: TurnPhase) {
         val game = gameStateGuard.ensureGameIsRunning(gameId)
         val players = playerDao.getPlayers(gameId)
-        val activeUserId = players.getOrNull(game.currentTurnIndex)?.userId
+        val activePlayerId = players.getOrNull(game.currentTurnIndex)?.userId
 
         messagingTemplate.convertAndSend(
             "/topic/game/$gameId",
@@ -233,7 +248,7 @@ class GameController(
                 sender = "server",
                 payload = mapOf(
                     "turnPhase" to newPhase.name,
-                    "activeUserId" to activeUserId,
+                    "activePlayerId" to activePlayerId,
                 ),
             ),
         )
