@@ -118,6 +118,13 @@ class GameControllerTest {
         assertEquals("server", message.sender)
         assertEquals("Game $gameId has started", message.content)
         assertEquals(gameId, message.gameId)
+
+        val phaseMessage = captor.secondValue
+        assertEquals(MessageType.GAME_ACTION, phaseMessage.type)
+        @Suppress("UNCHECKED_CAST")
+        val payload = phaseMessage.payload as Map<String, Any?>
+        assertEquals("ROLL_DICE", payload["turnPhase"])
+        assertEquals(1, payload["activePlayerId"])
     }
 
     @Test
