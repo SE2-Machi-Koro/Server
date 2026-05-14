@@ -60,7 +60,7 @@ class AuthControllerTests {
     @Test
     fun `login returns ok with response body when service succeeds`() {
         val request = LoginRequest(username = "alice", password = "hunter2")
-        val expected = LoginResponse(sessionToken = "token-uuid", username = "alice")
+        val expected = LoginResponse(sessionToken = "token-uuid", username = "alice", userId = 42) // NEU
         whenever(authService.login("alice", "hunter2")).thenReturn(expected)
 
         val response = controller.login(request)
