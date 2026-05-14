@@ -255,6 +255,7 @@ class GameControllerTest {
 
         val captor = argumentCaptor<WebSocketMessage>()
         verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+        verify(gamePhaseService).cleanupFinishedGameData(gameId)
 
         val message = captor.firstValue
         assertEquals(MessageType.GAME_END, message.type)

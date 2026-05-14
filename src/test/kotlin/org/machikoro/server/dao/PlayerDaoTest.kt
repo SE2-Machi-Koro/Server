@@ -12,6 +12,7 @@ import org.machikoro.server.database.Games
 import org.machikoro.server.database.Players
 import org.machikoro.server.database.Users
 import org.machikoro.server.domain.enums.GameStatus
+import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.exception.PlayerNotFoundException
 
 class PlayerDaoTest : AbstractDBSetup() {
@@ -93,16 +94,16 @@ class PlayerDaoTest : AbstractDBSetup() {
     }
 
     @Test
-    fun `delete removes player from db`() {
+    fun `deleteByPlayerId removes player from db`() {
         val player = playerDao.addPlayer(gameId, userId)
-        playerDao.delete(player.id)
+        playerDao.deleteByPlayerId(player.id)
         assertNull(playerDao.findById(player.id))
     }
 
     @Test
-    fun `delete throws when player does not exist`() {
+    fun `deleteByPlayerId throws when player does not exist`() {
         assertThrows<PlayerNotFoundException> {
-            playerDao.delete(999999)
+            playerDao.deleteByPlayerId(999999)
         }
     }
 
@@ -122,17 +123,27 @@ class PlayerDaoTest : AbstractDBSetup() {
     }
 
     @Test
-    fun `countByGameId returns 0 when no players exist`() {
-        val count = playerDao.countByGameId(gameId)
-        assertEquals(0, count)
+    fun `countByGameId throws when no players found`() {
+        assertThrows<GameNotFoundException> {
+            playerDao.countByGameId(gameId)
+        }
     }
 
     @Test
-    fun `countByGameId decreases after player deletion`() {
-        val player = playerDao.addPlayer(gameId, userId)
+    fun `countByGameId throws after all players removed`() {
+        val player = playerDao.addPlayer(gameId, 1)
+        val player2 = playerDao.addPlayer(gameId, 2)
+
+        assertEquals(2, playerDao.countByGameId(gameId))
+
+        playerDao.deleteByPlayerId(player.id)
         assertEquals(1, playerDao.countByGameId(gameId))
-        playerDao.delete(player.id)
-        assertEquals(0, playerDao.countByGameId(gameId))
+
+        playerDao.deleteByPlayerId(player2.id)
+
+        assertThrows<GameNotFoundException> {
+            playerDao.countByGameId(gameId)
+        }
     }
 
     @Test
@@ -197,6 +208,27 @@ class PlayerDaoTest : AbstractDBSetup() {
     fun `updateLastSeen throws when player does not exist`() {
         assertThrows<PlayerNotFoundException> {
             playerDao.updateLastSeen(999999)
+        }
+    }
+
+    @Test
+    fun `deleteByGameId removes all players from game`() {
+        val userId2 = userDao.create("player_user_2")
+
+        playerDao.addPlayer(gameId, userId)
+        playerDao.addPlayer(gameId, userId2)
+
+        assertEquals(2, playerDao.countByGameId(gameId))
+
+        playerDao.deleteByGameId(gameId)
+
+        assertTrue(playerDao.getPlayers(gameId).isEmpty())
+    }
+
+    @Test
+    fun `deleteByGameId throws when game has no players`() {
+        assertThrows<PlayerNotFoundException> {
+            playerDao.deleteByGameId(gameId)
         }
     }
 }

@@ -263,4 +263,40 @@ class GamePhaseServiceTest {
         verify(gameDao, never()).advanceTurn(any(), any(), any())
         verifyNoMoreInteractions(playerDao)
     }
+
+    @Test
+    fun `cleanupFinishedGameData deletes all finished game data in order`() {
+        val gameId = 42
+
+        val players = listOf(
+            PlayerModel(1, gameId, 10, 0, 3, lastSeenAt = 30),
+            PlayerModel(2, gameId, 11, 1, 3, lastSeenAt = 30),
+        )
+
+        whenever(playerDao.getPlayers(gameId))
+            .thenReturn(players)
+
+        service.cleanupFinishedGameData(gameId)
+
+        val ordered = inOrder(
+            gameStateGuard,
+            gameMarketplaceDao,
+            playerCardDao,
+            playerLandmarkDao,
+            playerDao,
+            gameDao
+        )
+
+        ordered.verify(gameStateGuard).ensureGameIsFinished(gameId)
+        ordered.verify(gameMarketplaceDao).deleteAllForGame(gameId)
+
+        ordered.verify(playerCardDao).deleteAllByPlayerId(1)
+        ordered.verify(playerLandmarkDao).deleteAllByPlayerId(1)
+
+        ordered.verify(playerCardDao).deleteAllByPlayerId(2)
+        ordered.verify(playerLandmarkDao).deleteAllByPlayerId(2)
+
+        ordered.verify(playerDao).deleteByGameId(gameId)
+        ordered.verify(gameDao).delete(gameId)
+    }
 }
