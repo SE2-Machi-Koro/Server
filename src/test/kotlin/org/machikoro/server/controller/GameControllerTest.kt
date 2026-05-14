@@ -89,6 +89,7 @@ class GameControllerTest {
         ),
         playerCards = emptyMap(),
         playerLandmarks = emptyMap(),
+        marketplace = emptyMap(),
         turnOrder = listOf(1, 2),
     )
 

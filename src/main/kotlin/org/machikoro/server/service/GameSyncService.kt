@@ -1,6 +1,7 @@
 package org.machikoro.server.service
 
 import org.machikoro.server.dao.GameDao
+import org.machikoro.server.dao.GameMarketplaceDao
 import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
@@ -15,6 +16,7 @@ class GameSyncService(
     private val playerDao: PlayerDao,
     private val playerCardDao: PlayerCardDao,
     private val playerLandmarkDao: PlayerLandmarkDao,
+    private val gameMarketplaceDao: GameMarketplaceDao,
 ) {
 
     fun findActiveInProgressGameId(userId: Int): Int? =
@@ -36,12 +38,14 @@ class GameSyncService(
         val playerLandmarks = players.associate { player ->
             player.id to playerLandmarkDao.findByPlayerId(player.id)
         }
+        val marketplace = gameMarketplaceDao.findByGameIdAsMap(gameId)
 
         return GameStateDto(
             game = game,
             players = players,
             playerCards = playerCards,
             playerLandmarks = playerLandmarks,
+            marketplace = marketplace,
             turnOrder = players.sortedBy { it.turnOrder }.map { it.id },
         )
     }

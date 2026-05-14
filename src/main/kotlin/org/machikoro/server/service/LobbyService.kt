@@ -184,12 +184,17 @@ open class LobbyService(
                 val playerLandmarks = shuffled.associate { player ->
                     player.id to playerLandmarkDao.findByPlayerId(player.id)
                 }
+                // Same reasoning for the marketplace — initForGame above seeded the
+                // full supply, so the client can render the buyable card grid on the
+                // first GAME_STARTED frame.
+                val marketplace = gameMarketplaceDao.findByGameIdAsMap(gameId)
 
                 GameStateDto(
                     game = updatedGame,
                     players = shuffled,
                     playerCards = emptyMap(),
                     playerLandmarks = playerLandmarks,
+                    marketplace = marketplace,
                     turnOrder = shuffled.map { it.id },
                 )
             }

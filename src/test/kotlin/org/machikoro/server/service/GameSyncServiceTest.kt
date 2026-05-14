@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.dao.GameDao
+import org.machikoro.server.dao.GameMarketplaceDao
 import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
@@ -29,7 +30,14 @@ class GameSyncServiceTest {
     private val playerDao = mock<PlayerDao>()
     private val playerCardDao = mock<PlayerCardDao>()
     private val playerLandmarkDao = mock<PlayerLandmarkDao>()
-    private val service = GameSyncService(gameDao, playerDao, playerCardDao, playerLandmarkDao)
+    private val gameMarketplaceDao = mock<GameMarketplaceDao>()
+    private val service = GameSyncService(
+        gameDao,
+        playerDao,
+        playerCardDao,
+        playerLandmarkDao,
+        gameMarketplaceDao,
+    )
 
     private fun game(id: Int, status: GameStatus) = GameModel(
         id = id,
@@ -85,6 +93,9 @@ class GameSyncServiceTest {
         whenever(playerLandmarkDao.findByPlayerId(2)).thenReturn(
             listOf(PlayerLandmarkModel(2, LandmarkType.TRAIN_STATION, isBuilt = false)),
         )
+        whenever(gameMarketplaceDao.findByGameIdAsMap(gameId)).thenReturn(
+            mapOf(CardType.BAKERY to 5, CardType.WHEAT_FIELD to 6),
+        )
 
         val snapshot = service.buildSnapshot(gameId)
 
@@ -98,6 +109,9 @@ class GameSyncServiceTest {
         assertEquals(true, snapshot.playerLandmarks[1]?.first()?.isBuilt)
         assertEquals(1, snapshot.playerLandmarks[2]?.size)
         assertEquals(false, snapshot.playerLandmarks[2]?.first()?.isBuilt)
+        // Marketplace is whatever the DAO helper returns — the flatten itself
+        // lives on the DAO and is covered by GameMarketplaceDaoTest.
+        assertEquals(mapOf(CardType.BAKERY to 5, CardType.WHEAT_FIELD to 6), snapshot.marketplace)
     }
 
     @Test
@@ -105,6 +119,7 @@ class GameSyncServiceTest {
         val gameId = 11
         whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.IN_PROGRESS))
         whenever(playerDao.getPlayers(gameId)).thenReturn(emptyList())
+        whenever(gameMarketplaceDao.findByGameIdAsMap(gameId)).thenReturn(emptyMap())
 
         val snapshot = service.buildSnapshot(gameId)
 
@@ -113,6 +128,7 @@ class GameSyncServiceTest {
         assertTrue(snapshot.turnOrder.isEmpty())
         assertTrue(snapshot.playerCards.isEmpty())
         assertTrue(snapshot.playerLandmarks.isEmpty())
+        assertTrue(snapshot.marketplace.isEmpty())
     }
 
     @Test
