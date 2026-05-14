@@ -52,7 +52,7 @@ class EarningsServiceImpl(
 
         players.forEach { player ->
             if (finalCoins[player.id] != player.coins) {
-                playerDao.updateCoins(player.id, finalCoins[player.id]!!)
+                playerDao.updateCoins(player.id, finalCoins.getValue(player.id))
             }
         }
     }
@@ -73,10 +73,10 @@ class EarningsServiceImpl(
                 .sumOf { (playerCard, card) -> playerCard.quantity * card.income }
 
             if (redEarned > 0) {
-                val transfer = minOf(redEarned, finalCoins[activePlayerId]!!)
+                val transfer = minOf(redEarned, finalCoins.getValue(activePlayerId))
                 if (transfer > 0) {
-                    finalCoins[activePlayerId] = finalCoins[activePlayerId]!! - transfer
-                    finalCoins[opponent.id] = finalCoins[opponent.id]!! + transfer
+                    finalCoins[activePlayerId] = finalCoins.getValue(activePlayerId) - transfer
+                    finalCoins[opponent.id] = finalCoins.getValue(opponent.id) + transfer
                 }
             }
         }
@@ -96,7 +96,7 @@ class EarningsServiceImpl(
                 .sumOf { (playerCard, card) -> playerCard.quantity * card.income }
 
             if (earned > 0) {
-                finalCoins[player.id] = finalCoins[player.id]!! + earned
+                finalCoins[player.id] = finalCoins.getValue(player.id) + earned
             }
         }
     }
@@ -116,7 +116,7 @@ class EarningsServiceImpl(
             .sumOf { (playerCard, card) -> playerCard.quantity * card.income }
 
         if (earned > 0) {
-            finalCoins[activePlayerId] = finalCoins[activePlayerId]!! + earned
+            finalCoins[activePlayerId] = finalCoins.getValue(activePlayerId) + earned
         }
     }
 
@@ -141,7 +141,7 @@ class EarningsServiceImpl(
             .sumOf { (playerCard, card) -> playerCard.quantity * card.income }
 
         if (bankEarned > 0) {
-            finalCoins[activePlayerId] = finalCoins[activePlayerId]!! + bankEarned
+            finalCoins[activePlayerId] = finalCoins.getValue(activePlayerId) + bankEarned
         }
 
         val coinsPerOpponent = purpleCards
@@ -150,10 +150,10 @@ class EarningsServiceImpl(
 
         if (coinsPerOpponent > 0) {
             players.filter { it.id != activePlayerId }.forEach { opponent ->
-                val transfer = minOf(coinsPerOpponent, finalCoins[opponent.id]!!)
+                val transfer = minOf(coinsPerOpponent, finalCoins.getValue(opponent.id))
                 if (transfer > 0) {
-                    finalCoins[opponent.id] = finalCoins[opponent.id]!! - transfer
-                    finalCoins[activePlayerId] = finalCoins[activePlayerId]!! + transfer
+                    finalCoins[opponent.id] = finalCoins.getValue(opponent.id) - transfer
+                    finalCoins[activePlayerId] = finalCoins.getValue(activePlayerId) + transfer
                 }
             }
         }
