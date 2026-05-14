@@ -1,8 +1,6 @@
 package org.machikoro.server.database
 
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
-import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.springframework.boot.CommandLineRunner
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.stereotype.Component
@@ -14,11 +12,9 @@ import javax.sql.DataSource
  * run against. Without this, the first DB-touching request throws
  * "No database specified and no default database found".
  *
- * Also runs Exposed's [SchemaUtils.create] as a safety net for environments
- * where Flyway hasn't (yet) executed — `CREATE TABLE IF NOT EXISTS` is
- * idempotent so this is a no-op once Flyway has the schema covered. See
- * tracker for the Flyway 11 + `flyway-database-postgresql` follow-up that
- * makes Flyway the sole schema owner.
+ * Schema creation is owned by Flyway (`src/main/resources/db/migration`),
+ * which runs automatically on Spring Boot startup before this runner. This
+ * class only wires Exposed to the already-migrated DataSource.
  *
  * Gated by `machikoro.db.init.enabled` so tests that boot the Spring context
  * without a DataSource (`HealthEndpointTest`, `SecurityConfigTests` via
@@ -35,23 +31,9 @@ class DatabaseInitializer(private val dataSource: DataSource) : CommandLineRunne
 }
 
 /**
- * Wires Exposed to [dataSource] and ensures the schema exists.
- * Idempotent — safe to call multiple times.
+ * Wires Exposed to [dataSource]. Idempotent — safe to call multiple times.
+ * Does not create or modify schema; Flyway handles that.
  */
 fun initDatabase(dataSource: DataSource) {
     Database.connect(dataSource)
-
-    transaction {
-        SchemaUtils.create(
-            Cards,
-            CardActivationNumbers,
-            Landmarks,
-            Users,
-            Games,
-            Players,
-            PlayerCards,
-            PlayerLandmarks,
-            GameMarketplace
-        )
-    }
 }
