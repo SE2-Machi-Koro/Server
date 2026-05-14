@@ -12,7 +12,10 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 
 @SpringBootTestWithoutDataSource
 @AutoConfigureMockMvc
-@TestPropertySource(properties = ["management.health.db.enabled=false"])
+@TestPropertySource(properties = [
+    "management.health.db.enabled=false",
+    "spring.flyway.enabled=false"
+])
 class HealthEndpointTest {
 
     @Autowired
