@@ -112,6 +112,11 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
         assertTrue(result.playerLandmarks[secondPlayerId]?.isNotEmpty() == true)
         // All landmarks start unbuilt at game start.
         assertTrue(result.playerLandmarks.values.flatten().all { !it.isBuilt })
+        // Marketplace must also ride along on the initial snapshot — same
+        // motivation as landmarks, this time for #248. Only BAKERY is seeded
+        // in the Cards table by setup(), so initForGame skips the other types
+        // (cardId lookup misses) and only BAKERY shows up at the default supply.
+        assertEquals(6, result.marketplace[CardType.BAKERY])
     }
 
     @Test
