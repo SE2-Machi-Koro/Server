@@ -8,6 +8,7 @@ enum class MessageType {
     JOIN,
     LEAVE,
     LOBBY_CREATED,
+    LOBBY_JOINED,
     GAME_START,
     GAME_STARTED,
     SYNC,
