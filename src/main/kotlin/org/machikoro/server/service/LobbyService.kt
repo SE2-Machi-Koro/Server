@@ -182,8 +182,7 @@ open class LobbyService(
         // Same reasoning for the marketplace — initForGame above seeded the
         // full supply, so the client can render the buyable card grid on the
         // first GAME_STARTED frame.
-        val marketplace = gameMarketplaceDao.findByGameId(gameId)
-            .associate { it.cardType to it.quantityAvailable }
+        val marketplace = gameMarketplaceDao.findByGameIdAsMap(gameId)
 
         GameStateDto(
             game = updatedGame,

@@ -238,6 +238,20 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `findByGameIdAsMap returns empty map before init`() {
+        assertTrue(marketplaceDao.findByGameIdAsMap(gameId).isEmpty())
+    }
+
+    @Test
+    fun `findByGameIdAsMap returns cardType to quantity after init`() {
+        marketplaceDao.initForGame(gameId, supplyPerCard = 4)
+        val asMap = marketplaceDao.findByGameIdAsMap(gameId)
+        assertEquals(CardType.entries.size, asMap.size)
+        assertTrue(asMap.values.all { it == 4 })
+        assertEquals(4, asMap[CardType.BAKERY])
+    }
+
+    @Test
     fun `findAll returns empty list before init`() {
         assertTrue(marketplaceDao.findAll().isEmpty())
     }

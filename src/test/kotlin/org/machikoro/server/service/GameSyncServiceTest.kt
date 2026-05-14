@@ -15,7 +15,6 @@ import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.LandmarkType
 import org.machikoro.server.domain.enums.TurnPhase
-import org.machikoro.server.domain.models.GameMarketplaceModel
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerCardModel
 import org.machikoro.server.domain.models.PlayerLandmarkModel
@@ -94,11 +93,8 @@ class GameSyncServiceTest {
         whenever(playerLandmarkDao.findByPlayerId(2)).thenReturn(
             listOf(PlayerLandmarkModel(2, LandmarkType.TRAIN_STATION, isBuilt = false)),
         )
-        whenever(gameMarketplaceDao.findByGameId(gameId)).thenReturn(
-            listOf(
-                GameMarketplaceModel(gameId, CardType.BAKERY, 5),
-                GameMarketplaceModel(gameId, CardType.WHEAT_FIELD, 6),
-            ),
+        whenever(gameMarketplaceDao.findByGameIdAsMap(gameId)).thenReturn(
+            mapOf(CardType.BAKERY to 5, CardType.WHEAT_FIELD to 6),
         )
 
         val snapshot = service.buildSnapshot(gameId)
@@ -113,7 +109,8 @@ class GameSyncServiceTest {
         assertEquals(true, snapshot.playerLandmarks[1]?.first()?.isBuilt)
         assertEquals(1, snapshot.playerLandmarks[2]?.size)
         assertEquals(false, snapshot.playerLandmarks[2]?.first()?.isBuilt)
-        // Marketplace flattens GameMarketplaceModel rows to cardType → quantity.
+        // Marketplace is whatever the DAO helper returns — the flatten itself
+        // lives on the DAO and is covered by GameMarketplaceDaoTest.
         assertEquals(mapOf(CardType.BAKERY to 5, CardType.WHEAT_FIELD to 6), snapshot.marketplace)
     }
 
@@ -122,7 +119,7 @@ class GameSyncServiceTest {
         val gameId = 11
         whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.IN_PROGRESS))
         whenever(playerDao.getPlayers(gameId)).thenReturn(emptyList())
-        whenever(gameMarketplaceDao.findByGameId(gameId)).thenReturn(emptyList())
+        whenever(gameMarketplaceDao.findByGameIdAsMap(gameId)).thenReturn(emptyMap())
 
         val snapshot = service.buildSnapshot(gameId)
 

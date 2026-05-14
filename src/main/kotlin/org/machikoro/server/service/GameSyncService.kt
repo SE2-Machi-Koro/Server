@@ -38,8 +38,7 @@ class GameSyncService(
         val playerLandmarks = players.associate { player ->
             player.id to playerLandmarkDao.findByPlayerId(player.id)
         }
-        val marketplace = gameMarketplaceDao.findByGameId(gameId)
-            .associate { it.cardType to it.quantityAvailable }
+        val marketplace = gameMarketplaceDao.findByGameIdAsMap(gameId)
 
         return GameStateDto(
             game = game,
