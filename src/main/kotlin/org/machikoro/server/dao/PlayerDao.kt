@@ -82,13 +82,22 @@ class PlayerDao {
     }
 
     /**
-     * Returns counter of players in game who didn't leave yet
+     * Returns counter of players in game
+     * @param gameId Game ID
+     * @return Count of players in the game
      */
     fun countByGameId(gameId: Int): Int = transaction {
-        Players.selectAll()
+        val count = Players
+            .selectAll()
             .where { Players.gameId eq gameId }
             .count()
             .toInt()
+
+        if (count == 0) {
+            throw GameNotFoundException("Game $gameId not found")
+        }
+
+        count
     }
 
     /**
