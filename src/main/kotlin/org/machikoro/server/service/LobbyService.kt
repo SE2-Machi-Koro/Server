@@ -196,6 +196,7 @@ open class LobbyService(
                     playerLandmarks = playerLandmarks,
                     marketplace = marketplace,
                     turnOrder = shuffled.map { it.id },
+                    activePlayerId = shuffled.firstOrNull()?.userId,
                 )
             }
         }
