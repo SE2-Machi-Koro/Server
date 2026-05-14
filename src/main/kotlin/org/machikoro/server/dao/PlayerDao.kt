@@ -14,6 +14,7 @@ import org.machikoro.server.database.Games
 import org.machikoro.server.database.Players
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.models.PlayerModel
+import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.exception.PlayerNotFoundException
 import org.springframework.stereotype.Repository
 
@@ -81,13 +82,22 @@ class PlayerDao {
     }
 
     /**
-     * Returns counter of players in game who didn't leave yet
+     * Returns counter of players in game
+     * @param gameId Game ID
+     * @return Count of players in the game
      */
     fun countByGameId(gameId: Int): Int = transaction {
-        Players.selectAll()
+        val count = Players
+            .selectAll()
             .where { Players.gameId eq gameId }
             .count()
             .toInt()
+
+        if (count == 0) {
+            throw GameNotFoundException("Game $gameId not found")
+        }
+
+        count
     }
 
     /**
