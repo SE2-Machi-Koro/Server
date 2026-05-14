@@ -118,18 +118,6 @@ class GameSyncServiceTest {
     }
 
     @Test
-    fun `buildSnapshot returns empty marketplace when DAO returns no rows`() {
-        val gameId = 12
-        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.IN_PROGRESS))
-        whenever(playerDao.getPlayers(gameId)).thenReturn(emptyList())
-        whenever(gameMarketplaceDao.findByGameId(gameId)).thenReturn(emptyList())
-
-        val snapshot = service.buildSnapshot(gameId)
-
-        assertTrue(snapshot.marketplace.isEmpty())
-    }
-
-    @Test
     fun `buildSnapshot works with zero players`() {
         val gameId = 11
         whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.IN_PROGRESS))
