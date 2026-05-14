@@ -1,6 +1,5 @@
 package org.machikoro.server.service
 
-import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.machikoro.server.dao.CardDao
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.PlayerCardDao
@@ -14,6 +13,7 @@ import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.service.interfaces.EarningsService
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 
 /**
  * Service responsible for core economic of the game
@@ -32,28 +32,27 @@ class EarningsServiceImpl(
     fun computeEarnings(pairs: List<Pair<Int, Int>>): Int =
         pairs.sumOf { (quantity, income) -> quantity * income }
 
+    @Transactional
     override fun processEarnings(gameId: Int, diceRoll: Int, activePlayerId: Int) {
-        transaction {
-            val activatingCards = cardDao.findByActivationNumber(diceRoll)
-                .associateBy { it.cardType }
+        val activatingCards = cardDao.findByActivationNumber(diceRoll)
+            .associateBy { it.cardType }
 
-            val players = playerDao.getPlayers(gameId)
-            val finalCoins = players.associate { it.id to it.coins }.toMutableMap()
+        val players = playerDao.getPlayers(gameId)
+        val finalCoins = players.associate { it.id to it.coins }.toMutableMap()
 
-            val matchedCardsByPlayer = players.associate { player ->
-                player.id to playerCardDao.findByPlayerId(player.id)
-                    .mapNotNull { playerCard -> activatingCards[playerCard.cardType]?.let { playerCard to it } }
-            }
+        val matchedCardsByPlayer = players.associate { player ->
+            player.id to playerCardDao.findByPlayerId(player.id)
+                .mapNotNull { playerCard -> activatingCards[playerCard.cardType]?.let { playerCard to it } }
+        }
 
-            processRedCards(players, activePlayerId, matchedCardsByPlayer, finalCoins)
-            processBlueCards(players, matchedCardsByPlayer, finalCoins)
-            processGreenCards(players, activePlayerId, matchedCardsByPlayer, finalCoins)
-            processPurpleCards(players, activePlayerId, matchedCardsByPlayer, finalCoins)
+        processRedCards(players, activePlayerId, matchedCardsByPlayer, finalCoins)
+        processBlueCards(players, matchedCardsByPlayer, finalCoins)
+        processGreenCards(players, activePlayerId, matchedCardsByPlayer, finalCoins)
+        processPurpleCards(players, activePlayerId, matchedCardsByPlayer, finalCoins)
 
-            players.forEach { player ->
-                if (finalCoins[player.id] != player.coins) {
-                    playerDao.updateCoins(player.id, finalCoins[player.id]!!)
-                }
+        players.forEach { player ->
+            if (finalCoins[player.id] != player.coins) {
+                playerDao.updateCoins(player.id, finalCoins[player.id]!!)
             }
         }
     }
@@ -167,24 +166,22 @@ class EarningsServiceImpl(
      * This is the handoff point introduced for the buying-phase flow: earnings
      * are resolved first, and only then does the turn enter BUY_OR_BUILD.
      */
+    @Transactional
     override fun resolveEffects(gameId: Int) {
-        // Single transaction ensures coin distribution and phase advance are atomic
-        transaction {
-            val game = gameDao.findById(gameId)
-                ?: throw GameNotFoundException("Game $gameId not found")
+        val game = gameDao.findById(gameId)
+            ?: throw GameNotFoundException("Game $gameId not found")
 
-            // Ensure exact phase where earnings are calculated
-            check(game.turnPhase == TurnPhase.RESOLVE_EFFECTS) { "Game is not in RESOLVE_EFFECTS phase" }
-            val diceRoll = checkNotNull(game.lastDiceRoll) { "Dice roll not set" }
+        // Ensure exact phase where earnings are calculated
+        check(game.turnPhase == TurnPhase.RESOLVE_EFFECTS) { "Game is not in RESOLVE_EFFECTS phase" }
+        val diceRoll = checkNotNull(game.lastDiceRoll) { "Dice roll not set" }
 
-            val players = playerDao.getPlayers(gameId)
-            val activePlayer = players[game.currentTurnIndex]
+        val players = playerDao.getPlayers(gameId)
+        val activePlayer = players[game.currentTurnIndex]
 
-            // Distribute coins
-            processEarnings(gameId, diceRoll, activePlayer.id)
+        // Distribute coins
+        processEarnings(gameId, diceRoll, activePlayer.id)
 
-            // Advance game state to allow active player to construct a new building
-            gameDao.updateTurnPhase(gameId, TurnPhase.BUY_OR_BUILD)
-        }
+        // Advance game state to allow active player to construct a new building
+        gameDao.updateTurnPhase(gameId, TurnPhase.BUY_OR_BUILD)
     }
 }
