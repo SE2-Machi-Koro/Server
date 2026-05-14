@@ -9,11 +9,14 @@ import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
+import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.GameStatus
+import org.machikoro.server.domain.enums.LandmarkType
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerCardModel
+import org.machikoro.server.domain.models.PlayerLandmarkModel
 import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.exception.GameNotFoundException
 import org.mockito.kotlin.mock
@@ -25,7 +28,8 @@ class GameSyncServiceTest {
     private val gameDao = mock<GameDao>()
     private val playerDao = mock<PlayerDao>()
     private val playerCardDao = mock<PlayerCardDao>()
-    private val service = GameSyncService(gameDao, playerDao, playerCardDao)
+    private val playerLandmarkDao = mock<PlayerLandmarkDao>()
+    private val service = GameSyncService(gameDao, playerDao, playerCardDao, playerLandmarkDao)
 
     private fun game(id: Int, status: GameStatus) = GameModel(
         id = id,
@@ -73,6 +77,14 @@ class GameSyncServiceTest {
                 // player 2 has no cards — absent from the map
             )
         )
+        // Per-player landmark lookup — see GameSyncService.buildSnapshot for
+        // the N=4 cap rationale on why this isn't a single batch query.
+        whenever(playerLandmarkDao.findByPlayerId(1)).thenReturn(
+            listOf(PlayerLandmarkModel(1, LandmarkType.TRAIN_STATION, isBuilt = true)),
+        )
+        whenever(playerLandmarkDao.findByPlayerId(2)).thenReturn(
+            listOf(PlayerLandmarkModel(2, LandmarkType.TRAIN_STATION, isBuilt = false)),
+        )
 
         val snapshot = service.buildSnapshot(gameId)
 
@@ -81,6 +93,11 @@ class GameSyncServiceTest {
         assertEquals(listOf(2, 1), snapshot.turnOrder)
         assertEquals(1, snapshot.playerCards[1]?.size)
         assertTrue(snapshot.playerCards[2].isNullOrEmpty())
+        // Landmarks are keyed by playerId and preserve isBuilt per row.
+        assertEquals(1, snapshot.playerLandmarks[1]?.size)
+        assertEquals(true, snapshot.playerLandmarks[1]?.first()?.isBuilt)
+        assertEquals(1, snapshot.playerLandmarks[2]?.size)
+        assertEquals(false, snapshot.playerLandmarks[2]?.first()?.isBuilt)
     }
 
     @Test
@@ -95,6 +112,7 @@ class GameSyncServiceTest {
         assertTrue(snapshot.players.isEmpty())
         assertTrue(snapshot.turnOrder.isEmpty())
         assertTrue(snapshot.playerCards.isEmpty())
+        assertTrue(snapshot.playerLandmarks.isEmpty())
     }
 
     @Test

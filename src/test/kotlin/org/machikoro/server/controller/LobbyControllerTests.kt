@@ -33,6 +33,7 @@ class LobbyControllerTests {
         ),
         players = emptyList(),
         playerCards = emptyMap(),
+        playerLandmarks = emptyMap(),
         turnOrder = emptyList(),
     )
 

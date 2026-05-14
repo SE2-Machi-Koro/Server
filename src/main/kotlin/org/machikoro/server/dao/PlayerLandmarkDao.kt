@@ -1,6 +1,7 @@
 package org.machikoro.server.dao
 
 import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
@@ -29,12 +30,17 @@ class PlayerLandmarkDao {
     )
 
     /**
-     * Finds all landmarks for a given player
+     * Finds all landmarks for a given player, ordered alphabetically by
+     * landmark type. Stable ordering matters because the result is surfaced
+     * in `GameStateDto.playerLandmarks` and serialized to clients — without
+     * an explicit order, the JSON output (and any downstream test assertions)
+     * would be at the mercy of the DB's row-return order.
      */
     fun findByPlayerId(playerId: Int): List<PlayerLandmarkModel> = transaction {
         (PlayerLandmarks innerJoin Landmarks)
             .selectAll()
             .where { PlayerLandmarks.playerId eq playerId }
+            .orderBy(Landmarks.landmarkType to SortOrder.ASC)
             .map { it.toPlayerLandmarkModel() }
     }
 

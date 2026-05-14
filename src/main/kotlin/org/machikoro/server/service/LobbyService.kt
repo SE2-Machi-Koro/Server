@@ -178,10 +178,18 @@ open class LobbyService(
                 gameDao.updateStatus(gameId, GameStatus.IN_PROGRESS)
                 val updatedGame = gameDao.findById(gameId)!!
 
+                // After initForPlayer each player has all landmarks as unbuilt rows.
+                // Include them in the initial snapshot so clients can render the build
+                // grid immediately, without an extra round-trip.
+                val playerLandmarks = shuffled.associate { player ->
+                    player.id to playerLandmarkDao.findByPlayerId(player.id)
+                }
+
                 GameStateDto(
                     game = updatedGame,
                     players = shuffled,
                     playerCards = emptyMap(),
+                    playerLandmarks = playerLandmarks,
                     turnOrder = shuffled.map { it.id },
                 )
             }
