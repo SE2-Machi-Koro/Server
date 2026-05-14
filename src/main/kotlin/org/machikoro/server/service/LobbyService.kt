@@ -9,6 +9,7 @@ import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.dto.GameStateDto
+import org.machikoro.server.exception.GameFinishedException
 import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.exception.LobbyFullException
@@ -59,27 +60,70 @@ open class LobbyService(
     }
 
     /**
+     * Validates whether a lobby code exists.
+     *
+     * @throws GameNotFoundException if no lobby with the given code exists.
+     */
+    fun validateLobbyCode(lobbyCode: String): GameModel = runInTransaction {
+        gameDao.findByLobbyCode(lobbyCode)
+            ?: throw GameNotFoundException("Lobby with code $lobbyCode not found")
+    }
+
+    /**
+     * Adds [userId] to the lobby identified by [lobbyCode].
+     *
+     * The lobby code is first resolved to the corresponding game. Then the existing
+     * addUserToLobby logic is reused so all validation rules stay in one place.
+     *
+     * @throws GameNotFoundException if no lobby with [lobbyCode] exists.
+     * @throws GameStartedException  if the game has already started.
+     * @throws GameFinishedException if the game has already ended.
+     * @throws LobbyFullException    if the lobby has already reached its player cap.
+     */
+    fun joinLobby(lobbyCode: String, userId: Int): PlayerModel = runInTransaction {
+        val game = gameDao.findByLobbyCode(lobbyCode)
+            ?: throw GameNotFoundException("Lobby with code $lobbyCode not found")
+
+        addUserToLobby(game.id, userId)
+    }
+
+    /**
      * Adds [userId] to the lobby for [gameId] if the game exists, is still in the
      * WAITING state and has not yet reached its player cap.
      *
-     * @throws GameNotFoundException  if no game with [gameId] exists.
-     * @throws GameStartedException   if the game has already moved to IN_PROGRESS.
-     * @throws LobbyFullException     if the lobby already has reached its player cap.
+     * Existing players in the game can rejoin regardless of status (including
+     * FINISHED) — the reconnect short-circuit returns their record without any
+     * status check or DB write. New joins are rejected for both IN_PROGRESS and
+     * FINISHED games.
+     *
+     * @throws GameNotFoundException        if no game with [gameId] exists.
+     * @throws GameStartedException         if the game has already moved to IN_PROGRESS.
+     * @throws GameFinishedException        if the game has already ended.
+     * @throws LobbyFullException           if the lobby already has reached its player cap.
      */
     fun addUserToLobby(gameId: Int, userId: Int): PlayerModel {
-        val game = gameDao.findById(gameId)
+        gameDao.findById(gameId)
             ?: throw GameNotFoundException("Game $gameId not found")
 
         // Reconnect path: player already belongs to this game, so do not re-insert.
+        // Allowed regardless of game status — a player rejoining a FINISHED game
+        // can still pull their final state via the same record.
         playerDao.findByGameIdAndUserId(gameId, userId)?.let { return it }
-
-        if (game.status == GameStatus.IN_PROGRESS) {
-            throw GameStartedException("Game $gameId has already started")
-        }
 
         synchronized(lobbyLocks.getOrPut(gameId) { Any() }) {
             // Protect against duplicate inserts on concurrent reconnect/join attempts.
             playerDao.findByGameIdAndUserId(gameId, userId)?.let { return it }
+
+            val game = gameDao.findById(gameId)
+                ?: throw GameNotFoundException("Game $gameId not found")
+
+            if (game.status == GameStatus.IN_PROGRESS) {
+                throw GameStartedException("Game $gameId has already started")
+            }
+
+            if (game.status == GameStatus.FINISHED) {
+                throw GameFinishedException("Game $gameId has already finished")
+            }
 
             val players = playerDao.getPlayers(gameId)
             if (players.size >= game.maxPlayers) {
@@ -106,37 +150,53 @@ open class LobbyService(
      * @throws GameNotFoundException if no game with [gameId] exists.
      * @throws NotHostException      if [requestingUserId] is provided but is not the host.
      */
-    fun startGame(gameId: Int, requestingUserId: Int? = null): GameStateDto = runInTransaction {
-        val game = gameDao.findById(gameId)
-            ?: throw GameNotFoundException("Game $gameId not found")
+    fun startGame(gameId: Int, requestingUserId: Int? = null): GameStateDto =
+        synchronized(lobbyLocks.getOrPut(gameId) { Any() }) {
+            runInTransaction {
+                val game = gameDao.findById(gameId)
+                    ?: throw GameNotFoundException("Game $gameId not found")
 
-        if (requestingUserId != null && game.hostUserId != requestingUserId) {
-            throw NotHostException("User $requestingUserId is not the host of game $gameId")
+                if (requestingUserId != null && game.hostUserId != requestingUserId) {
+                    throw NotHostException("User $requestingUserId is not the host of game $gameId")
+                }
+
+                val players = playerDao.getPlayers(gameId)
+                val shuffled = players.shuffled()
+
+                // Two-pass update to avoid unique (gameId, turnOrder) constraint violations
+                // while reassigning turn orders.
+                shuffled.forEachIndexed { index, player ->
+                    playerDao.updateTurnOrder(player.id, index + TEMP_TURN_ORDER_OFFSET)
+                }
+                shuffled.forEachIndexed { index, player ->
+                    playerDao.updateTurnOrder(player.id, index)
+                }
+
+                gameMarketplaceDao.initForGame(gameId)
+                shuffled.forEach { player -> playerLandmarkDao.initForPlayer(player.id) }
+
+                gameDao.updateStatus(gameId, GameStatus.IN_PROGRESS)
+                val updatedGame = gameDao.findById(gameId)!!
+
+                // After initForPlayer each player has all landmarks as unbuilt rows.
+                // Include them in the initial snapshot so clients can render the build
+                // grid immediately, without an extra round-trip.
+                val playerLandmarks = shuffled.associate { player ->
+                    player.id to playerLandmarkDao.findByPlayerId(player.id)
+                }
+                // Same reasoning for the marketplace — initForGame above seeded the
+                // full supply, so the client can render the buyable card grid on the
+                // first GAME_STARTED frame.
+                val marketplace = gameMarketplaceDao.findByGameIdAsMap(gameId)
+
+                GameStateDto(
+                    game = updatedGame,
+                    players = shuffled,
+                    playerCards = emptyMap(),
+                    playerLandmarks = playerLandmarks,
+                    marketplace = marketplace,
+                    turnOrder = shuffled.map { it.id },
+                )
+            }
         }
-
-        val players = playerDao.getPlayers(gameId)
-        val shuffled = players.shuffled()
-
-        // Two-pass update to avoid unique (gameId, turnOrder) constraint violations
-        // while reassigning turn orders.
-        shuffled.forEachIndexed { index, player ->
-            playerDao.updateTurnOrder(player.id, index + TEMP_TURN_ORDER_OFFSET)
-        }
-        shuffled.forEachIndexed { index, player ->
-            playerDao.updateTurnOrder(player.id, index)
-        }
-
-        gameMarketplaceDao.initForGame(gameId)
-        shuffled.forEach { player -> playerLandmarkDao.initForPlayer(player.id) }
-
-        gameDao.updateStatus(gameId, GameStatus.IN_PROGRESS)
-        val updatedGame = gameDao.findById(gameId)!!
-
-        GameStateDto(
-            game = updatedGame,
-            players = shuffled,
-            playerCards = emptyMap(),
-            turnOrder = shuffled.map { it.id },
-        )
-    }
 }

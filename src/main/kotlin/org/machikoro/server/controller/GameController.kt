@@ -1,6 +1,6 @@
 package org.machikoro.server.controller
 
-import java.security.Principal
+import org.machikoro.server.auth.requireUserPrincipal
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.dto.EndTurnOutcome
@@ -93,16 +93,16 @@ class GameController(
     }
 
     @MessageMapping("/game.advancePhase")
-    fun advancePhase(@Payload request: AdvancePhaseRequest, principal: Principal) {
-        gameStateGuard.ensureSenderIsActivePlayer(request.gameId, principal)
+    fun advancePhase(@Payload request: AdvancePhaseRequest, headerAccessor: SimpMessageHeaderAccessor) {
+        requireActivePlayer(request.gameId, headerAccessor)
         val newPhase = gamePhaseService.advancePhase(request.gameId)
         logger.info("Advanced phase for game ${request.gameId} to $newPhase")
         broadcastPhase(request.gameId, newPhase)
     }
 
     @MessageMapping("/game.purchase")
-    fun purchase(@Payload request: PurchaseRequest, principal: Principal) {
-        gameStateGuard.ensureSenderIsActivePlayer(request.gameId, principal)
+    fun purchase(@Payload request: PurchaseRequest, headerAccessor: SimpMessageHeaderAccessor) {
+        requireActivePlayer(request.gameId, headerAccessor)
         val result = purchaseService.purchase(
             gameId = request.gameId,
             purchaseType = request.purchaseType,
@@ -113,9 +113,15 @@ class GameController(
         broadcastPurchase(request.gameId, result)
     }
 
+    /**
+     * Ends the active player's turn, checks for a winner, and either finishes
+     * the game or advances to the next player's turn.
+     *
+     * Message is sent to /app/game.endTurn and broadcast to /topic/game/{gameId}.
+     */
     @MessageMapping("/game.endTurn")
-    fun endTurn(@Payload request: EndTurnRequest, principal: Principal) {
-        gameStateGuard.ensureSenderIsActivePlayer(request.gameId, principal)
+    fun endTurn(@Payload request: EndTurnRequest, headerAccessor: SimpMessageHeaderAccessor) {
+        requireActivePlayer(request.gameId, headerAccessor)
         when (val result = gamePhaseService.endTurn(request.gameId)) {
             is EndTurnOutcome.Continue -> {
                 logger.info("Ended turn for game ${request.gameId}, new phase ${result.nextPhase}")
@@ -128,9 +134,14 @@ class GameController(
         }
     }
 
+    /**
+     * Removes a player from a finished game.
+     *
+     * Message is sent to /app/game.leave and broadcast to /topic/game/{gameId}.
+     */
     @MessageMapping("/game.leave")
-    fun leaveFinishedGame(@Payload request: LeaveFinishedGameRequest, principal: Principal) {
-        gameStateGuard.ensureSenderOwnsPlayer(request.gameId, request.playerId, principal)
+    fun leaveFinishedGame(@Payload request: LeaveFinishedGameRequest, headerAccessor: SimpMessageHeaderAccessor) {
+        requireOwnerOfPlayer(request.gameId, request.playerId, headerAccessor)
         leaveFinishedGameService.leaveFinishedGame(request.gameId, request.playerId)
         logger.info("${request.playerId} left game ${request.gameId}")
         broadcastPlayerLeftFinishedGame(request.gameId, request.playerId)
@@ -138,16 +149,14 @@ class GameController(
 
     /**
      * Handle dice roll requests and broadcast result to the specific game topic.
-     * Message is sent to /app/game.rollDice and broadcast to /topic/game/{gameId}
      *
-     * Payload contains:
-     * - playerId: the player who rolled
-     * - result: list of individual dice values
-     * - timestamp: server-side time of the roll
+     * Message is sent to /app/game.rollDice and broadcast to /topic/game/{gameId}.
+     * The result payload contains the player ID, the individual dice values, and
+     * a server-side timestamp so all clients see the same result simultaneously.
      */
     @MessageMapping("/game.rollDice")
-    fun rollDice(@Payload request: RollDiceRequest, principal: Principal) {
-        gameStateGuard.ensureSenderIsActivePlayer(request.gameId, principal)
+    fun rollDice(@Payload request: RollDiceRequest, headerAccessor: SimpMessageHeaderAccessor) {
+        requireActivePlayer(request.gameId, headerAccessor)
         val gameTopic = "/topic/game/${request.gameId}"
         logger.info("Roll dice request from player ${request.playerId} in game ${request.gameId}")
         try {
@@ -178,10 +187,15 @@ class GameController(
         }
     }
 
+    /**
+     * Broadcasts the new turn phase and the active user ID to all subscribers
+     * of the game topic. The [activeUserId] identifies the user whose turn it
+     * is so clients can compare it against their own user ID.
+     */
     private fun broadcastPhase(gameId: Int, newPhase: TurnPhase) {
         val game = gameStateGuard.ensureGameIsRunning(gameId)
         val players = playerDao.getPlayers(gameId)
-        val activePlayer = players.getOrNull(game.currentTurnIndex)
+        val activeUserId = players.getOrNull(game.currentTurnIndex)?.userId
 
         messagingTemplate.convertAndSend(
             "/topic/game/$gameId",
@@ -190,7 +204,7 @@ class GameController(
                 sender = "server",
                 payload = mapOf(
                     "turnPhase" to newPhase.name,
-                    "activePlayerId" to activePlayer?.userId,
+                    "activeUserId" to activeUserId,
                 ),
             ),
         )
@@ -236,5 +250,13 @@ class GameController(
                 ),
             ),
         )
+    }
+
+    private fun requireActivePlayer(gameId: Int, headerAccessor: SimpMessageHeaderAccessor) {
+        gameStateGuard.ensureSenderIsActivePlayer(gameId, headerAccessor.requireUserPrincipal())
+    }
+
+    private fun requireOwnerOfPlayer(gameId: Int, playerId: Int, headerAccessor: SimpMessageHeaderAccessor) {
+        gameStateGuard.ensureSenderOwnsPlayer(gameId, playerId, headerAccessor.requireUserPrincipal())
     }
 }

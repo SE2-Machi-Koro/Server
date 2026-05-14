@@ -3,6 +3,8 @@
 .idea
 .vscode
 build/
+!build/docker/
+!build/docker/app.jar
 out/
 bin/
 *.log

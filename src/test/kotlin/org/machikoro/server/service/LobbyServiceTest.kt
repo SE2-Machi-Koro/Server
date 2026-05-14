@@ -1,6 +1,8 @@
 package org.machikoro.server.service
 
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.dao.GameDao
@@ -10,12 +12,14 @@ import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
+import org.machikoro.server.exception.GameFinishedException
 import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.exception.LobbyFullException
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 
@@ -90,6 +94,44 @@ class LobbyServiceTest {
     }
 
     @Test
+    fun `addUserToLobby throws GameFinishedException when game is finished and user is not a player`() {
+        val gameId = 5
+        val userId = 10
+        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.FINISHED))
+        // playerDao.findByGameIdAndUserId returns null by default → user is not
+        // an existing player, so the reconnect short-circuit doesn't apply and
+        // the FINISHED check must fire.
+
+        val ex = assertThrows<GameFinishedException> {
+            lobbyService.addUserToLobby(gameId, userId)
+        }
+
+        // GAME_FINISHED is the contract code the client matches on — assert
+        // both the type and the code so a future refactor that changes the
+        // exception hierarchy can't silently drop the code.
+        assertEquals("GAME_FINISHED", ex.errorCode)
+        // No player row must be inserted into a finished game.
+        verify(playerDao, never()).addPlayer(any(), any())
+    }
+
+    @Test
+    fun `addUserToLobby returns existing player on reconnect to FINISHED game without throwing`() {
+        // Pins the design choice: existing players can rejoin a finished game
+        // (to pull final state). The reconnect short-circuit runs before any
+        // status check, mirroring how IN_PROGRESS games already behave.
+        val gameId = 6
+        val userId = 11
+        val existing = player(99).copy(gameId = gameId, userId = userId)
+        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.FINISHED))
+        whenever(playerDao.findByGameIdAndUserId(gameId, userId)).thenReturn(existing)
+
+        val result = lobbyService.addUserToLobby(gameId, userId)
+
+        assertSame(existing, result)
+        verify(playerDao, never()).addPlayer(any(), any())
+    }
+
+    @Test
     fun `addUserToLobby throws LobbyFullException`() {
         val gameId = 3
         whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING))
@@ -133,4 +175,58 @@ class LobbyServiceTest {
         }
     }
 
+    @Test
+    fun `validateLobbyCode returns game when lobby code exists`() {
+        val expected = game(1, GameStatus.WAITING)
+
+        whenever(gameDao.findByLobbyCode("ABC123")).thenReturn(expected)
+
+        val result = lobbyService.validateLobbyCode("ABC123")
+
+        kotlin.test.assertEquals(expected, result)
+        verify(gameDao).findByLobbyCode("ABC123")
+    }
+
+    @Test
+    fun `validateLobbyCode throws GameNotFoundException when lobby code does not exist`() {
+        whenever(gameDao.findByLobbyCode("WRONG")).thenReturn(null)
+
+        assertThrows<GameNotFoundException> {
+            lobbyService.validateLobbyCode("WRONG")
+        }
+
+        verify(gameDao).findByLobbyCode("WRONG")
+    }
+
+    @Test
+    fun `joinLobby adds user to lobby found by code`() {
+        val lobbyCode = "ABC123"
+        val gameId = 1
+        val userId = 10
+        val expectedPlayer = player(1)
+
+        whenever(gameDao.findByLobbyCode(any())).thenReturn(game(gameId, GameStatus.WAITING))
+        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING))
+        whenever(playerDao.getPlayers(gameId)).thenReturn(emptyList())
+        whenever(playerDao.addPlayer(gameId, userId)).thenReturn(expectedPlayer)
+
+        val result = lobbyService.joinLobby(lobbyCode, userId)
+
+        kotlin.test.assertEquals(expectedPlayer, result)
+        verify(gameDao).findByLobbyCode(any())
+        verify(playerDao).addPlayer(gameId, userId)
+    }
+
+    @Test
+    fun `joinLobby throws GameNotFoundException when lobby code does not exist`() {
+        val lobbyCode = "WRONG"
+
+        whenever(gameDao.findByLobbyCode(lobbyCode)).thenReturn(null)
+
+        assertThrows<GameNotFoundException> {
+            lobbyService.joinLobby(lobbyCode, 10)
+        }
+
+        verify(gameDao).findByLobbyCode(lobbyCode)
+    }
 }

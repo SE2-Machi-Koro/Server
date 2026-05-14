@@ -90,6 +90,16 @@ class GameDao {
     }
 
     /**
+     * Finds a game by its lobby code
+     */
+    fun findByLobbyCode(code: String): GameModel? = transaction {
+        Games.selectAll()
+            .where { Games.lobbyCode eq code }
+            .singleOrNull()
+            ?.toModel()
+    }
+
+    /**
      * Updates status of the game
      */
     fun updateStatus(id: Int, status: GameStatus): Unit = transaction {

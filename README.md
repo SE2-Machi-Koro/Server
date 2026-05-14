@@ -150,6 +150,13 @@ internal `GameModel` may hold additional state used purely for server-side logic
 
 ## Environment Configuration
 
+### Database Initialization
+
+- Flyway is the authoritative source for schema creation in runtime environments.
+- Initial schema and required reference data are defined in `src/main/resources/db/migration/V1__init_schema.sql`.
+- `machikoro.db.init.enabled` is disabled by default in runtime config to prevent Exposed-based schema auto-creation from drifting away from migrations.
+- Tests can still override `machikoro.db.init.enabled=true` while the suite transitions to a fully migration-driven setup.
+
 1. Copy the example environment file and adjust as needed:
 
 ```bash
@@ -201,6 +208,17 @@ Build the project:
 ./gradlew build
 ```
 
+Gradle dependency verification is enabled via [gradle/verification-metadata.xml](gradle/verification-metadata.xml).
+If you add or update dependencies, refresh both generated dependency files before committing:
+
+```bash
+./gradlew dependencies --write-locks
+./gradlew --write-verification-metadata sha256 build
+```
+
+Review the updated verification metadata before committing it. Bootstrapping records the artifacts currently resolved by
+your configured repositories, so it should be treated as generated security-sensitive state rather than an opaque cache.
+
 Run the server locally:
 
 ```bash
@@ -208,6 +226,19 @@ Run the server locally:
 ```
 
 The backend will be available at: `http://localhost:8080`
+
+### Local Docker build
+
+For an end-to-end local run that mirrors the production container, use the compose
+override that builds the backend image from source:
+
+```bash
+docker compose -f compose.yaml -f compose.local-test.yaml --env-file .env.test up -d --build
+```
+
+This local Docker path keeps the source-based fallback in the `Dockerfile`, while
+the GitHub publish workflow uses a faster CI-only path that builds the Spring Boot
+jar once and reuses it for the multi-architecture image push.
 
 ## Testing
 
@@ -224,6 +255,16 @@ Generate a coverage report:
 ```
 
 HTML report: `build/reports/jacoco/test/html/index.html`
+
+Run SonarCloud analysis (requires `SONAR_TOKEN` in your shell):
+
+```bash
+SONAR_TOKEN=<your-token> \
+./gradlew --no-daemon clean check jacocoTestReport sonar \
+  --info --stacktrace
+```
+
+Sonar analysis settings are defined in `build.gradle.kts` under the Gradle `sonar { properties { ... } }` block, so local and CI use the same configuration path.
 
 ## API & WebSocket Documentation
 
@@ -257,15 +298,23 @@ repository's `compose.yaml` on every push to `main`.
 ### Pipeline overview
 
 1. A push to `main` triggers the [`Publish Docker image to GHCR`](.github/workflows/docker-publish.yml)
-   workflow, which builds the backend image and pushes it to
+  workflow.
+2. The workflow first runs a `build-jar` job on `ubuntu-latest`, sets up JDK 21 with
+  Gradle dependency caching, and executes `./gradlew bootJar -x test` exactly once.
+  The resulting application jar is uploaded as a short-lived workflow artifact.
+3. The `build-and-push` job downloads that artifact and uses Docker Buildx to package
+  and push the multi-architecture runtime image for `linux/amd64` and `linux/arm64`
+  without recompiling the application per architecture. This avoids the slow Gradle
+  build under QEMU emulation on `arm64`.
+4. The published image is pushed to
    `ghcr.io/se2-machi-koro/server` with the tags:
    - `latest` (only on `main`)
    - `sha-<short-commit>` (every build, used for rollback)
    - `v*` (when a Git tag matching `v*` is pushed)
-2. doco-cd on the AAU server detects the change, pulls the new image (`pull_policy: always`),
+5. doco-cd on the AAU server detects the change, pulls the new image (`pull_policy: always`),
    and restarts the `backend` service defined in [compose.yaml](compose.yaml), when the
    course deployment config contains a stack entry for this repository.
-3. The Postgres service runs alongside the backend on the internal compose network and is
+6. The Postgres service runs alongside the backend on the internal compose network and is
    **not exposed to the host** — only the backend is published on `PUBLIC_PORT` (`53210`).
 
 ### Live endpoints
@@ -339,3 +388,23 @@ To roll back to a previous image, edit the production `.env` on the server and s
 `IMAGE_TAG=sha-<short-commit>` (or any other tag published to GHCR), then trigger a
 manual `docker compose up -d` or a doco-cd reconcile. The `compose.yaml` resolves the image as
 `ghcr.io/se2-machi-koro/server:${IMAGE_TAG:-latest}`.
+
+## Frontend dependencies (Subresource Integrity)
+
+The static landing page at [`src/main/resources/static/index.html`](src/main/resources/static/index.html)
+loads three pinned assets from the cdnjs CDN (Bootstrap 4.6.0, SockJS-client 1.1.4,
+stomp.js 2.3.3). Each `<link>`/`<script>` tag includes a `sha512` Subresource Integrity
+(SRI) hash plus `crossorigin="anonymous"` and `referrerpolicy="no-referrer"`, so the
+browser refuses to execute any payload that does not match the pinned hash. This
+satisfies SonarCloud rule *"Make sure not using resource integrity feature is safe here"*
+(CWE / former-hotspot) and protects users if the CDN is ever compromised.
+
+When bumping any of these CDN versions, regenerate the matching hash:
+
+```bash
+curl -sSL <new-cdn-url> | openssl dgst -sha512 -binary | openssl base64 -A
+```
+
+Replace the `integrity="sha512-..."` value on the same tag and verify in the browser
+DevTools console that no *"Failed to find a valid digest in the 'integrity' attribute"*
+error is logged.

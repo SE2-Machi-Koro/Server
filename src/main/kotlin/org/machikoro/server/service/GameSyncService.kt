@@ -1,8 +1,10 @@
 package org.machikoro.server.service
 
 import org.machikoro.server.dao.GameDao
+import org.machikoro.server.dao.GameMarketplaceDao
 import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
+import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.dto.GameStateDto
 import org.machikoro.server.exception.GameNotFoundException
@@ -13,6 +15,8 @@ class GameSyncService(
     private val gameDao: GameDao,
     private val playerDao: PlayerDao,
     private val playerCardDao: PlayerCardDao,
+    private val playerLandmarkDao: PlayerLandmarkDao,
+    private val gameMarketplaceDao: GameMarketplaceDao,
 ) {
 
     fun findActiveInProgressGameId(userId: Int): Int? =
@@ -28,11 +32,20 @@ class GameSyncService(
         val playerCards = players.associate { player ->
             player.id to (playerCardsByPlayerId[player.id] ?: emptyList())
         }
+        // PlayerLandmarkDao has no batch lookup today; with maxPlayers = 4 the
+        // per-player iteration here is bounded at 4 queries per snapshot. If
+        // that ever matters, add findByPlayerIds() mirroring PlayerCardDao.
+        val playerLandmarks = players.associate { player ->
+            player.id to playerLandmarkDao.findByPlayerId(player.id)
+        }
+        val marketplace = gameMarketplaceDao.findByGameIdAsMap(gameId)
 
         return GameStateDto(
             game = game,
             players = players,
             playerCards = playerCards,
+            playerLandmarks = playerLandmarks,
+            marketplace = marketplace,
             turnOrder = players.sortedBy { it.turnOrder }.map { it.id },
         )
     }

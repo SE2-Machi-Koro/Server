@@ -2,7 +2,7 @@ package org.machikoro.server.controller
 
 import io.micrometer.core.instrument.Metrics
 import io.micrometer.core.instrument.Timer
-import org.machikoro.server.auth.UserPrincipal
+import org.machikoro.server.auth.userPrincipal
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.SyncGameRequest
 import org.machikoro.server.dto.WebSocketMessage
@@ -63,7 +63,7 @@ class WebSocketController(
         @Payload message: WebSocketMessage,
         headerAccessor: SimpMessageHeaderAccessor,
     ): WebSocketMessage {
-        val principal = headerAccessor.user as? UserPrincipal
+        val principal = headerAccessor.userPrincipal()
         if (principal == null) {
             logger.warn("addUser rejected: no authenticated principal on session ${headerAccessor.sessionId}")
             return message
@@ -136,7 +136,7 @@ class WebSocketController(
 
         // Resolve identity from the authenticated principal, not from the tracker,
         // to prevent a compromised or spoofed session from claiming another user's ID.
-        val principal = headerAccessor.user as? UserPrincipal
+        val principal = headerAccessor.userPrincipal()
         if (principal == null) {
             logger.warn("SYNC rejected: no authenticated principal on session {}", sessionId)
             recordSyncFailure(source = GAME_SYNC_SOURCE, reason = "missing_principal")

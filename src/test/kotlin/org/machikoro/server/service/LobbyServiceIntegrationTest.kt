@@ -20,9 +20,12 @@ import org.machikoro.server.database.Landmarks
 import org.machikoro.server.database.PlayerLandmarks
 import org.machikoro.server.database.Players
 import org.machikoro.server.database.Users
+import org.machikoro.server.domain.enums.CardColor
 import org.machikoro.server.domain.enums.CardType
+import org.machikoro.server.domain.enums.EstablishmentType
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.LandmarkType
+import org.machikoro.server.domain.enums.PaymentSource
 import org.machikoro.server.exception.GameNotFoundException
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doThrow
@@ -30,12 +33,6 @@ import org.mockito.kotlin.mock
 import org.springframework.beans.factory.annotation.Autowired
 import kotlin.test.Test
 
-/**
- * DB-backed coverage for the transactional startGame setup path.
- *
- * This proves the game status flip and the buy/build setup rows are created
- * together against the real persistence layer.
- */
 class LobbyServiceIntegrationTest : AbstractDBSetup() {
 
     @Autowired
@@ -65,15 +62,18 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
             GameMarketplace.deleteAll()
             Games.deleteAll()
             Users.deleteAll()
+            Landmarks.deleteAll()
+            Cards.deleteAll()
         }
 
         val userIds = transaction {
             Cards.insertIgnore {
                 it[cardType] = CardType.BAKERY
                 it[cost] = 1
-                it[diceMin] = 2
-                it[diceMax] = 3
                 it[income] = 1
+                it[color] = CardColor.GREEN
+                it[establishmentType] = EstablishmentType.BREAD
+                it[paymentSource] = PaymentSource.BANK
             }
 
             Landmarks.insertIgnore {
@@ -105,6 +105,18 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
         assertTrue(gameMarketplaceDao.findByGameId(gameId).isNotEmpty())
         assertTrue(playerLandmarkDao.findByPlayerId(firstPlayerId).isNotEmpty())
         assertTrue(playerLandmarkDao.findByPlayerId(secondPlayerId).isNotEmpty())
+        // Snapshot must include the freshly-initialized landmarks so the
+        // client renders the build grid without an extra round-trip — see
+        // SE2-Machi-Koro/Server#247.
+        assertTrue(result.playerLandmarks[firstPlayerId]?.isNotEmpty() == true)
+        assertTrue(result.playerLandmarks[secondPlayerId]?.isNotEmpty() == true)
+        // All landmarks start unbuilt at game start.
+        assertTrue(result.playerLandmarks.values.flatten().all { !it.isBuilt })
+        // Marketplace must also ride along on the initial snapshot — same
+        // motivation as landmarks, this time for #248. Only BAKERY is seeded
+        // in the Cards table by setup(), so initForGame skips the other types
+        // (cardId lookup misses) and only BAKERY shows up at the default supply.
+        assertEquals(6, result.marketplace[CardType.BAKERY])
     }
 
     @Test
@@ -119,6 +131,7 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
         val failingLandmarkDao = mock<PlayerLandmarkDao> {
             on { initForPlayer(any()) } doThrow RuntimeException("landmark setup failed")
         }
+
         val service = LobbyService(
             gameDao,
             playerDao,

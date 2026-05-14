@@ -1,19 +1,25 @@
 package org.machikoro.server.service
 
-import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.machikoro.server.dao.CardDao
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
-import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.enums.CardColor
+import org.machikoro.server.domain.enums.PaymentSource
+import org.machikoro.server.domain.enums.TurnPhase
+import org.machikoro.server.domain.models.CardModel
+import org.machikoro.server.domain.models.PlayerCardModel
+import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.service.interfaces.EarningsService
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 
 /**
  * Service responsible for core economic of the game
- * Handles the calculation and distribution of coins based on dice rolls and player establishments
+ * Handles the calculation and distribution of coins based on dice rolls and player establishments.
+ *
+ * Machi Koro activation order: RED → BLUE → GREEN → PURPLE
  */
 @Service
 class EarningsServiceImpl(
@@ -23,56 +29,131 @@ class EarningsServiceImpl(
     private val gameDao: GameDao
 ) : EarningsService {
 
-    /**
-     * Helper function to calculate total earnings for a specific set of cards
-     * Multiplies the number of cards owned (quantity) by the coin yield of that card (income)
-     */
     fun computeEarnings(pairs: List<Pair<Int, Int>>): Int =
         pairs.sumOf { (quantity, income) -> quantity * income }
 
-    /**
-     * Processes income for all players based on the current dice roll
-     * Evaluates the color-coded rules to determine who gets paid
-     */
+    @Transactional
     override fun processEarnings(gameId: Int, diceRoll: Int, activePlayerId: Int) {
-        transaction {
-            // Find all establishment cards in the game that activate on this specific dice roll
-            val allCards = cardDao.findAll()
-                .filter { it.diceMin <= diceRoll && it.diceMax >= diceRoll }
-                .associateBy { it.cardType }
+        val activatingCards = cardDao.findByActivationNumber(diceRoll)
+            .associateBy { it.cardType }
 
-            val players = playerDao.getPlayers(gameId)
+        val players = playerDao.getPlayers(gameId)
+        val finalCoins = players.associate { it.id to it.coins }.toMutableMap()
 
-            // Iterate through every player in the game to see if their cards trigger
-            players.forEach { player ->
-                val isActive = player.id == activePlayerId
+        val matchedCardsByPlayer = players.associate { player ->
+            player.id to playerCardDao.findByPlayerId(player.id)
+                .mapNotNull { playerCard -> activatingCards[playerCard.cardType]?.let { playerCard to it } }
+        }
 
-                val earned = playerCardDao.findByPlayerId(player.id)
-                    // Match the player's owned cards with the ones that trigger on this roll
-                    .mapNotNull { playerCard -> allCards[playerCard.cardType]?.let { playerCard to it } }
-                    // Apply activation rules based on card color
-                    .filter { (playerCard, _) ->
-                        when (playerCard.cardType.color) {
-                            // Primary Industry (Blue): Activates on ANY player's turn
-                            CardColor.BLUE -> true
-                            // Secondary Industry (Green): Activates ONLY on your turn
-                            CardColor.GREEN -> isActive
-                            // Major Establishment (Purple): Activates ONLY on your turn
-                            CardColor.PURPLE -> isActive
-                            // Restaurants (Red): Activates ONLY on opponents' turns
-                            // Note: Red card logic usually requires stealing from the active player
-                            // Currently, this just grants coins from the bank
-                            // Stealing logic may need to be expanded here
-                            CardColor.RED -> !isActive
-                        }
-                    }
-                    // Extract the quantities and income values to compute the total
-                    .map { (playerCard, card) -> playerCard.quantity to card.income }
-                    .let { computeEarnings(it) }
+        processRedCards(players, activePlayerId, matchedCardsByPlayer, finalCoins)
+        processBlueCards(players, matchedCardsByPlayer, finalCoins)
+        processGreenCards(players, activePlayerId, matchedCardsByPlayer, finalCoins)
+        processPurpleCards(players, activePlayerId, matchedCardsByPlayer, finalCoins)
 
-                // If the player earned coins, update their wallet in the database
-                if (earned > 0) {
-                    playerDao.updateCoins(player.id, player.coins + earned)
+        players.forEach { player ->
+            if (finalCoins[player.id] != player.coins) {
+                playerDao.updateCoins(player.id, finalCoins.getValue(player.id))
+            }
+        }
+    }
+
+    /**
+     * RED cards (OTHER_TURN): each opponent with a matching red card steals from the active player.
+     * Each theft is capped at the active player's remaining balance — no coins are created.
+     */
+    private fun processRedCards(
+        players: List<PlayerModel>,
+        activePlayerId: Int,
+        matchedCardsByPlayer: Map<Int, List<Pair<PlayerCardModel, CardModel>>>,
+        finalCoins: MutableMap<Int, Int>
+    ) {
+        players.filter { it.id != activePlayerId }.forEach { opponent ->
+            val redEarned = matchedCardsByPlayer[opponent.id].orEmpty()
+                .filter { (_, card) -> card.color == CardColor.RED }
+                .sumOf { (playerCard, card) -> playerCard.quantity * card.income }
+
+            if (redEarned > 0) {
+                val transfer = minOf(redEarned, finalCoins.getValue(activePlayerId))
+                if (transfer > 0) {
+                    finalCoins[activePlayerId] = finalCoins.getValue(activePlayerId) - transfer
+                    finalCoins[opponent.id] = finalCoins.getValue(opponent.id) + transfer
+                }
+            }
+        }
+    }
+
+    /**
+     * BLUE cards (ANY_TURN): all players receive income from the bank.
+     */
+    private fun processBlueCards(
+        players: List<PlayerModel>,
+        matchedCardsByPlayer: Map<Int, List<Pair<PlayerCardModel, CardModel>>>,
+        finalCoins: MutableMap<Int, Int>
+    ) {
+        players.forEach { player ->
+            val earned = matchedCardsByPlayer[player.id].orEmpty()
+                .filter { (_, card) -> card.color == CardColor.BLUE }
+                .sumOf { (playerCard, card) -> playerCard.quantity * card.income }
+
+            if (earned > 0) {
+                finalCoins[player.id] = finalCoins.getValue(player.id) + earned
+            }
+        }
+    }
+
+    /**
+     * GREEN cards (OWN_TURN): only the active player receives income from the bank.
+     */
+    private fun processGreenCards(
+        players: List<PlayerModel>,
+        activePlayerId: Int,
+        matchedCardsByPlayer: Map<Int, List<Pair<PlayerCardModel, CardModel>>>,
+        finalCoins: MutableMap<Int, Int>
+    ) {
+        val activePlayer = players.find { it.id == activePlayerId } ?: return
+        val earned = matchedCardsByPlayer[activePlayer.id].orEmpty()
+            .filter { (_, card) -> card.color == CardColor.GREEN }
+            .sumOf { (playerCard, card) -> playerCard.quantity * card.income }
+
+        if (earned > 0) {
+            finalCoins[activePlayerId] = finalCoins.getValue(activePlayerId) + earned
+        }
+    }
+
+    /**
+     * PURPLE cards (OWN_TURN): only the active player benefits.
+     * - BANK-sourced: active player receives income from the bank.
+     * - ALL_PLAYERS-sourced (e.g. Stadium): active player steals from each opponent,
+     *   capped at each opponent's actual balance to avoid creating coins.
+     */
+    private fun processPurpleCards(
+        players: List<PlayerModel>,
+        activePlayerId: Int,
+        matchedCardsByPlayer: Map<Int, List<Pair<PlayerCardModel, CardModel>>>,
+        finalCoins: MutableMap<Int, Int>
+    ) {
+        val activePlayer = players.find { it.id == activePlayerId } ?: return
+        val purpleCards = matchedCardsByPlayer[activePlayer.id].orEmpty()
+            .filter { (_, card) -> card.color == CardColor.PURPLE }
+
+        val bankEarned = purpleCards
+            .filter { (_, card) -> card.paymentSource != PaymentSource.ALL_PLAYERS }
+            .sumOf { (playerCard, card) -> playerCard.quantity * card.income }
+
+        if (bankEarned > 0) {
+            finalCoins[activePlayerId] = finalCoins.getValue(activePlayerId) + bankEarned
+        }
+
+        val coinsPerOpponent = purpleCards
+            .filter { (_, card) -> card.paymentSource == PaymentSource.ALL_PLAYERS }
+            .sumOf { (playerCard, card) -> playerCard.quantity * card.income }
+
+        if (coinsPerOpponent > 0) {
+            players.filter { it.id != activePlayerId }.forEach { opponent ->
+                val transfer = minOf(coinsPerOpponent, finalCoins.getValue(opponent.id))
+                if (transfer > 0) {
+                    finalCoins[opponent.id] = finalCoins.getValue(opponent.id) - transfer
+                    finalCoins[activePlayerId] = finalCoins.getValue(activePlayerId) + transfer
                 }
             }
         }
@@ -85,6 +166,7 @@ class EarningsServiceImpl(
      * This is the handoff point introduced for the buying-phase flow: earnings
      * are resolved first, and only then does the turn enter BUY_OR_BUILD.
      */
+    @Transactional
     override fun resolveEffects(gameId: Int) {
         val game = gameDao.findById(gameId)
             ?: throw GameNotFoundException("Game $gameId not found")

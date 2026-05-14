@@ -41,6 +41,13 @@ class GameMarketplaceDao {
     }
 
     /**
+     * Returns the marketplace for [gameId] as a cardType → remaining-quantity map,
+     * the shape that callers building [org.machikoro.server.dto.GameStateDto] need.
+     */
+    fun findByGameIdAsMap(gameId: Int): Map<CardType, Int> =
+        findByGameId(gameId).associate { it.cardType to it.quantityAvailable }
+
+    /**
      * Retrieves a specific card entry from marketplace for a game
      * Returns null if card is not present
      */

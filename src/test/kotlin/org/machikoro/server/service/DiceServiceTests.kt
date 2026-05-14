@@ -116,4 +116,38 @@ class DiceServiceTests {
         assert(result.total in 2..12)
         assertEquals(result.dice.sum(), result.total)
     }
+
+
+    @Test
+    fun rollDiceShouldSaveResultInGameState() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(defaultGame)
+
+        val request = RollDiceRequest(gameId = 1, playerId = 2)
+        val result = diceService.rollDice(request)
+
+        verify(gameDao).updateAfterRoll(1, result.total, TurnPhase.RESOLVE_EFFECTS)
+    }
+
+    @Test
+    fun rollDiceShouldAdvancePhaseToResolveEffects() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(defaultGame)
+
+        val request = RollDiceRequest(gameId = 1, playerId = 2)
+        val result = diceService.rollDice(request)
+
+        verify(gameDao).updateAfterRoll(any(), any(), org.mockito.kotlin.eq(TurnPhase.RESOLVE_EFFECTS))
+    }
+
+    @Test
+    fun rollDiceShouldNotSaveResultWhenWrongPhase() {
+        whenever(gameStateGuard.ensureGameIsRunning(1))
+            .thenReturn(defaultGame.copy(turnPhase = TurnPhase.BUY_OR_BUILD))
+
+        val request = RollDiceRequest(gameId = 1, playerId = 2)
+
+        assertThrows(CustomWebSocketException::class.java) {
+            diceService.rollDice(request)
+        }
+        verify(gameDao, never()).updateAfterRoll(any(), any(), any())
+    }
 }
