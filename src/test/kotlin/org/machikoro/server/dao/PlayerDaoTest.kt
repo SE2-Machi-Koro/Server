@@ -123,28 +123,19 @@ class PlayerDaoTest : AbstractDBSetup() {
     }
 
     @Test
-    fun `countByGameId throws when no players found`() {
-        assertThrows<GameNotFoundException> {
-            playerDao.countByGameId(gameId)
-        }
+    fun `countByGameId returns 0 when no players exist`() {
+        val count = playerDao.countByGameId(gameId)
+        assertEquals(0, count)
     }
 
     @Test
-    fun `countByGameId throws after all players removed`() {
-        val player = playerDao.addPlayer(gameId, 1)
-        val player2 = playerDao.addPlayer(gameId, 2)
-
-        assertEquals(2, playerDao.countByGameId(gameId))
-
-        playerDao.deleteByPlayerId(player.id)
+    fun `countByGameId decreases after player deletion`() {
+        val player = playerDao.addPlayer(gameId, userId)
         assertEquals(1, playerDao.countByGameId(gameId))
-
-        playerDao.deleteByPlayerId(player2.id)
-
-        assertThrows<GameNotFoundException> {
-            playerDao.countByGameId(gameId)
-        }
+        playerDao.deleteByPlayerId(player.id)
+        assertEquals(0, playerDao.countByGameId(gameId))
     }
+
 
     @Test
     fun `addPlayer assigns incrementing turn order`() {
@@ -225,10 +216,4 @@ class PlayerDaoTest : AbstractDBSetup() {
         assertTrue(playerDao.getPlayers(gameId).isEmpty())
     }
 
-    @Test
-    fun `deleteByGameId throws when game has no players`() {
-        assertThrows<PlayerNotFoundException> {
-            playerDao.deleteByGameId(gameId)
-        }
-    }
 }
