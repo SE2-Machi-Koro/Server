@@ -1,5 +1,7 @@
 package org.machikoro.server.controller
 
+import io.github.springwolf.core.asyncapi.annotations.AsyncListener
+import io.github.springwolf.core.asyncapi.annotations.AsyncOperation
 import org.machikoro.server.auth.requireUserPrincipal
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.ResolveEffectsRequest
@@ -28,6 +30,12 @@ class EarningsController(
      * Resolves card effects for all players and broadcasts the result to the game topic.
      */
     @MessageMapping("/game.resolveEffects")
+    @AsyncListener(
+        operation = AsyncOperation(
+            channelName = "/game.resolveEffects",
+            description = "Resolves card effects for all players after a dice roll."
+        )
+    )
     fun resolveEffects(@Payload request: ResolveEffectsRequest, headerAccessor: SimpMessageHeaderAccessor) {
         val user = headerAccessor.requireUserPrincipal()
         gameStateGuard.ensureSenderIsActivePlayer(request.gameId, user)
