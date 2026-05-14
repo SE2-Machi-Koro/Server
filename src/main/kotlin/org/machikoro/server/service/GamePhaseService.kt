@@ -84,14 +84,21 @@ class GamePhaseService(
     }
 
     /**
-     * Runs inside endTurn's transaction so game cleanup and status changes stay
+     * Runs as transaction so game cleanup stays
      * atomic when a landmark purchase produces a winner.
      */
-    private fun cleanupFinishedGameData(gameId: Int) {
+    @Transactional
+     fun cleanupFinishedGameData(gameId: Int) {
+        gameStateGuard.ensureGameIsFinished(gameId)
+
         gameMarketplaceDao.deleteAllForGame(gameId)
+
         playerDao.getPlayers(gameId).forEach {
             playerCardDao.deleteAllByPlayerId(it.id)
             playerLandmarkDao.deleteAllByPlayerId(it.id)
         }
+        playerDao.deleteByGameId(gameId)
+
+        gameDao.delete(gameId)
     }
 }
