@@ -39,6 +39,7 @@ import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor
@@ -88,6 +89,7 @@ class GameControllerTest {
         playerLandmarks = emptyMap(),
         marketplace = emptyMap(),
         turnOrder = listOf(1, 2),
+        activePlayerId = 1,
     )
 
     private fun headerWithSession(sessionId: String): SimpMessageHeaderAccessor {
@@ -109,7 +111,7 @@ class GameControllerTest {
         controller.startGame(StartGameRequest(gameId), headerWithSession(sessionId))
 
         val captor = argumentCaptor<WebSocketMessage>()
-        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+        verify(messagingTemplate, times(2)).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
 
         val message = captor.firstValue
         assertEquals(MessageType.GAME_STARTED, message.type)
@@ -170,7 +172,7 @@ class GameControllerTest {
     }
 
     @Test
-    fun `advancePhase broadcasts new phase and activeUserId as GAME_ACTION`() {
+    fun `advancePhase broadcasts new phase and activePlayerId as GAME_ACTION`() {
         val gameId = 42
         whenever(gamePhaseService.advancePhase(gameId)).thenReturn(TurnPhase.RESOLVE_EFFECTS)
         whenever(gameStateGuard.ensureGameIsRunning(gameId)).thenReturn(defaultGame.copy(id = gameId))
@@ -187,7 +189,7 @@ class GameControllerTest {
         @Suppress("UNCHECKED_CAST")
         val payload = message.payload as Map<String, Any?>
         assertEquals("RESOLVE_EFFECTS", payload["turnPhase"])
-        assertEquals(10, payload["activeUserId"])
+        assertEquals(10, payload["activePlayerId"])
     }
 
     @Test
@@ -220,7 +222,7 @@ class GameControllerTest {
     }
 
     @Test
-    fun `endTurn broadcasts resulting phase and activeUserId as GAME_ACTION`() {
+    fun `endTurn broadcasts resulting phase and activePlayerId as GAME_ACTION`() {
         val gameId = 42
         whenever(gamePhaseService.endTurn(gameId)).thenReturn(EndTurnOutcome.Continue(TurnPhase.ROLL_DICE))
         whenever(gameStateGuard.ensureGameIsRunning(gameId)).thenReturn(defaultGame.copy(id = gameId))
@@ -236,7 +238,7 @@ class GameControllerTest {
         @Suppress("UNCHECKED_CAST")
         val payload = message.payload as Map<String, Any?>
         assertEquals("ROLL_DICE", payload["turnPhase"])
-        assertEquals(10, payload["activeUserId"])
+        assertEquals(10, payload["activePlayerId"])
     }
 
     @Test
