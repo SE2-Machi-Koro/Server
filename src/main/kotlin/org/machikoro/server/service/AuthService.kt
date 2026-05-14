@@ -78,7 +78,7 @@ class AuthService(
         return LoginResponse(
             sessionToken = token,
             username = user.username,
-            userId = user.id, // NEU
+            userId = user.id,
         )
     }
 

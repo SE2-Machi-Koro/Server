@@ -42,9 +42,22 @@ class GameController(
 ) {
     private val logger = LoggerFactory.getLogger(GameController::class.java)
 
+    /**
+     * Handle the START_GAME signal from the lobby host.
+     *
+     * Message is sent to /app/game.start.
+     * On success, a GAME_STARTED event containing the full [GameStateDto] is
+     * broadcast to /topic/game/{gameId} so every subscriber transitions
+     * simultaneously to the game board.
+     *
+     * Authorization: the requesting user ID is derived from the STOMP session via
+     * [WebSocketConnectionTracker] — a client cannot bypass the host check by
+     * forging a user ID in the payload.
+     */
     @MessageMapping("/game.start")
     fun startGame(@Payload request: StartGameRequest, headerAccessor: SimpMessageHeaderAccessor) {
         val gameTopic = "/topic/game/${request.gameId}"
+
         val sessionId = headerAccessor.sessionId
         val requestingUserId = sessionId?.let { connectionTracker.getUserId(it) }
 
@@ -68,7 +81,12 @@ class GameController(
                 gameId = request.gameId,
                 requestingUserId = requestingUserId,
             )
-            logger.info("Game ${request.gameId} started — players=${gameState.players.size}, turnOrder=${gameState.turnOrder}")
+
+            logger.info(
+                "Game ${request.gameId} started — players=${gameState.players.size}, " +
+                        "turnOrder=${gameState.turnOrder}"
+            )
+
             messagingTemplate.convertAndSend(
                 gameTopic,
                 WebSocketMessage(
@@ -92,6 +110,12 @@ class GameController(
         }
     }
 
+    /**
+     * Advances the current turn phase for a game and broadcasts the resulting
+     * phase to all subscribers of the game topic.
+     *
+     * Message is sent to /app/game.advancePhase and broadcast to /topic/game/{gameId}.
+     */
     @MessageMapping("/game.advancePhase")
     fun advancePhase(@Payload request: AdvancePhaseRequest, headerAccessor: SimpMessageHeaderAccessor) {
         requireActivePlayer(request.gameId, headerAccessor)
@@ -100,6 +124,11 @@ class GameController(
         broadcastPhase(request.gameId, newPhase)
     }
 
+    /**
+     * Handles one buy/build action from the active player during BUY_OR_BUILD
+     * and broadcasts either the purchase result or the win event after a
+     * landmark completes the game.
+     */
     @MessageMapping("/game.purchase")
     fun purchase(@Payload request: PurchaseRequest, headerAccessor: SimpMessageHeaderAccessor) {
         requireActivePlayer(request.gameId, headerAccessor)
@@ -252,6 +281,12 @@ class GameController(
         )
     }
 
+    /**
+     * Resolve the authenticated user from the STOMP session and assert they
+     * are the active player for [gameId]. Throws `UNAUTHENTICATED` /
+     * `NOT_YOUR_TURN` / `NO_ACTIVE_PLAYER` / `GAME_FINISHED` per the helper
+     * and guard contracts.
+     */
     private fun requireActivePlayer(gameId: Int, headerAccessor: SimpMessageHeaderAccessor) {
         gameStateGuard.ensureSenderIsActivePlayer(gameId, headerAccessor.requireUserPrincipal())
     }
