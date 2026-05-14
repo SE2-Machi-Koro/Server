@@ -15,7 +15,6 @@ import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.dto.AdvancePhaseRequest
 import org.machikoro.server.dto.EndTurnRequest
 import org.machikoro.server.dto.GameStateDto
-import org.machikoro.server.dto.LeaveFinishedGameRequest
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.PurchaseRequest
 import org.machikoro.server.dto.PurchaseType
@@ -28,7 +27,6 @@ import org.machikoro.server.exception.NotHostException
 import org.machikoro.server.service.DiceService
 import org.machikoro.server.service.GamePhaseService
 import org.machikoro.server.service.GameStateGuard
-import org.machikoro.server.service.LeaveFinishedGameService
 import org.machikoro.server.service.LobbyService
 import org.machikoro.server.service.PurchaseResult
 import org.machikoro.server.service.PurchaseService
@@ -36,7 +34,6 @@ import org.machikoro.server.service.WebSocketConnectionTracker
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
-import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -49,7 +46,6 @@ class GameControllerTest {
 
     private val gamePhaseService = mock<GamePhaseService>()
     private val messagingTemplate = mock<SimpMessagingTemplate>()
-    private val leaveFinishedGameService = mock<LeaveFinishedGameService>()
     private val purchaseService = mock<PurchaseService>()
     private val diceService = mock<DiceService>()
     private val lobbyService = mock<LobbyService>()
@@ -57,7 +53,7 @@ class GameControllerTest {
     private val gameStateGuard = mock<GameStateGuard>()
     private val playerDao = mock<PlayerDao>()
     private val controller = GameController(
-        gamePhaseService, messagingTemplate, leaveFinishedGameService,
+        gamePhaseService, messagingTemplate,
         purchaseService, diceService, lobbyService, connectionTracker,
         gameStateGuard, playerDao,
     )
@@ -327,63 +323,6 @@ class GameControllerTest {
         verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }
 
-    // ── leaveFinishedGame ─────────────────────────────────────────────────────
-
-    @Test
-    fun `leaveFinishedGame calls service before broadcasting`() {
-        val gameId = 1
-        val playerId = 10
-        controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId), authedAccessor())
-        val order = inOrder(gameStateGuard, leaveFinishedGameService, messagingTemplate)
-        order.verify(gameStateGuard).ensureSenderOwnsPlayer(gameId, playerId, alice)
-        order.verify(leaveFinishedGameService).leaveFinishedGame(gameId, playerId)
-        order.verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), any<WebSocketMessage>())
-    }
-
-    @Test
-    fun `leaveFinishedGame gets exception from service`() {
-        val gameId = 1
-        val playerId = 10
-        whenever(leaveFinishedGameService.leaveFinishedGame(gameId, playerId)).thenThrow(RuntimeException("boom"))
-        org.junit.jupiter.api.assertThrows<RuntimeException> {
-            controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId), authedAccessor())
-        }
-    }
-
-    @Test
-    fun `leaveFinishedGame sends message to correct topic`() {
-        val gameId = 5
-        val playerId = 20
-        controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId), authedAccessor())
-        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), any<WebSocketMessage>())
-    }
-
-    @Test
-    fun `leaveFinishedGame payload contains correct playerId and type`() {
-        val gameId = 3
-        val playerId = 99
-        controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId), authedAccessor())
-        val captor = argumentCaptor<WebSocketMessage>()
-        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
-        val message = captor.firstValue
-        assertEquals(MessageType.PLAYER_LEFT_FINISHED_GAME, message.type)
-        assertEquals(mapOf("playerId" to playerId), message.payload)
-    }
-
-    @Test
-    fun `leaveFinishedGame propagates NOT_YOUR_PLAYER and does not call service`() {
-        val gameId = 3
-        val playerId = 99
-        whenever(gameStateGuard.ensureSenderOwnsPlayer(gameId, playerId, alice))
-            .thenThrow(CustomWebSocketException("NOT_YOUR_PLAYER", "You do not own player 99"))
-        val ex = assertThrows<CustomWebSocketException> {
-            controller.leaveFinishedGame(LeaveFinishedGameRequest(gameId, playerId), authedAccessor())
-        }
-        assertEquals("NOT_YOUR_PLAYER", ex.errorCode)
-        verify(leaveFinishedGameService, never()).leaveFinishedGame(any(), any())
-        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
-    }
-
     // ── rollDice ──────────────────────────────────────────────────────────────
 
     @Test
@@ -480,9 +419,4 @@ class GameControllerTest {
         verify(diceService, never()).rollDice(any())
     }
 
-    @Test
-    fun `leaveFinishedGame throws UNAUTHENTICATED when accessor has no principal`() {
-        assertUnauthenticated { controller.leaveFinishedGame(LeaveFinishedGameRequest(42, 99), it) }
-        verify(leaveFinishedGameService, never()).leaveFinishedGame(any(), any())
-    }
 }
