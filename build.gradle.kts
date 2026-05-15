@@ -15,7 +15,7 @@ val springdocVersion = "3.0.2"
 val dotenvVersion = "5.2.2"
 val mockitoKotlinVersion = "5.2.1"
 val exposedVersion = "1.0.0"
-val testcontainersVersion = "1.20.4"
+val testcontainersVersion = "2.0.3"
 
 
 java {
