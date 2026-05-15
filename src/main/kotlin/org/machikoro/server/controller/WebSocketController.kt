@@ -1,5 +1,7 @@
 package org.machikoro.server.controller
 
+import io.github.springwolf.core.asyncapi.annotations.AsyncListener
+import io.github.springwolf.core.asyncapi.annotations.AsyncOperation
 import io.micrometer.core.instrument.Metrics
 import io.micrometer.core.instrument.Timer
 import org.machikoro.server.auth.userPrincipal
@@ -42,6 +44,11 @@ class WebSocketController(
      */
     @MessageMapping("/chat.send")
     @SendTo("/topic/public")
+    @AsyncListener(operation = AsyncOperation(
+        channelName = "/chat.send",
+        description = "Broadcasts a chat message to all subscribers of /topic/public.",
+        payloadType = WebSocketMessage::class,
+    ))
     fun sendMessage(@Payload message: WebSocketMessage): WebSocketMessage {
         logger.info("Message received from ${message.sender}: ${message.content}")
         return message
@@ -59,6 +66,11 @@ class WebSocketController(
      */
     @MessageMapping("/chat.addUser")
     @SendTo("/topic/public")
+    @AsyncListener(operation = AsyncOperation(
+        channelName = "/chat.addUser",
+        description = "Registers a user session and broadcasts the join event to /topic/public. Triggers a game-state sync if the user has an active in-progress game.",
+        payloadType = WebSocketMessage::class,
+    ))
     fun addUser(
         @Payload message: WebSocketMessage,
         headerAccessor: SimpMessageHeaderAccessor,
@@ -124,6 +136,11 @@ class WebSocketController(
      * against the server-side player membership before the snapshot is emitted.
      */
     @MessageMapping("/game.sync")
+    @AsyncListener(operation = AsyncOperation(
+        channelName = "/game.sync",
+        description = "Explicit reconnect sync — delivers a full game-state snapshot to the requesting user's private queue.",
+        payloadType = SyncGameRequest::class,
+    ))
     fun syncGameState(
         @Payload request: SyncGameRequest,
         headerAccessor: SimpMessageHeaderAccessor,

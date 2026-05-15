@@ -8,12 +8,15 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.assertThrows
+import org.machikoro.server.dao.CardDao
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.GameMarketplaceDao
 import org.machikoro.server.dao.PlayerCardDao
+import org.machikoro.server.dao.LandmarkDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.database.AbstractDBSetup
+import org.machikoro.server.database.CardActivationNumbers
 import org.machikoro.server.database.Cards
 import org.machikoro.server.database.GameMarketplace
 import org.machikoro.server.database.Games
@@ -56,6 +59,10 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
 
     @Autowired
     private lateinit var initializationService: InitializationService
+    private lateinit var cardDao: CardDao
+
+    @Autowired
+    private lateinit var landmarkDao: LandmarkDao
 
     private var gameId: Int = 0
     private var firstPlayerId: Int = 0
@@ -69,18 +76,28 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
             GameMarketplace.deleteAll()
             Games.deleteAll()
             Users.deleteAll()
+            CardActivationNumbers.deleteAll()
             Landmarks.deleteAll()
             Cards.deleteAll()
         }
 
         val userIds = transaction {
-            Cards.insertIgnore {
+            val bakeryId = Cards.insertIgnore {
                 it[cardType] = CardType.BAKERY
                 it[cost] = 1
                 it[income] = 1
                 it[color] = CardColor.GREEN
                 it[establishmentType] = EstablishmentType.BREAD
                 it[paymentSource] = PaymentSource.BANK
+            } get Cards.id
+
+            CardActivationNumbers.insertIgnore {
+                it[cardId] = bakeryId
+                it[number] = 2
+            }
+            CardActivationNumbers.insertIgnore {
+                it[cardId] = bakeryId
+                it[number] = 3
             }
             Cards.insertIgnore {
                 it[cardType] = CardType.WHEAT_FIELD
@@ -132,6 +149,12 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
         // in the Cards table by setup(), so initForGame skips the other types
         // (cardId lookup misses) and only BAKERY shows up at the default supply.
         assertEquals(6, result.marketplace[CardType.BAKERY])
+        val bakeryDefinition = result.cardDefinitions.single { it.cardType == CardType.BAKERY }
+        assertEquals(1, bakeryDefinition.cost)
+        assertEquals(CardColor.GREEN, bakeryDefinition.color)
+        assertEquals(listOf(2, 3), bakeryDefinition.activationNumbers.sorted())
+        val landmarkDefinition = result.landmarkDefinitions.single { it.landmarkType == LandmarkType.TRAIN_STATION }
+        assertEquals(4, landmarkDefinition.cost)
     }
 
     @Test
@@ -211,7 +234,10 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
             playerDao,
             gameMarketplaceDao,
             playerLandmarkDao,
-            failingInitService
+            failingInitService,
+            failingLandmarkDao,
+            cardDao,
+            landmarkDao
         )
 
         assertThrows<RuntimeException> {

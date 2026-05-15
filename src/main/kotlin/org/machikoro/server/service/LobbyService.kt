@@ -1,14 +1,17 @@
 package org.machikoro.server.service
 
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.machikoro.server.dao.CardDao
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.GameMarketplaceDao
+import org.machikoro.server.dao.LandmarkDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.dto.GameStateDto
+import org.machikoro.server.dto.toDefinitionDto
 import org.machikoro.server.exception.GameFinishedException
 import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.exception.GameStartedException
@@ -22,7 +25,9 @@ open class LobbyService(
     private val playerDao: PlayerDao,
     private val gameMarketplaceDao: GameMarketplaceDao,
     private val playerLandmarkDao: PlayerLandmarkDao,
-    private val initializationService: InitializationService
+    private val initializationService: InitializationService,
+    private val cardDao: CardDao,
+    private val landmarkDao: LandmarkDao,
 ) {
 
     private val lobbyLocks = mutableMapOf<Int, Any>()
@@ -177,6 +182,8 @@ open class LobbyService(
                 // full supply, so the client can render the buyable card grid on the
                 // first GAME_STARTED frame.
                 val marketplace = gameMarketplaceDao.findByGameIdAsMap(gameId)
+                val cardDefinitions = cardDao.findAll().map { it.toDefinitionDto() }
+                val landmarkDefinitions = landmarkDao.findAll().map { it.toDefinitionDto() }
 
                 GameStateDto(
                     game = updatedGame,
@@ -184,6 +191,8 @@ open class LobbyService(
                     playerCards = emptyMap(),
                     playerLandmarks = playerLandmarks,
                     marketplace = marketplace,
+                    cardDefinitions = cardDefinitions,
+                    landmarkDefinitions = landmarkDefinitions,
                     turnOrder = shuffled.map { it.id },
                     activePlayerId = shuffled.firstOrNull()?.userId,
                 )

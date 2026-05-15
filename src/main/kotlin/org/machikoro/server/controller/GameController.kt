@@ -15,12 +15,15 @@ import org.machikoro.server.dto.StartGameRequest
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.service.DiceService
 import org.machikoro.server.service.GamePhaseService
+import org.machikoro.server.service.GameSyncService
 import org.machikoro.server.service.GameStateGuard
 import org.machikoro.server.service.LeaveFinishedGameService
 import org.machikoro.server.service.LobbyService
 import org.machikoro.server.service.PurchaseResult
 import org.machikoro.server.service.PurchaseService
 import org.machikoro.server.service.WebSocketConnectionTracker
+import io.github.springwolf.core.asyncapi.annotations.AsyncListener
+import io.github.springwolf.core.asyncapi.annotations.AsyncOperation
 import org.slf4j.LoggerFactory
 import org.springframework.messaging.handler.annotation.MessageMapping
 import org.springframework.messaging.handler.annotation.Payload
@@ -39,6 +42,7 @@ class GameController(
     private val connectionTracker: WebSocketConnectionTracker,
     private val gameStateGuard: GameStateGuard,
     private val playerDao: PlayerDao,
+    private val gameSyncService: GameSyncService,
 ) {
     private val logger = LoggerFactory.getLogger(GameController::class.java)
 
@@ -55,6 +59,11 @@ class GameController(
      * forging a user ID in the payload.
      */
     @MessageMapping("/game.start")
+    @AsyncListener(operation = AsyncOperation(
+        channelName = "/game.start",
+        description = "Starts the game. Must be sent by the lobby host.",
+        payloadType = StartGameRequest::class,
+    ))
     fun startGame(@Payload request: StartGameRequest, headerAccessor: SimpMessageHeaderAccessor) {
         val gameTopic = "/topic/game/${request.gameId}"
 
@@ -132,6 +141,11 @@ class GameController(
      * Message is sent to /app/game.advancePhase and broadcast to /topic/game/{gameId}.
      */
     @MessageMapping("/game.advancePhase")
+    @AsyncListener(operation = AsyncOperation(
+        channelName = "/game.advancePhase",
+        description = "Advances the current turn phase. Must be sent by the active player.",
+        payloadType = AdvancePhaseRequest::class,
+    ))
     fun advancePhase(@Payload request: AdvancePhaseRequest, headerAccessor: SimpMessageHeaderAccessor) {
         requireActivePlayer(request.gameId, headerAccessor)
         val newPhase = gamePhaseService.advancePhase(request.gameId)
@@ -145,6 +159,11 @@ class GameController(
      * landmark completes the game.
      */
     @MessageMapping("/game.purchase")
+    @AsyncListener(operation = AsyncOperation(
+        channelName = "/game.purchase",
+        description = "Buys an establishment or builds a landmark during BUY_OR_BUILD phase. Must be sent by the active player.",
+        payloadType = PurchaseRequest::class,
+    ))
     fun purchase(@Payload request: PurchaseRequest, headerAccessor: SimpMessageHeaderAccessor) {
         requireActivePlayer(request.gameId, headerAccessor)
         val result = purchaseService.purchase(
@@ -164,6 +183,11 @@ class GameController(
      * Message is sent to /app/game.endTurn and broadcast to /topic/game/{gameId}.
      */
     @MessageMapping("/game.endTurn")
+    @AsyncListener(operation = AsyncOperation(
+        channelName = "/game.endTurn",
+        description = "Ends the active player's turn. Broadcasts next phase or game-won event.",
+        payloadType = EndTurnRequest::class,
+    ))
     fun endTurn(@Payload request: EndTurnRequest, headerAccessor: SimpMessageHeaderAccessor) {
         requireActivePlayer(request.gameId, headerAccessor)
         when (val result = gamePhaseService.endTurn(request.gameId)) {
@@ -184,6 +208,11 @@ class GameController(
      * Message is sent to /app/game.leave and broadcast to /topic/game/{gameId}.
      */
     @MessageMapping("/game.leave")
+    @AsyncListener(operation = AsyncOperation(
+        channelName = "/game.leave",
+        description = "Removes a player from a finished game.",
+        payloadType = LeaveFinishedGameRequest::class,
+    ))
     fun leaveFinishedGame(@Payload request: LeaveFinishedGameRequest, headerAccessor: SimpMessageHeaderAccessor) {
         requireOwnerOfPlayer(request.gameId, request.playerId, headerAccessor)
         leaveFinishedGameService.leaveFinishedGame(request.gameId, request.playerId)
@@ -199,6 +228,11 @@ class GameController(
      * a server-side timestamp so all clients see the same result simultaneously.
      */
     @MessageMapping("/game.rollDice")
+    @AsyncListener(operation = AsyncOperation(
+        channelName = "/game.rollDice",
+        description = "Rolls dice for the active player and broadcasts the result to the game topic.",
+        payloadType = RollDiceRequest::class,
+    ))
     fun rollDice(@Payload request: RollDiceRequest, headerAccessor: SimpMessageHeaderAccessor) {
         requireActivePlayer(request.gameId, headerAccessor)
         val gameTopic = "/topic/game/${request.gameId}"
@@ -256,8 +290,10 @@ class GameController(
 
     private fun broadcastPurchase(gameId: Int, result: PurchaseResult) {
         val payload = linkedMapOf<String, Any?>(
+            "event" to "PURCHASE_COMPLETED",
             "turnPhase" to result.turnPhase.name,
             "purchaseType" to result.purchaseType.name,
+            "state" to gameSyncService.buildSnapshot(gameId),
         )
         result.cardType?.let { payload["cardType"] = it.name }
         result.landmarkType?.let { payload["landmarkType"] = it.name }
