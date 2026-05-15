@@ -94,8 +94,20 @@ class LobbyWebSocketController(
 
         logger.info("User '{}' requested to join lobby '{}'", principal.username, lobbyCode)
 
-        val player = lobbyService.joinLobby(lobbyCode, principal.userId)
+        val player = try {
+            lobbyService.joinLobby(lobbyCode, principal.userId)
+        } catch (ex: Exception) {
+            logger.warn("Failed to join lobby '{}': {}", lobbyCode, ex.message)
 
+            return WebSocketMessage(
+                type = MessageType.ERROR,
+                sender = "SERVER",
+                content = "Lobby code is invalid",
+                payload = mapOf(
+                    "errorCode" to "INVALID_LOBBY_CODE"
+                )
+            )
+        }
         return WebSocketMessage(
             type = MessageType.LOBBY_JOINED,
             sender = "SERVER",
