@@ -14,6 +14,7 @@ import org.machikoro.server.dto.StartGameRequest
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.service.DiceService
 import org.machikoro.server.service.GamePhaseService
+import org.machikoro.server.service.GameSyncService
 import org.machikoro.server.service.GameStateGuard
 import org.machikoro.server.service.LobbyService
 import org.machikoro.server.service.PurchaseResult
@@ -36,6 +37,7 @@ class GameController(
     private val connectionTracker: WebSocketConnectionTracker,
     private val gameStateGuard: GameStateGuard,
     private val playerDao: PlayerDao,
+    private val gameSyncService: GameSyncService,
 ) {
     private val logger = LoggerFactory.getLogger(GameController::class.java)
 
@@ -241,8 +243,10 @@ class GameController(
 
     private fun broadcastPurchase(gameId: Int, result: PurchaseResult) {
         val payload = linkedMapOf<String, Any?>(
+            "event" to "PURCHASE_COMPLETED",
             "turnPhase" to result.turnPhase.name,
             "purchaseType" to result.purchaseType.name,
+            "state" to gameSyncService.buildSnapshot(gameId),
         )
         result.cardType?.let { payload["cardType"] = it.name }
         result.landmarkType?.let { payload["landmarkType"] = it.name }

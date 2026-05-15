@@ -26,6 +26,7 @@ import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.exception.NotHostException
 import org.machikoro.server.service.DiceService
 import org.machikoro.server.service.GamePhaseService
+import org.machikoro.server.service.GameSyncService
 import org.machikoro.server.service.GameStateGuard
 import org.machikoro.server.service.LobbyService
 import org.machikoro.server.service.PurchaseResult
@@ -52,10 +53,11 @@ class GameControllerTest {
     private val connectionTracker = mock<WebSocketConnectionTracker>()
     private val gameStateGuard = mock<GameStateGuard>()
     private val playerDao = mock<PlayerDao>()
+    private val gameSyncService = mock<GameSyncService>()
     private val controller = GameController(
         gamePhaseService, messagingTemplate,
         purchaseService, diceService, lobbyService, connectionTracker,
-        gameStateGuard, playerDao,
+        gameStateGuard, playerDao, gameSyncService,
     )
 
     private val alice = UserPrincipal(userId = 1, username = "alice")
@@ -281,8 +283,10 @@ class GameControllerTest {
     @Test
     fun `purchase delegates to service with the requested payload`() {
         val gameId = 42
+        val snapshot = gameStateDto(gameId)
         whenever(purchaseService.purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.BAKERY, null))
             .thenReturn(PurchaseResult(turnPhase = TurnPhase.BUY_OR_BUILD, purchaseType = PurchaseType.ESTABLISHMENT, cardType = CardType.BAKERY))
+        whenever(gameSyncService.buildSnapshot(gameId)).thenReturn(snapshot)
 
         controller.purchase(PurchaseRequest(gameId, PurchaseType.ESTABLISHMENT, cardType = CardType.BAKERY), authedAccessor())
 
@@ -293,8 +297,10 @@ class GameControllerTest {
     @Test
     fun `purchase broadcasts resulting purchase payload as GAME_ACTION on game topic`() {
         val gameId = 42
+        val snapshot = gameStateDto(gameId)
         whenever(purchaseService.purchase(gameId, PurchaseType.LANDMARK, null, LandmarkType.TRAIN_STATION))
             .thenReturn(PurchaseResult(turnPhase = TurnPhase.BUY_OR_BUILD, purchaseType = PurchaseType.LANDMARK, landmarkType = LandmarkType.TRAIN_STATION))
+        whenever(gameSyncService.buildSnapshot(gameId)).thenReturn(snapshot)
 
         controller.purchase(PurchaseRequest(gameId, PurchaseType.LANDMARK, landmarkType = LandmarkType.TRAIN_STATION), authedAccessor())
 
@@ -305,9 +311,11 @@ class GameControllerTest {
         assertEquals(MessageType.GAME_ACTION, message.type)
         @Suppress("UNCHECKED_CAST")
         val payload = message.payload as Map<String, Any?>
+        assertEquals("PURCHASE_COMPLETED", payload["event"])
         assertEquals("BUY_OR_BUILD", payload["turnPhase"])
         assertEquals("LANDMARK", payload["purchaseType"])
         assertEquals("TRAIN_STATION", payload["landmarkType"])
+        assertEquals(snapshot, payload["state"])
     }
 
     @Test

@@ -311,6 +311,31 @@ class PurchaseServiceIntegrationTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `purchase fails when card is unavailable in marketplace`() {
+        gameMarketplaceDao.updateQuantity(gameId, CardType.BAKERY, 0)
+        val before = snapshot()
+
+        val ex = assertThrows<CustomWebSocketException> {
+            purchaseService.purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.BAKERY, null)
+        }
+
+        assertEquals("CARD_UNAVAILABLE", ex.errorCode)
+        assertEquals(before, snapshot())
+    }
+
+    @Test
+    fun `purchase fails when landmark does not exist`() {
+        val before = snapshot()
+
+        val ex = assertThrows<CustomWebSocketException> {
+            purchaseService.purchase(gameId, PurchaseType.LANDMARK, null, LandmarkType.RADIO_TOWER)
+        }
+
+        assertEquals("LANDMARK_NOT_FOUND", ex.errorCode)
+        assertEquals(before, snapshot())
+    }
+
+    @Test
     fun `purchase fails when active player cannot be resolved`() {
         transaction {
             Games.update({ Games.id eq gameId }) { it[currentTurnIndex] = 99 }
