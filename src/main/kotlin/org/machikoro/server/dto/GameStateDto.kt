@@ -18,6 +18,7 @@ import org.machikoro.server.domain.models.PlayerModel
  * @property marketplace      Map of [CardType] → remaining quantity in the game's marketplace supply.
  * @property turnOrder        Ordered list of **player IDs** representing the randomized turn order
  *                            (index 0 goes first).
+ * @property activePlayerId   userId of the player whose turn it is at the time of the snapshot.
  */
 @Schema(description = "Full game state broadcast on game start and returned by /app/game.sync on reconnect")
 data class GameStateDto(
@@ -38,5 +39,7 @@ data class GameStateDto(
 
     @Schema(description = "Randomized turn order as a list of player IDs")
     val turnOrder: List<Int>,
-)
 
+    @Schema(description = "userId of the player whose turn it is (matches the userId the client received at login)")
+    val activePlayerId: Int? = null,
+)
