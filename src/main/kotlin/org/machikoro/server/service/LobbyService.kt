@@ -22,6 +22,7 @@ open class LobbyService(
     private val playerDao: PlayerDao,
     private val gameMarketplaceDao: GameMarketplaceDao,
     private val playerLandmarkDao: PlayerLandmarkDao,
+    private val initializationService: InitializationService
 ) {
 
     private val lobbyLocks = mutableMapOf<Int, Any>()
@@ -160,20 +161,8 @@ open class LobbyService(
                     throw NotHostException("User $requestingUserId is not the host of game $gameId")
                 }
 
-                val players = playerDao.getPlayers(gameId)
-                val shuffled = players.shuffled()
-
-                // Two-pass update to avoid unique (gameId, turnOrder) constraint violations
-                // while reassigning turn orders.
-                shuffled.forEachIndexed { index, player ->
-                    playerDao.updateTurnOrder(player.id, index + TEMP_TURN_ORDER_OFFSET)
-                }
-                shuffled.forEachIndexed { index, player ->
-                    playerDao.updateTurnOrder(player.id, index)
-                }
-
-                gameMarketplaceDao.initForGame(gameId)
-                shuffled.forEach { player -> playerLandmarkDao.initForPlayer(player.id) }
+                //Uses Initialization Service to handle all resource initialization
+                val shuffled = initializationService.initializeGame(gameId)
 
                 gameDao.updateStatus(gameId, GameStatus.IN_PROGRESS)
                 val updatedGame = gameDao.findById(gameId)!!
