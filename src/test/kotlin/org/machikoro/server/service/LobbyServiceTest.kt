@@ -16,6 +16,7 @@ import org.machikoro.server.exception.GameFinishedException
 import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.exception.LobbyFullException
+import org.machikoro.server.exception.NotHostException
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -35,11 +36,12 @@ class LobbyServiceTest {
     private val playerDao = mock<PlayerDao>()
     private val gameMarketplaceDao = mock<GameMarketplaceDao>()
     private val playerLandmarkDao = mock<PlayerLandmarkDao>()
+    private val initializationService = mock<InitializationService>()
 
     // Anonymous subclass that bypasses the real Exposed transaction so this
     // unit test doesn't need a database. Methods that don't call
     // runInTransaction (e.g. addUserToLobby) are unaffected.
-    private val lobbyService = object : LobbyService(gameDao, playerDao, gameMarketplaceDao, playerLandmarkDao) {
+    private val lobbyService = object : LobbyService(gameDao, playerDao, gameMarketplaceDao, playerLandmarkDao, initializationService) {
         override fun <T> runInTransaction(block: () -> T): T = block()
     }
 
@@ -228,5 +230,42 @@ class LobbyServiceTest {
         }
 
         verify(gameDao).findByLobbyCode(lobbyCode)
+    }
+
+    @Test
+    fun `startGame delegates resource initialization to InitializationService`() {
+        val gameId = 1
+        val players = listOf(
+            player(1),
+            player(2),
+        )
+        val updatedGame = game(gameId, GameStatus.IN_PROGRESS)
+
+        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING))
+        whenever(initializationService.initializeGame(gameId)).thenReturn(players)
+        whenever(gameDao.findById(gameId)).thenReturn(updatedGame)
+        whenever(playerLandmarkDao.findByPlayerId(1)).thenReturn(emptyList())
+        whenever(playerLandmarkDao.findByPlayerId(2)).thenReturn(emptyList())
+        whenever(gameMarketplaceDao.findByGameIdAsMap(gameId)).thenReturn(emptyMap())
+
+        val result = lobbyService.startGame(gameId)
+
+        verify(initializationService).initializeGame(gameId)
+        assertEquals(GameStatus.IN_PROGRESS, result.game.status)
+    }
+
+    @Test
+    fun `startGame throws NotHostException when requesting user is not the host`() {
+        val gameId = 1
+        val hostUserId = 1
+        val requestingUserId = 999
+
+        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING).copy(hostUserId = hostUserId))
+
+        assertThrows<NotHostException> {
+            lobbyService.startGame(gameId, requestingUserId)
+        }
+
+        verify(initializationService, never()).initializeGame(any())
     }
 }

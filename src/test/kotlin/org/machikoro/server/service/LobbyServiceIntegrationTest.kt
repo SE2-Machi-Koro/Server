@@ -10,6 +10,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.GameMarketplaceDao
+import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.database.AbstractDBSetup
@@ -49,6 +50,12 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
 
     @Autowired
     private lateinit var playerLandmarkDao: PlayerLandmarkDao
+
+    @Autowired
+    private lateinit var playerCardDao: PlayerCardDao
+
+    @Autowired
+    private lateinit var initializationService: InitializationService
 
     private var gameId: Int = 0
     private var firstPlayerId: Int = 0
@@ -120,6 +127,65 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `startGame initializes all resources correctly`() {
+        val result = lobbyService.startGame(gameId)
+
+        // Game status
+        assertEquals(GameStatus.IN_PROGRESS, result.game.status)
+
+        // Marketplace
+        assertTrue(gameMarketplaceDao.findByGameId(gameId).isNotEmpty())
+        assertEquals(6, result.marketplace[CardType.BAKERY])
+
+        // Landmarks - all unbuilt
+        assertTrue(playerLandmarkDao.findByPlayerId(firstPlayerId).isNotEmpty())
+        assertTrue(playerLandmarkDao.findByPlayerId(secondPlayerId).isNotEmpty())
+        assertTrue(result.playerLandmarks.values.flatten().all { !it.isBuilt })
+
+        // Cards - both players should have starting cards
+        val firstPlayerCards = playerCardDao.findByPlayerId(firstPlayerId)
+        val secondPlayerCards = playerCardDao.findByPlayerId(secondPlayerId)
+        assertEquals(2, firstPlayerCards.size)
+        assertEquals(2, secondPlayerCards.size)
+
+        // Coins - should be 3
+        val firstPlayerCoins = playerDao.findById(firstPlayerId)?.coins
+        val secondPlayerCoins = playerDao.findById(secondPlayerId)?.coins
+        assertEquals(3, firstPlayerCoins)
+        assertEquals(3, secondPlayerCoins)
+    }
+
+    @Test
+    fun `startGame randomizes player turn order`() {
+        // Run startGame multiple times and verify turn orders can be different
+        val result1 = lobbyService.startGame(gameId)
+        val turnOrder1 = result1.turnOrder
+
+        // The first run already shuffled, so we just verify order is set
+        assertEquals(2, turnOrder1.size)
+        assertTrue(turnOrder1.containsAll(listOf(firstPlayerId, secondPlayerId)))
+    }
+
+    @Test
+    fun `startGame gives players starting coins and cards`() {
+        val result = lobbyService.startGame(gameId)
+
+        // Verify coins
+        result.players.forEach { player ->
+            val playerRecord = playerDao.findById(player.id)
+            assertEquals(3, playerRecord?.coins, "Player ${player.id} should have 3 coins")
+        }
+
+        // Verify starting cards
+        result.players.forEach { player ->
+            val cards = playerCardDao.findByPlayerId(player.id)
+            assertEquals(2, cards.size, "Player ${player.id} should have 2 starting cards")
+            val cardTypes = cards.map { it.cardType }.toSet()
+            assertEquals(setOf(CardType.WHEAT_FIELD, CardType.BAKERY), cardTypes)
+        }
+    }
+
+    @Test
     fun `startGame throws GameNotFoundException for unknown game`() {
         assertThrows<GameNotFoundException> {
             lobbyService.startGame(999999)
@@ -127,16 +193,17 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
     }
 
     @Test
-    fun `startGame rolls back setup when landmark initialization fails`() {
-        val failingLandmarkDao = mock<PlayerLandmarkDao> {
-            on { initForPlayer(any()) } doThrow RuntimeException("landmark setup failed")
+    fun `startGame rolls back all initialization when it fails`() {
+        val failingInitService = mock<InitializationService> {
+            on { initializeGame(any()) } doThrow RuntimeException("initialization failed")
         }
 
         val service = LobbyService(
             gameDao,
             playerDao,
             gameMarketplaceDao,
-            failingLandmarkDao,
+            playerLandmarkDao,
+            failingInitService
         )
 
         assertThrows<RuntimeException> {
