@@ -59,6 +59,8 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
 
     @Autowired
     private lateinit var initializationService: InitializationService
+
+    @Autowired
     private lateinit var cardDao: CardDao
 
     @Autowired
@@ -173,11 +175,17 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
         assertTrue(playerLandmarkDao.findByPlayerId(secondPlayerId).isNotEmpty())
         assertTrue(result.playerLandmarks.values.flatten().all { !it.isBuilt })
 
-        // Cards - both players should have starting cards
+        // Cards — snapshot must carry starting cards so the client can render immediately.
         val firstPlayerCards = playerCardDao.findByPlayerId(firstPlayerId)
         val secondPlayerCards = playerCardDao.findByPlayerId(secondPlayerId)
         assertEquals(2, firstPlayerCards.size)
         assertEquals(2, secondPlayerCards.size)
+        assertEquals(2, result.playerCards[firstPlayerId]?.size)
+        assertEquals(2, result.playerCards[secondPlayerId]?.size)
+        assertEquals(
+            setOf(CardType.WHEAT_FIELD, CardType.BAKERY),
+            result.playerCards[firstPlayerId]?.map { it.cardType }?.toSet(),
+        )
 
         // Coins - should be 3
         val firstPlayerCoins = playerDao.findById(firstPlayerId)?.coins
@@ -207,12 +215,15 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
             assertEquals(3, playerRecord?.coins, "Player ${player.id} should have 3 coins")
         }
 
-        // Verify starting cards
+        // Verify starting cards in DB and in the GameStateDto snapshot.
         result.players.forEach { player ->
             val cards = playerCardDao.findByPlayerId(player.id)
             assertEquals(2, cards.size, "Player ${player.id} should have 2 starting cards")
             val cardTypes = cards.map { it.cardType }.toSet()
             assertEquals(setOf(CardType.WHEAT_FIELD, CardType.BAKERY), cardTypes)
+            // Snapshot must include cards for each player — assert by cardType, not index.
+            val snapshotCardTypes = result.playerCards[player.id]?.map { it.cardType }?.toSet()
+            assertEquals(setOf(CardType.WHEAT_FIELD, CardType.BAKERY), snapshotCardTypes)
         }
     }
 
@@ -235,9 +246,9 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
             gameMarketplaceDao,
             playerLandmarkDao,
             failingInitService,
-            failingLandmarkDao,
+            playerCardDao,
             cardDao,
-            landmarkDao
+            landmarkDao,
         )
 
         assertThrows<RuntimeException> {

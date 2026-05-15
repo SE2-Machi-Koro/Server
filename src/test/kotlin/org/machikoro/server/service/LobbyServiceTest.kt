@@ -9,8 +9,11 @@ import org.machikoro.server.dao.CardDao
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.GameMarketplaceDao
 import org.machikoro.server.dao.LandmarkDao
+import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
+import org.machikoro.server.domain.enums.CardType
+import org.machikoro.server.domain.models.PlayerCardModel
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
@@ -39,6 +42,7 @@ class LobbyServiceTest {
     private val gameMarketplaceDao = mock<GameMarketplaceDao>()
     private val playerLandmarkDao = mock<PlayerLandmarkDao>()
     private val initializationService = mock<InitializationService>()
+    private val playerCardDao = mock<PlayerCardDao>()
     private val cardDao = mock<CardDao>()
     private val landmarkDao = mock<LandmarkDao>()
 
@@ -50,9 +54,10 @@ class LobbyServiceTest {
         playerDao,
         gameMarketplaceDao,
         playerLandmarkDao,
+        initializationService,
+        playerCardDao,
         cardDao,
         landmarkDao,
-        initializationService
     ) {
         override fun <T> runInTransaction(block: () -> T): T = block()
     }
@@ -247,15 +252,22 @@ class LobbyServiceTest {
     @Test
     fun `startGame delegates resource initialization to InitializationService`() {
         val gameId = 1
-        val players = listOf(
-            player(1),
-            player(2),
-        )
+        val players = listOf(player(1), player(2))
         val updatedGame = game(gameId, GameStatus.IN_PROGRESS)
+        // Simulate each player starting with WHEAT_FIELD and BAKERY.
+        val p1Cards = listOf(
+            PlayerCardModel(playerId = 1, cardType = CardType.WHEAT_FIELD, quantity = 1),
+            PlayerCardModel(playerId = 1, cardType = CardType.BAKERY, quantity = 1),
+        )
+        val p2Cards = listOf(
+            PlayerCardModel(playerId = 2, cardType = CardType.WHEAT_FIELD, quantity = 1),
+            PlayerCardModel(playerId = 2, cardType = CardType.BAKERY, quantity = 1),
+        )
 
         whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING))
         whenever(initializationService.initializeGame(gameId)).thenReturn(players)
         whenever(gameDao.findById(gameId)).thenReturn(updatedGame)
+        whenever(playerCardDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(1 to p1Cards, 2 to p2Cards))
         whenever(playerLandmarkDao.findByPlayerId(1)).thenReturn(emptyList())
         whenever(playerLandmarkDao.findByPlayerId(2)).thenReturn(emptyList())
         whenever(gameMarketplaceDao.findByGameIdAsMap(gameId)).thenReturn(emptyMap())
@@ -264,6 +276,10 @@ class LobbyServiceTest {
 
         verify(initializationService).initializeGame(gameId)
         assertEquals(GameStatus.IN_PROGRESS, result.game.status)
+        // Snapshot must carry the initialized cards — not an empty map.
+        assertEquals(2, result.playerCards[1]?.size)
+        assertEquals(2, result.playerCards[2]?.size)
+        assertEquals(setOf(CardType.WHEAT_FIELD, CardType.BAKERY), result.playerCards[1]?.map { it.cardType }?.toSet())
     }
 
     @Test
