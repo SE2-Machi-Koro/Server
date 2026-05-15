@@ -4,6 +4,7 @@ import org.machikoro.server.auth.userPrincipal
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.CustomWebSocketException
+import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.service.LobbyService
 import org.slf4j.LoggerFactory
 import org.springframework.messaging.handler.annotation.MessageMapping
@@ -96,7 +97,7 @@ class LobbyWebSocketController(
 
         val player = try {
             lobbyService.joinLobby(lobbyCode, principal.userId)
-        } catch (ex: Exception) {
+        } catch (ex: GameNotFoundException) {
             logger.warn("Failed to join lobby '{}': {}", lobbyCode, ex.message)
 
             return WebSocketMessage(
