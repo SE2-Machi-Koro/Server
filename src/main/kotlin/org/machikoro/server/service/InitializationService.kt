@@ -52,7 +52,7 @@ class InitializationService (
      */
     fun initializeGame(gameId: Int): List<PlayerModel> {
         val players = playerDao.getPlayers(gameId)
-        val shuffled = generateRandomOrder(gameId, players)
+        val shuffled = generateRandomOrder(players)
 
         //generate starting Resources
         initializePlayerCoins(shuffled)
@@ -67,11 +67,10 @@ class InitializationService (
      * Randomizes the player turn order using a two-pass update to avoid
      * unique constraint collisions on (gameId, turnOrder).
      *
-     * @param gameId The ID of the game
      * @param players The list of players to shuffle
      * @return The shuffled players list
      */
-    private fun generateRandomOrder(gameId: Int, players: List<PlayerModel>): List<PlayerModel>{
+    private fun generateRandomOrder(players: List<PlayerModel>): List<PlayerModel>{
         //shuffle list of players
         val shuffled = players.shuffled()
         // Two-pass update to avoid unique (gameId, turnOrder) constraint violations
