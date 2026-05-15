@@ -5,8 +5,10 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.machikoro.server.dao.CardDao
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.GameMarketplaceDao
+import org.machikoro.server.dao.LandmarkDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.domain.enums.GameStatus
@@ -35,11 +37,20 @@ class LobbyServiceTest {
     private val playerDao = mock<PlayerDao>()
     private val gameMarketplaceDao = mock<GameMarketplaceDao>()
     private val playerLandmarkDao = mock<PlayerLandmarkDao>()
+    private val cardDao = mock<CardDao>()
+    private val landmarkDao = mock<LandmarkDao>()
 
     // Anonymous subclass that bypasses the real Exposed transaction so this
     // unit test doesn't need a database. Methods that don't call
     // runInTransaction (e.g. addUserToLobby) are unaffected.
-    private val lobbyService = object : LobbyService(gameDao, playerDao, gameMarketplaceDao, playerLandmarkDao) {
+    private val lobbyService = object : LobbyService(
+        gameDao,
+        playerDao,
+        gameMarketplaceDao,
+        playerLandmarkDao,
+        cardDao,
+        landmarkDao,
+    ) {
         override fun <T> runInTransaction(block: () -> T): T = block()
     }
 

@@ -2,11 +2,14 @@ package org.machikoro.server.service
 
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.GameMarketplaceDao
+import org.machikoro.server.dao.CardDao
+import org.machikoro.server.dao.LandmarkDao
 import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.dto.GameStateDto
+import org.machikoro.server.dto.toDefinitionDto
 import org.machikoro.server.exception.GameNotFoundException
 import org.springframework.stereotype.Service
 
@@ -17,6 +20,8 @@ class GameSyncService(
     private val playerCardDao: PlayerCardDao,
     private val playerLandmarkDao: PlayerLandmarkDao,
     private val gameMarketplaceDao: GameMarketplaceDao,
+    private val cardDao: CardDao,
+    private val landmarkDao: LandmarkDao,
 ) {
 
     fun findActiveInProgressGameId(userId: Int): Int? =
@@ -39,6 +44,8 @@ class GameSyncService(
             player.id to playerLandmarkDao.findByPlayerId(player.id)
         }
         val marketplace = gameMarketplaceDao.findByGameIdAsMap(gameId)
+        val cardDefinitions = cardDao.findAll().map { it.toDefinitionDto() }
+        val landmarkDefinitions = landmarkDao.findAll().map { it.toDefinitionDto() }
 
         val sortedPlayers = players.sortedBy { it.turnOrder }
         return GameStateDto(
@@ -47,6 +54,8 @@ class GameSyncService(
             playerCards = playerCards,
             playerLandmarks = playerLandmarks,
             marketplace = marketplace,
+            cardDefinitions = cardDefinitions,
+            landmarkDefinitions = landmarkDefinitions,
             turnOrder = sortedPlayers.map { it.id },
             activePlayerId = sortedPlayers.getOrNull(game.currentTurnIndex)?.userId,
         )
