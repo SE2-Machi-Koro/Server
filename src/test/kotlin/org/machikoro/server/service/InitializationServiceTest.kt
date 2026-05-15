@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.GameMarketplaceDao
 import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
@@ -20,17 +19,15 @@ import org.mockito.kotlin.inOrder
 class InitializationServiceTest {
 
     private val playerDao = mock<PlayerDao>()
-    private val gameDao = mock<GameDao>()
     private val playerCardDao = mock<PlayerCardDao>()
     private val playerLandmarkDao = mock<PlayerLandmarkDao>()
     private val gameMarketplaceDao = mock<GameMarketplaceDao>()
 
     private val initializationService = InitializationService(
         playerDao = playerDao,
-        gameDao = gameDao,
         playerCardDao = playerCardDao,
         playerLandmarkDao = playerLandmarkDao,
-        gameMarketplaceDao = gameMarketplaceDao
+        gameMarketplaceDao = gameMarketplaceDao,
     )
 
     private val testPlayers = listOf(
