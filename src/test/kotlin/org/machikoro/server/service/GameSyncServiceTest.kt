@@ -8,14 +8,21 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.GameMarketplaceDao
+import org.machikoro.server.dao.CardDao
+import org.machikoro.server.dao.LandmarkDao
 import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
+import org.machikoro.server.domain.enums.CardColor
 import org.machikoro.server.domain.enums.CardType
+import org.machikoro.server.domain.enums.EstablishmentType
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.LandmarkType
+import org.machikoro.server.domain.enums.PaymentSource
+import org.machikoro.server.domain.models.CardModel
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.GameModel
+import org.machikoro.server.domain.models.LandmarkModel
 import org.machikoro.server.domain.models.PlayerCardModel
 import org.machikoro.server.domain.models.PlayerLandmarkModel
 import org.machikoro.server.domain.models.PlayerModel
@@ -31,12 +38,16 @@ class GameSyncServiceTest {
     private val playerCardDao = mock<PlayerCardDao>()
     private val playerLandmarkDao = mock<PlayerLandmarkDao>()
     private val gameMarketplaceDao = mock<GameMarketplaceDao>()
+    private val cardDao = mock<CardDao>()
+    private val landmarkDao = mock<LandmarkDao>()
     private val service = GameSyncService(
         gameDao,
         playerDao,
         playerCardDao,
         playerLandmarkDao,
         gameMarketplaceDao,
+        cardDao,
+        landmarkDao,
     )
 
     private fun game(id: Int, status: GameStatus) = GameModel(
@@ -96,6 +107,23 @@ class GameSyncServiceTest {
         whenever(gameMarketplaceDao.findByGameIdAsMap(gameId)).thenReturn(
             mapOf(CardType.BAKERY to 5, CardType.WHEAT_FIELD to 6),
         )
+        whenever(cardDao.findAll()).thenReturn(
+            listOf(
+                CardModel(
+                    id = 10,
+                    cardType = CardType.BAKERY,
+                    cost = 1,
+                    income = 1,
+                    color = CardColor.GREEN,
+                    establishmentType = EstablishmentType.BREAD,
+                    paymentSource = PaymentSource.BANK,
+                    activationNumbers = listOf(2, 3),
+                ),
+            ),
+        )
+        whenever(landmarkDao.findAll()).thenReturn(
+            listOf(LandmarkModel(id = 20, landmarkType = LandmarkType.TRAIN_STATION, cost = 4)),
+        )
 
         val snapshot = service.buildSnapshot(gameId)
 
@@ -112,6 +140,10 @@ class GameSyncServiceTest {
         // Marketplace is whatever the DAO helper returns — the flatten itself
         // lives on the DAO and is covered by GameMarketplaceDaoTest.
         assertEquals(mapOf(CardType.BAKERY to 5, CardType.WHEAT_FIELD to 6), snapshot.marketplace)
+        assertEquals(CardType.BAKERY, snapshot.cardDefinitions.single().cardType)
+        assertEquals(listOf(2, 3), snapshot.cardDefinitions.single().activationNumbers)
+        assertEquals(LandmarkType.TRAIN_STATION, snapshot.landmarkDefinitions.single().landmarkType)
+        assertEquals(4, snapshot.landmarkDefinitions.single().cost)
     }
 
     @Test
@@ -120,6 +152,8 @@ class GameSyncServiceTest {
         whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.IN_PROGRESS))
         whenever(playerDao.getPlayers(gameId)).thenReturn(emptyList())
         whenever(gameMarketplaceDao.findByGameIdAsMap(gameId)).thenReturn(emptyMap())
+        whenever(cardDao.findAll()).thenReturn(emptyList())
+        whenever(landmarkDao.findAll()).thenReturn(emptyList())
 
         val snapshot = service.buildSnapshot(gameId)
 

@@ -16,6 +16,8 @@ import org.machikoro.server.domain.models.PlayerModel
  * @property playerCards      Map of playerId → list of [PlayerCardModel] representing each player's hand.
  * @property playerLandmarks  Map of playerId → list of [PlayerLandmarkModel] with each landmark's built / unbuilt state.
  * @property marketplace      Map of [CardType] → remaining quantity in the game's marketplace supply.
+ * @property cardDefinitions  DB-backed card definitions for rendering the shop.
+ * @property landmarkDefinitions DB-backed landmark definitions for rendering build options.
  * @property turnOrder        Ordered list of **player IDs** representing the randomized turn order
  *                            (index 0 goes first).
  * @property activePlayerId   userId of the player whose turn it is at the time of the snapshot.
@@ -36,6 +38,12 @@ data class GameStateDto(
 
     @Schema(description = "Map of CardType to the remaining quantity available in the marketplace supply")
     val marketplace: Map<CardType, Int>,
+
+    @Schema(description = "DB-backed card definitions available to the shop UI")
+    val cardDefinitions: List<CardDefinitionDto> = emptyList(),
+
+    @Schema(description = "DB-backed landmark definitions available to the shop UI")
+    val landmarkDefinitions: List<LandmarkDefinitionDto> = emptyList(),
 
     @Schema(description = "Randomized turn order as a list of player IDs")
     val turnOrder: List<Int>,
