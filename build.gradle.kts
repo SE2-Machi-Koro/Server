@@ -45,14 +45,6 @@ sonar {
         property("sonar.coverage.exclusions", "src/main/kotlin/**/dto/**,src/main/kotlin/**/config/**,src/main/kotlin/**/ServerApplication.kt")
         property("sonar.newCode.referenceBranch", "main")
         property("sonar.qualitygate.wait", "true")
-
-        // Suppress S1192 (duplicated string literals) on the V1 Flyway baseline.
-        // The repeated color / establishment_type / payment_source literals (and
-        // repeated card_type literals in the activation-number seed block) are
-        // intrinsic to the immutable V1 baseline. Refactoring or normalizing
-        // them would change the V1 file checksum and break Flyway validation on
-        // databases that have already applied V1. If a future schema/data change
-        // is required, introduce a V2 migration instead.
         property("sonar.issue.ignore.multicriteria", "e1")
         property("sonar.issue.ignore.multicriteria.e1.ruleKey", "sql:S1192")
         property(
@@ -64,7 +56,6 @@ sonar {
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
-    implementation("org.flywaydb:flyway-core")
     implementation("org.springframework.boot:spring-boot-starter-restclient")
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
@@ -77,9 +68,11 @@ dependencies {
     implementation("org.jetbrains.exposed:exposed-jdbc:$exposedVersion")
     implementation("org.jetbrains.exposed:exposed-dao:$exposedVersion")
     implementation("org.springframework.boot:spring-boot-starter-jdbc")
+    implementation("org.springframework.boot:spring-boot-starter-flyway")
     developmentOnly("org.springframework.boot:spring-boot-devtools")
     developmentOnly("org.springframework.boot:spring-boot-docker-compose")
     runtimeOnly("org.postgresql:postgresql")
+    runtimeOnly("org.flywaydb:flyway-database-postgresql")
     testImplementation("org.springframework.boot:spring-boot-starter-restclient-test")
     testImplementation("org.springframework.boot:spring-boot-starter-security-test")
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
