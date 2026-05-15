@@ -28,6 +28,7 @@ class EarningsServiceImplTest {
     private lateinit var playerCardDao: PlayerCardDao
     private lateinit var cardDao: CardDao
     private lateinit var gameDao: GameDao
+    private lateinit var gamePhaseService: GamePhaseService
 
     private lateinit var service: EarningsServiceImpl
 
@@ -37,12 +38,14 @@ class EarningsServiceImplTest {
         playerCardDao = mock(PlayerCardDao::class.java)
         cardDao = mock(CardDao::class.java)
         gameDao = mock(GameDao::class.java)
+        gamePhaseService = mock(GamePhaseService::class.java)
 
         service = EarningsServiceImpl(
             playerDao,
             playerCardDao,
             cardDao,
-            gameDao
+            gameDao,
+            gamePhaseService,
         )
     }
 
@@ -263,7 +266,7 @@ class EarningsServiceImplTest {
 
         service.resolveEffects(1)
 
-        verify(gameDao).updateTurnPhase(1, TurnPhase.BUY_OR_BUILD)
+        verify(gamePhaseService).advancePhase(1)
     }
 
     // Invalid phases should fail immediately
