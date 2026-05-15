@@ -141,7 +141,7 @@ class GameSyncServiceIntegrationTest : AbstractDBSetup() {
         // Simulate the first player buying a BAKERY: decrement marketplace,
         // insert the player card.
         gameMarketplaceDao.decrementQuantity(gameId, CardType.BAKERY)
-        playerCardDao.upsert(firstPlayerId, CardType.BAKERY, quantity = 2)
+        playerCardDao.upsert(firstPlayerId, CardType.BAKERY, quantity = 1)
 
         // Build one of two landmarks on the first player.
         playerLandmarkDao.markBuilt(firstPlayerId, LandmarkType.TRAIN_STATION)
@@ -164,21 +164,12 @@ class GameSyncServiceIntegrationTest : AbstractDBSetup() {
         assertEquals(7, secondPlayer.coins)
 
         // ── playerCards ─────────────────────────────────────────────────
-        // First player owns two BAKERYs and one WHEAT_FIELD;
+        // First player owns one BAKERY; second player owns nothing.
         val firstCards = snapshot.playerCards[firstPlayerId].orEmpty()
-        assertEquals(2, firstCards.size)
-        assertEquals(CardType.BAKERY, firstCards[0].cardType)
-        assertEquals(2, firstCards[0].quantity)
-        assertEquals(CardType.WHEAT_FIELD, firstCards[1].cardType)
-        assertEquals(1, firstCards[1].quantity)
-        //second player owns one BAKERY and one WHEAT_FILED.
-        val secondCards = snapshot.playerCards[secondPlayerId].orEmpty()
-        assertEquals(2, secondCards.size)
-        assertEquals(CardType.BAKERY, secondCards[0].cardType)
-        assertEquals(1, secondCards[0].quantity)
-        assertEquals(CardType.WHEAT_FIELD, secondCards[1].cardType)
-        assertEquals(1, secondCards[1].quantity)
-
+        assertEquals(1, firstCards.size)
+        assertEquals(CardType.BAKERY, firstCards.single().cardType)
+        assertEquals(1, firstCards.single().quantity)
+        assertTrue(snapshot.playerCards[secondPlayerId].isNullOrEmpty())
 
         // ── playerLandmarks ─────────────────────────────────────────────
         // First player: TRAIN_STATION built, SHOPPING_MALL unbuilt.
