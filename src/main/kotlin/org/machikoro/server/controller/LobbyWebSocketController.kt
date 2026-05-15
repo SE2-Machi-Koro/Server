@@ -1,5 +1,7 @@
 package org.machikoro.server.controller
 
+import io.github.springwolf.core.asyncapi.annotations.AsyncListener
+import io.github.springwolf.core.asyncapi.annotations.AsyncOperation
 import org.machikoro.server.auth.userPrincipal
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.WebSocketMessage
@@ -31,6 +33,11 @@ class LobbyWebSocketController(
      */
     @MessageMapping("/lobby.create")
     @SendTo("/topic/public")
+    @AsyncListener(operation = AsyncOperation(
+        channelName = "/lobby.create",
+        description = "Creates a new lobby for the authenticated user and broadcasts the result to /topic/public.",
+        payloadType = WebSocketMessage::class,
+    ))
     @Suppress("UNUSED_PARAMETER") // Spring requires a @Payload parameter to deserialize the STOMP frame body
     fun createLobby(
         @Payload message: WebSocketMessage,
@@ -71,6 +78,11 @@ class LobbyWebSocketController(
      */
     @MessageMapping("/lobby.join")
     @SendTo("/topic/public")
+    @AsyncListener(operation = AsyncOperation(
+        channelName = "/lobby.join",
+        description = "Joins an existing lobby by lobby code and broadcasts the joined player data to /topic/public.",
+        payloadType = WebSocketMessage::class,
+    ))
     fun joinLobby(
         @Payload message: WebSocketMessage,
         headerAccessor: SimpMessageHeaderAccessor,

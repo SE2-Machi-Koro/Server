@@ -16,6 +16,7 @@ val dotenvVersion = "5.2.2"
 val mockitoKotlinVersion = "5.2.1"
 val exposedVersion = "1.0.0"
 val testcontainersVersion = "1.20.4"
+val springwolfVersion = "2.3.0"
 
 
 java {
@@ -71,8 +72,11 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     developmentOnly("org.springframework.boot:spring-boot-devtools")
     developmentOnly("org.springframework.boot:spring-boot-docker-compose")
+    implementation("io.github.springwolf:springwolf-stomp:${springwolfVersion}")
+    implementation("io.github.springwolf:springwolf-stomp-binding:${springwolfVersion}")
     runtimeOnly("org.postgresql:postgresql")
     runtimeOnly("org.flywaydb:flyway-database-postgresql")
+    runtimeOnly("io.github.springwolf:springwolf-ui:${springwolfVersion}")
     testImplementation("org.springframework.boot:spring-boot-starter-restclient-test")
     testImplementation("org.springframework.boot:spring-boot-starter-security-test")
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
