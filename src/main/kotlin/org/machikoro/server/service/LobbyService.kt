@@ -18,6 +18,7 @@ import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.exception.LobbyFullException
 import org.machikoro.server.exception.NotHostException
 import org.springframework.stereotype.Service
+import java.util.concurrent.ConcurrentHashMap
 
 @Service
 open class LobbyService(
@@ -29,7 +30,8 @@ open class LobbyService(
     private val landmarkDao: LandmarkDao,
 ) {
 
-    private val lobbyLocks = mutableMapOf<Int, Any>()
+    // ConcurrentHashMap for thread-safe lock creation and removal
+    private val lobbyLocks = ConcurrentHashMap<Int, Any>()
 
     /**
      * Runs [block] inside an Exposed transaction.
@@ -115,7 +117,7 @@ open class LobbyService(
         // can still pull their final state via the same record.
         playerDao.findByGameIdAndUserId(gameId, userId)?.let { return it }
 
-        synchronized(lobbyLocks.getOrPut(gameId) { Any() }) {
+        synchronized(lobbyLocks.computeIfAbsent(gameId) { Any() }) {
             // Protect against duplicate inserts on concurrent reconnect/join attempts.
             playerDao.findByGameIdAndUserId(gameId, userId)?.let { return it }
 
@@ -155,8 +157,8 @@ open class LobbyService(
      * @throws GameNotFoundException if no game with [gameId] exists.
      * @throws NotHostException      if [requestingUserId] is provided but is not the host.
      */
-    fun startGame(gameId: Int, requestingUserId: Int? = null): GameStateDto =
-        synchronized(lobbyLocks.getOrPut(gameId) { Any() }) {
+    fun startGame(gameId: Int, requestingUserId: Int? = null): GameStateDto {
+        val result = synchronized(lobbyLocks.computeIfAbsent(gameId) { Any() }) {
             runInTransaction {
                 val game = gameDao.findById(gameId)
                     ?: throw GameNotFoundException("Game $gameId not found")
@@ -209,4 +211,8 @@ open class LobbyService(
                 )
             }
         }
+        // Game is now IN_PROGRESS; no new joins can happen, so the lock is no longer needed
+        lobbyLocks.remove(gameId)
+        return result
+    }
 }
