@@ -201,24 +201,6 @@ class GameController(
     }
 
     /**
-     * Removes a player from a finished game.
-     *
-     * Message is sent to /app/game.leave and broadcast to /topic/game/{gameId}.
-     */
-    @MessageMapping("/game.leave")
-    @AsyncListener(operation = AsyncOperation(
-        channelName = "/game.leave",
-        description = "Removes a player from a finished game.",
-        payloadType = LeaveFinishedGameRequest::class,
-    ))
-    fun leaveFinishedGame(@Payload request: LeaveFinishedGameRequest, headerAccessor: SimpMessageHeaderAccessor) {
-        requireOwnerOfPlayer(request.gameId, request.playerId, headerAccessor)
-        leaveFinishedGameService.leaveFinishedGame(request.gameId, request.playerId)
-        logger.info("${request.playerId} left game ${request.gameId}")
-        broadcastPlayerLeftFinishedGame(request.gameId, request.playerId)
-    }
-
-    /**
      * Handle dice roll requests and broadcast result to the specific game topic.
      *
      * Message is sent to /app/game.rollDice and broadcast to /topic/game/{gameId}.
