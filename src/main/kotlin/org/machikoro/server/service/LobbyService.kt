@@ -17,6 +17,7 @@ import org.machikoro.server.exception.GameFinishedException
 import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.exception.LobbyFullException
+import org.machikoro.server.exception.NotEnoughPlayersException
 import org.machikoro.server.exception.NotHostException
 import org.springframework.stereotype.Service
 
@@ -42,6 +43,11 @@ open class LobbyService(
      * Exposed transaction machinery that requires a real database connection.
      */
     protected open fun <T> runInTransaction(block: () -> T): T = transaction { block() }
+
+    companion object {
+        // Machi Koro base game requires at least 2 players.
+        const val MIN_PLAYERS = 2
+    }
 
     /**
      * Creates a new lobby owned by [hostUserId] and returns the persisted
@@ -143,8 +149,9 @@ open class LobbyService(
      * 3. Flips the game status to IN_PROGRESS.
      * 4. Returns a full [GameStateDto] snapshot including players, cards, landmarks, and marketplace.
      *
-     * @throws GameNotFoundException if no game with [gameId] exists.
-     * @throws NotHostException      if [requestingUserId] is provided but is not the host.
+     * @throws GameNotFoundException       if no game with [gameId] exists.
+     * @throws NotHostException            if [requestingUserId] is provided but is not the host.
+     * @throws NotEnoughPlayersException   if fewer than [MIN_PLAYERS] players have joined.
      */
     fun startGame(gameId: Int, requestingUserId: Int? = null): GameStateDto =
         synchronized(lobbyLocks.getOrPut(gameId) { Any() }) {
@@ -154,6 +161,13 @@ open class LobbyService(
 
                 if (requestingUserId != null && game.hostUserId != requestingUserId) {
                     throw NotHostException("User $requestingUserId is not the host of game $gameId")
+                }
+
+                val players = playerDao.getPlayers(gameId)
+                if (players.size < MIN_PLAYERS) {
+                    throw NotEnoughPlayersException(
+                        "Game $gameId needs at least $MIN_PLAYERS players to start, has ${players.size}"
+                    )
                 }
 
                 val shuffled = initializationService.initializeGame(gameId)

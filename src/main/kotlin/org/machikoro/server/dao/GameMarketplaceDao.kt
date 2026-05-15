@@ -72,7 +72,9 @@ class GameMarketplaceDao {
             .associate { it[Cards.cardType] to it[Cards.id] }
 
         CardType.entries.forEach { type ->
-            val cardId = cardIdByType[type] ?: return@forEach
+            // All card types must be seeded in the DB before a game can start.
+            val cardId = cardIdByType[type]
+                ?: throw CardNotFoundException("Card type $type not seeded in database")
             GameMarketplace.insertIgnore {
                 it[GameMarketplace.gameId] = gameId
                 it[GameMarketplace.cardId] = cardId
