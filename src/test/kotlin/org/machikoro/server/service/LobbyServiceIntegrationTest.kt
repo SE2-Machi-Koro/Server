@@ -82,6 +82,14 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
                 it[establishmentType] = EstablishmentType.BREAD
                 it[paymentSource] = PaymentSource.BANK
             }
+            Cards.insertIgnore {
+                it[cardType] = CardType.WHEAT_FIELD
+                it[cost] = 1
+                it[income] = 1
+                it[color] = CardColor.BLUE
+                it[establishmentType] = EstablishmentType.WHEAT
+                it[paymentSource] = PaymentSource.BANK
+            }
 
             Landmarks.insertIgnore {
                 it[landmarkType] = LandmarkType.TRAIN_STATION
