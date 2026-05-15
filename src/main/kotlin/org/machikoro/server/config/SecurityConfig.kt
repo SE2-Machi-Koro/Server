@@ -41,7 +41,8 @@ class SecurityConfig {
                     "/api-docs",
                     "/api-docs/**",
                     "/v3/api-docs",
-                    "/v3/api-docs/**"
+                    "/v3/api-docs/**",
+                    "/springwolf/**"
                 ).permitAll()
                 auth.requestMatchers("/auth/**").permitAll()
                 auth.requestMatchers("/api/**").authenticated()

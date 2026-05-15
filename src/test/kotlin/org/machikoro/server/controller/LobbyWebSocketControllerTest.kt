@@ -13,6 +13,7 @@ import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.service.LobbyService
 import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.domain.models.PlayerModel
+import org.machikoro.server.exception.GameNotFoundException
 import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -197,5 +198,30 @@ class LobbyWebSocketControllerTest {
 
         assertEquals("INVALID_LOBBY_CODE", ex.errorCode)
         verify(lobbyService, never()).joinLobby(any(), any())
+    }
+
+    @Test
+    fun `joinLobby returns ERROR message when lobby code is invalid`() {
+        whenever(lobbyService.joinLobby("INVALID", 20))
+            .thenThrow(GameNotFoundException("Lobby with code INVALID not found"))
+
+        val accessor = authenticatedAccessor(userId = 20, username = "Player2")
+
+        val result = controller.joinLobby(
+            WebSocketMessage(
+                type = MessageType.JOIN,
+                sender = "ignored-by-server",
+                payload = mapOf("lobbyCode" to "INVALID")
+            ),
+            accessor,
+        )
+
+        val payload = result.payload as? Map<String, Any>
+            ?: throw AssertionError("Payload is not a Map")
+
+        assertEquals(MessageType.ERROR, result.type)
+        assertEquals("SERVER", result.sender)
+        assertEquals("Lobby code is invalid", result.content)
+        assertEquals("INVALID_LOBBY_CODE", payload["errorCode"])
     }
 }

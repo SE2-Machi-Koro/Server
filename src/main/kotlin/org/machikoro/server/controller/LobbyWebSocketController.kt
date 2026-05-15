@@ -1,9 +1,12 @@
 package org.machikoro.server.controller
 
+import io.github.springwolf.core.asyncapi.annotations.AsyncListener
+import io.github.springwolf.core.asyncapi.annotations.AsyncOperation
 import org.machikoro.server.auth.userPrincipal
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.CustomWebSocketException
+import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.service.LobbyService
 import org.slf4j.LoggerFactory
 import org.springframework.messaging.handler.annotation.MessageMapping
@@ -30,6 +33,11 @@ class LobbyWebSocketController(
      */
     @MessageMapping("/lobby.create")
     @SendTo("/topic/public")
+    @AsyncListener(operation = AsyncOperation(
+        channelName = "/lobby.create",
+        description = "Creates a new lobby for the authenticated user and broadcasts the result to /topic/public.",
+        payloadType = WebSocketMessage::class,
+    ))
     @Suppress("UNUSED_PARAMETER") // Spring requires a @Payload parameter to deserialize the STOMP frame body
     fun createLobby(
         @Payload message: WebSocketMessage,
@@ -70,6 +78,11 @@ class LobbyWebSocketController(
      */
     @MessageMapping("/lobby.join")
     @SendTo("/topic/public")
+    @AsyncListener(operation = AsyncOperation(
+        channelName = "/lobby.join",
+        description = "Joins an existing lobby by lobby code and broadcasts the joined player data to /topic/public.",
+        payloadType = WebSocketMessage::class,
+    ))
     fun joinLobby(
         @Payload message: WebSocketMessage,
         headerAccessor: SimpMessageHeaderAccessor,
@@ -94,8 +107,20 @@ class LobbyWebSocketController(
 
         logger.info("User '{}' requested to join lobby '{}'", principal.username, lobbyCode)
 
-        val player = lobbyService.joinLobby(lobbyCode, principal.userId)
+        val player = try {
+            lobbyService.joinLobby(lobbyCode, principal.userId)
+        } catch (ex: GameNotFoundException) {
+            logger.warn("Failed to join lobby '{}': {}", lobbyCode, ex.message)
 
+            return WebSocketMessage(
+                type = MessageType.ERROR,
+                sender = "SERVER",
+                content = "Lobby code is invalid",
+                payload = mapOf(
+                    "errorCode" to "INVALID_LOBBY_CODE"
+                )
+            )
+        }
         return WebSocketMessage(
             type = MessageType.LOBBY_JOINED,
             sender = "SERVER",
