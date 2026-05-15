@@ -63,10 +63,6 @@ class InitializationService (
         return shuffled
     }
 
-    //lock input
-    private fun lockInput(){
-
-    }
     /**
      * Randomizes the player turn order using a two-pass update to avoid
      * unique constraint collisions on (gameId, turnOrder).
@@ -134,11 +130,6 @@ class InitializationService (
      */
     private fun initializeMarketplace(gameId: Int) {
         gameMarketplaceDao.initForGame(gameId, MARKETPLACE_SUPPLY_PER_CARD)
-    }
-
-    //trigger first players turn
-    private fun startFirstTurn(){
-        //unlock input
     }
 
 }
