@@ -22,15 +22,31 @@ PostgreSQL. Designed for reliability, scalability, and developer productivity.
 - **Language:** Kotlin 2.2.21
 - **Framework:** Spring Boot 4.0.3
 - **Database:** PostgreSQL 18.0
+- **Database Migrations:** Flyway - Handles database schema migrations automatically on startup, ensuring the database structure is always in sync with the codebase.
 - **ORM:** JetBrains Exposed 1.0.0 (DSL only)
 - **Real-Time Communication:** Spring WebSockets (STOMP / SockJS)
 - **API Documentation:** Springdoc OpenAPI (Swagger UI) 3.0.2
+- **AsyncAPI Documentation:** Springwolf 2.3.0 - Auto-generates AsyncAPI documentation for the WebSocket endpoints, allowing developers to explore and interact with message channels directly from the browser.
 - **Testing:** JUnit 5, Mockito-Kotlin, Testcontainers
 - **Containerization:** Docker & Docker Compose
 
 ## Architecture Overview
 
 The project follows a standard multi-layer Spring Boot architecture:
+
+```mermaid
+flowchart TD
+    Client((Client)) <-->|WebSocket STOMP| Controllers[WebSocket / REST Controllers]
+    Controllers <-->|DTOs| Services[Business Logic Services]
+    Services <-->|Domain Models| DAOs[Data Access Objects]
+    DAOs <-->|Exposed DSL| Database[(PostgreSQL)]
+    
+    subgraph Spring Boot Backend
+        Controllers
+        Services
+        DAOs
+    end
+```
 
 - **Controllers (`controller/`):** Expose WebSocket and REST endpoints (e.g., `GameController`, `WebSocketController`).
 - **Services (`service/`):** Contain the core game logic (`GamePhaseService`, `EarningsService`, `WinConditionService`).
@@ -152,9 +168,9 @@ internal `GameModel` may hold additional state used purely for server-side logic
 
 ### Database Initialization
 
-- Flyway is the authoritative source for schema creation in runtime environments.
+- **Flyway** is the authoritative source for database schema creation and migration across environments. We use Flyway to version control our database setup, ensuring consistency from local development to production.
 - Initial schema and required reference data are defined in `src/main/resources/db/migration/V1__init_schema.sql`.
-- `machikoro.db.init.enabled` is disabled by default in runtime config to prevent Exposed-based schema auto-creation from drifting away from migrations.
+- We disable `machikoro.db.init.enabled` (Exposed-based auto-creation) by default in runtime configuration to prevent it from drifting away from migrations.
 - Tests can still override `machikoro.db.init.enabled=true` while the suite transitions to a fully migration-driven setup.
 
 1. Copy the example environment file and adjust as needed:
@@ -268,14 +284,11 @@ Sonar analysis settings are defined in `build.gradle.kts` under the Gradle `sona
 
 ## API & WebSocket Documentation
 
-For detailed REST and WebSocket API documentation, see the `docs/` directory or access Swagger UI at `/swagger-ui.html`
-after starting the server.
+For detailed API documentation, the server exposes both standard REST and asynchronous API documentation.
 
-Key endpoints:
-
-- API: `http://localhost:8080`
-- WebSocket: `ws://localhost:8080/ws`
-- Swagger UI: `http://localhost:8080/swagger-ui.html`
+- **Swagger UI (REST):** Accessible at `http://localhost:8080/swagger-ui.html`. Powered by Springdoc OpenAPI, this interface provides interactive documentation for our standard REST endpoints.
+- **Springwolf UI (AsyncAPI/WebSockets):** Accessible at `http://localhost:8080/springwolf/asyncapi-ui.html`. Powered by Springwolf, this provides interactive documentation and an event publisher for our STOMP over WebSocket channels, which are the backbone of our real-time game communications.
+- **WebSocket Endpoint:** `ws://localhost:8080/ws`
 
 ---
 
@@ -296,6 +309,19 @@ The server is deployed to the AAU shared infrastructure (`se2-demo.aau.at`, grou
 repository's `compose.yaml` on every push to `main`.
 
 ### Pipeline overview
+
+```mermaid
+flowchart LR
+    Push(Push to main) --> Action[GitHub Actions CI/CD]
+    Action --> Test[Build & Test]
+    Action --> Docker[Build Multi-Arch Docker Image]
+    Docker --> GHCR[(GHCR Image Registry)]
+    
+    GHCR --> DocoCD(doco-cd on AAU Server)
+    DocoCD -->|Pulls Image| Production[Docker Compose Stack]
+    Production --> Backend[Machi Koro Backend]
+    Production --> DB[(PostgreSQL)]
+```
 
 1. A push to `main` triggers the [`Publish Docker image to GHCR`](.github/workflows/docker-publish.yml)
   workflow.
@@ -408,3 +434,6 @@ curl -sSL <new-cdn-url> | openssl dgst -sha512 -binary | openssl base64 -A
 Replace the `integrity="sha512-..."` value on the same tag and verify in the browser
 DevTools console that no *"Failed to find a valid digest in the 'integrity' attribute"*
 error is logged.
+
+---
+*Last Updated: May 15, 2026*
