@@ -1,5 +1,8 @@
 # Machi Koro Server
 
+[![Server CI](https://github.com/SE2-Machi-Koro/Server/actions/workflows/ci.yml/badge.svg)](https://github.com/SE2-Machi-Koro/Server/actions/workflows/ci.yml)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=SE2-Machi-Koro_Server&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=SE2-Machi-Koro_Server)
+
 > Robust real-time multiplayer backend for the Machi Koro board game, built with Kotlin, Spring Boot, and WebSockets.
 
 This server manages real-time Machi Koro game sessions, player communication, game state, and persistent storage on
