@@ -5,6 +5,7 @@ import org.machikoro.server.dao.CardDao
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.GameMarketplaceDao
 import org.machikoro.server.dao.LandmarkDao
+import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.domain.enums.GameStatus
@@ -16,6 +17,7 @@ import org.machikoro.server.exception.GameFinishedException
 import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.exception.LobbyFullException
+import org.machikoro.server.exception.NotEnoughPlayersException
 import org.machikoro.server.exception.NotHostException
 import org.springframework.stereotype.Service
 import java.util.concurrent.ConcurrentHashMap
@@ -26,6 +28,8 @@ open class LobbyService(
     private val playerDao: PlayerDao,
     private val gameMarketplaceDao: GameMarketplaceDao,
     private val playerLandmarkDao: PlayerLandmarkDao,
+    private val initializationService: InitializationService,
+    private val playerCardDao: PlayerCardDao,
     private val cardDao: CardDao,
     private val landmarkDao: LandmarkDao,
 ) {
@@ -43,13 +47,8 @@ open class LobbyService(
     protected open fun <T> runInTransaction(block: () -> T): T = transaction { block() }
 
     companion object {
-        /**
-         * Temporary offset applied to all player turn orders in the first pass of
-         * the shuffle so that intermediate values don't collide with the unique
-         * (gameId, turnOrder) constraint while the final values are being assigned.
-         * Any value larger than the max players limit works; 10 000 provides headroom.
-         */
-        private const val TEMP_TURN_ORDER_OFFSET = 10_000
+        // Machi Koro base game requires at least 2 players.
+        const val MIN_PLAYERS = 2
     }
 
     /**
@@ -148,14 +147,13 @@ open class LobbyService(
      *
      * Inside a single transaction this method:
      * 1. Validates the game exists and (optionally) that the caller is the host.
-     * 2. Randomly shuffles the player turn order using a two-pass update to avoid
-     *    unique-constraint collisions on the (gameId, turnOrder) pair.
-     * 3. Initialises the marketplace supply rows for the game.
-     * 4. Initialises landmark entries for every player.
-     * 5. Flips the game status to IN_PROGRESS.
+     * 2. Delegates all resource initialization to [InitializationService.initializeGame].
+     * 3. Flips the game status to IN_PROGRESS.
+     * 4. Returns a full [GameStateDto] snapshot including players, cards, landmarks, and marketplace.
      *
-     * @throws GameNotFoundException if no game with [gameId] exists.
-     * @throws NotHostException      if [requestingUserId] is provided but is not the host.
+     * @throws GameNotFoundException       if no game with [gameId] exists.
+     * @throws NotHostException            if [requestingUserId] is provided but is not the host.
+     * @throws NotEnoughPlayersException   if fewer than [MIN_PLAYERS] players have joined.
      */
     fun startGame(gameId: Int, requestingUserId: Int? = null): GameStateDto {
         val result = synchronized(lobbyLocks.computeIfAbsent(gameId) { Any() }) {
@@ -168,32 +166,23 @@ open class LobbyService(
                 }
 
                 val players = playerDao.getPlayers(gameId)
-                val shuffled = players.shuffled()
-
-                // Two-pass update to avoid unique (gameId, turnOrder) constraint violations
-                // while reassigning turn orders.
-                shuffled.forEachIndexed { index, player ->
-                    playerDao.updateTurnOrder(player.id, index + TEMP_TURN_ORDER_OFFSET)
-                }
-                shuffled.forEachIndexed { index, player ->
-                    playerDao.updateTurnOrder(player.id, index)
+                if (players.size < MIN_PLAYERS) {
+                    throw NotEnoughPlayersException(
+                        "Game $gameId needs at least $MIN_PLAYERS players to start, has ${players.size}"
+                    )
                 }
 
-                gameMarketplaceDao.initForGame(gameId)
-                shuffled.forEach { player -> playerLandmarkDao.initForPlayer(player.id) }
+                val shuffled = initializationService.initializeGame(gameId)
 
                 gameDao.updateStatus(gameId, GameStatus.IN_PROGRESS)
                 val updatedGame = gameDao.findById(gameId)!!
 
-                // After initForPlayer each player has all landmarks as unbuilt rows.
-                // Include them in the initial snapshot so clients can render the build
-                // grid immediately, without an extra round-trip.
+                val playerIds = shuffled.map { it.id }
+                // Build a full snapshot so the client can render immediately without extra round-trips.
+                val playerCards = playerCardDao.findByPlayerIds(playerIds)
                 val playerLandmarks = shuffled.associate { player ->
                     player.id to playerLandmarkDao.findByPlayerId(player.id)
                 }
-                // Same reasoning for the marketplace — initForGame above seeded the
-                // full supply, so the client can render the buyable card grid on the
-                // first GAME_STARTED frame.
                 val marketplace = gameMarketplaceDao.findByGameIdAsMap(gameId)
                 val cardDefinitions = cardDao.findAll().map { it.toDefinitionDto() }
                 val landmarkDefinitions = landmarkDao.findAll().map { it.toDefinitionDto() }
@@ -201,12 +190,12 @@ open class LobbyService(
                 GameStateDto(
                     game = updatedGame,
                     players = shuffled,
-                    playerCards = emptyMap(),
+                    playerCards = playerCards,
                     playerLandmarks = playerLandmarks,
                     marketplace = marketplace,
                     cardDefinitions = cardDefinitions,
                     landmarkDefinitions = landmarkDefinitions,
-                    turnOrder = shuffled.map { it.id },
+                    turnOrder = shuffled.map { it.userId },
                     activePlayerId = shuffled.firstOrNull()?.userId,
                 )
             }

@@ -56,7 +56,7 @@ class GameSyncService(
             marketplace = marketplace,
             cardDefinitions = cardDefinitions,
             landmarkDefinitions = landmarkDefinitions,
-            turnOrder = sortedPlayers.map { it.id },
+            turnOrder = sortedPlayers.map { it.userId },
             activePlayerId = sortedPlayers.getOrNull(game.currentTurnIndex)?.userId,
         )
     }
