@@ -77,7 +77,7 @@ class GameSyncServiceTest {
         whenever(playerDao.findActiveGameIdByUserId(8)).thenReturn(null)
 
         assertNull(service.findActiveInProgressGameId(8))
-        
+
         verify(playerDao).findActiveGameIdByUserId(8)
     }
 
@@ -129,7 +129,7 @@ class GameSyncServiceTest {
 
         assertEquals(gameId, snapshot.game.id)
         assertEquals(listOf(p1, p2), snapshot.players)
-        assertEquals(listOf(2, 1), snapshot.turnOrder)
+        assertEquals(listOf(22, 11), snapshot.turnOrder)
         assertEquals(1, snapshot.playerCards[1]?.size)
         assertTrue(snapshot.playerCards[2].isNullOrEmpty())
         // Landmarks are keyed by playerId and preserve isBuilt per row.

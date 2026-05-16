@@ -69,7 +69,9 @@ class PlayerLandmarkDao {
             .associate { it[Landmarks.landmarkType] to it[Landmarks.id] }
 
         LandmarkType.entries.forEach { type ->
-            val landmarkId = landmarkIdByType[type] ?: return@forEach
+            // All landmark types must be seeded in the DB before a game can start.
+            val landmarkId = landmarkIdByType[type]
+                ?: throw LandmarkNotFoundException("Landmark type $type not seeded in database")
             PlayerLandmarks.insertIgnore {
                 it[PlayerLandmarks.playerId] = playerId
                 it[PlayerLandmarks.landmarkId] = landmarkId

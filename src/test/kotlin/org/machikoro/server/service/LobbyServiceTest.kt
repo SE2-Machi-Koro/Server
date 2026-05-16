@@ -9,8 +9,11 @@ import org.machikoro.server.dao.CardDao
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.GameMarketplaceDao
 import org.machikoro.server.dao.LandmarkDao
+import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
+import org.machikoro.server.domain.enums.CardType
+import org.machikoro.server.domain.models.PlayerCardModel
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
@@ -18,6 +21,8 @@ import org.machikoro.server.exception.GameFinishedException
 import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.exception.LobbyFullException
+import org.machikoro.server.exception.NotEnoughPlayersException
+import org.machikoro.server.exception.NotHostException
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -37,6 +42,8 @@ class LobbyServiceTest {
     private val playerDao = mock<PlayerDao>()
     private val gameMarketplaceDao = mock<GameMarketplaceDao>()
     private val playerLandmarkDao = mock<PlayerLandmarkDao>()
+    private val initializationService = mock<InitializationService>()
+    private val playerCardDao = mock<PlayerCardDao>()
     private val cardDao = mock<CardDao>()
     private val landmarkDao = mock<LandmarkDao>()
 
@@ -48,6 +55,8 @@ class LobbyServiceTest {
         playerDao,
         gameMarketplaceDao,
         playerLandmarkDao,
+        initializationService,
+        playerCardDao,
         cardDao,
         landmarkDao,
     ) {
@@ -239,5 +248,80 @@ class LobbyServiceTest {
         }
 
         verify(gameDao).findByLobbyCode(lobbyCode)
+    }
+
+    @Test
+    fun `startGame delegates resource initialization to InitializationService`() {
+        val gameId = 1
+        val players = listOf(player(1), player(2))
+        val updatedGame = game(gameId, GameStatus.IN_PROGRESS)
+        // Simulate each player starting with WHEAT_FIELD and BAKERY.
+        val p1Cards = listOf(
+            PlayerCardModel(playerId = 1, cardType = CardType.WHEAT_FIELD, quantity = 1),
+            PlayerCardModel(playerId = 1, cardType = CardType.BAKERY, quantity = 1),
+        )
+        val p2Cards = listOf(
+            PlayerCardModel(playerId = 2, cardType = CardType.WHEAT_FIELD, quantity = 1),
+            PlayerCardModel(playerId = 2, cardType = CardType.BAKERY, quantity = 1),
+        )
+
+        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING))
+        whenever(playerDao.getPlayers(gameId)).thenReturn(players)
+        whenever(initializationService.initializeGame(gameId)).thenReturn(players)
+        whenever(gameDao.findById(gameId)).thenReturn(updatedGame)
+        whenever(playerCardDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(1 to p1Cards, 2 to p2Cards))
+        whenever(playerLandmarkDao.findByPlayerId(1)).thenReturn(emptyList())
+        whenever(playerLandmarkDao.findByPlayerId(2)).thenReturn(emptyList())
+        whenever(gameMarketplaceDao.findByGameIdAsMap(gameId)).thenReturn(emptyMap())
+
+        val result = lobbyService.startGame(gameId)
+
+        verify(initializationService).initializeGame(gameId)
+        assertEquals(GameStatus.IN_PROGRESS, result.game.status)
+        // Snapshot must carry the initialized cards — not an empty map.
+        assertEquals(2, result.playerCards[1]?.size)
+        assertEquals(2, result.playerCards[2]?.size)
+        assertEquals(setOf(CardType.WHEAT_FIELD, CardType.BAKERY), result.playerCards[1]?.map { it.cardType }?.toSet())
+    }
+
+    @Test
+    fun `startGame throws NotEnoughPlayersException with only 1 player`() {
+        val gameId = 1
+        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING))
+        whenever(playerDao.getPlayers(gameId)).thenReturn(listOf(player(1)))
+
+        assertThrows<NotEnoughPlayersException> {
+            lobbyService.startGame(gameId)
+        }
+
+        verify(initializationService, never()).initializeGame(any())
+    }
+
+    @Test
+    fun `startGame throws NotEnoughPlayersException with no players`() {
+        val gameId = 1
+        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING))
+        whenever(playerDao.getPlayers(gameId)).thenReturn(emptyList())
+
+        assertThrows<NotEnoughPlayersException> {
+            lobbyService.startGame(gameId)
+        }
+
+        verify(initializationService, never()).initializeGame(any())
+    }
+
+    @Test
+    fun `startGame throws NotHostException when requesting user is not the host`() {
+        val gameId = 1
+        val hostUserId = 1
+        val requestingUserId = 999
+
+        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING).copy(hostUserId = hostUserId))
+
+        assertThrows<NotHostException> {
+            lobbyService.startGame(gameId, requestingUserId)
+        }
+
+        verify(initializationService, never()).initializeGame(any())
     }
 }

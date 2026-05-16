@@ -2,7 +2,6 @@ package org.machikoro.server.service
 
 import org.jetbrains.exposed.v1.jdbc.deleteAll
 import org.jetbrains.exposed.v1.jdbc.insert
-import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -15,6 +14,7 @@ import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.database.AbstractDBSetup
 import org.machikoro.server.database.Cards
+import org.machikoro.server.database.TestDataSeeder
 import org.machikoro.server.database.GameMarketplace
 import org.machikoro.server.database.Games
 import org.machikoro.server.database.Landmarks
@@ -22,12 +22,9 @@ import org.machikoro.server.database.PlayerCards
 import org.machikoro.server.database.PlayerLandmarks
 import org.machikoro.server.database.Players
 import org.machikoro.server.database.Users
-import org.machikoro.server.domain.enums.CardColor
 import org.machikoro.server.domain.enums.CardType
-import org.machikoro.server.domain.enums.EstablishmentType
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.LandmarkType
-import org.machikoro.server.domain.enums.PaymentSource
 import org.machikoro.server.domain.enums.TurnPhase
 import org.springframework.beans.factory.annotation.Autowired
 import kotlin.test.Test
@@ -66,6 +63,8 @@ class GameSyncServiceIntegrationTest : AbstractDBSetup() {
     private var gameId: Int = 0
     private var firstPlayerId: Int = 0
     private var secondPlayerId: Int = 0
+    private var firstUserId: Int = 0
+    private var secondUserId: Int = 0
 
     @BeforeEach
     fun setup() {
@@ -81,35 +80,8 @@ class GameSyncServiceIntegrationTest : AbstractDBSetup() {
         }
 
         val userIds = transaction {
-            // Two card types so we can exercise both the marketplace decrement
-            // (BAKERY purchased) and the unaffected-supply (WHEAT_FIELD) paths.
-            Cards.insertIgnore {
-                it[cardType] = CardType.BAKERY
-                it[cost] = 1
-                it[income] = 1
-                it[color] = CardColor.GREEN
-                it[establishmentType] = EstablishmentType.BREAD
-                it[paymentSource] = PaymentSource.BANK
-            }
-            Cards.insertIgnore {
-                it[cardType] = CardType.WHEAT_FIELD
-                it[cost] = 1
-                it[income] = 1
-                it[color] = CardColor.BLUE
-                it[establishmentType] = EstablishmentType.WHEAT
-                it[paymentSource] = PaymentSource.BANK
-            }
-
-            // Two landmarks so we can assert one built vs one unbuilt on the
-            // same player without conflating "no row" with "unbuilt row".
-            Landmarks.insertIgnore {
-                it[landmarkType] = LandmarkType.TRAIN_STATION
-                it[cost] = 4
-            }
-            Landmarks.insertIgnore {
-                it[landmarkType] = LandmarkType.SHOPPING_MALL
-                it[cost] = 10
-            }
+            TestDataSeeder.seedAllCards()
+            TestDataSeeder.seedAllLandmarks()
 
             val user1Id = (Users.insert { it[username] = "syncHost" } get Users.id).value
             val user2Id = (Users.insert { it[username] = "syncGuest" } get Users.id).value
@@ -117,6 +89,8 @@ class GameSyncServiceIntegrationTest : AbstractDBSetup() {
         }
 
         gameId = gameDao.create(userIds.first)
+        firstUserId = userIds.first
+        secondUserId = userIds.second
         firstPlayerId = playerDao.addPlayer(gameId, userIds.first).id
         secondPlayerId = playerDao.addPlayer(gameId, userIds.second).id
     }
@@ -164,16 +138,21 @@ class GameSyncServiceIntegrationTest : AbstractDBSetup() {
         assertEquals(7, secondPlayer.coins)
 
         // ── playerCards ─────────────────────────────────────────────────
-        // First player owns one BAKERY; second player owns nothing.
+        // Both players start with WHEAT_FIELD + BAKERY from initialization.
+        // The extra upsert(BAKERY, 1) above keeps BAKERY quantity at 1 (upsert is idempotent here).
         val firstCards = snapshot.playerCards[firstPlayerId].orEmpty()
-        assertEquals(1, firstCards.size)
-        assertEquals(CardType.BAKERY, firstCards.single().cardType)
-        assertEquals(1, firstCards.single().quantity)
-        assertTrue(snapshot.playerCards[secondPlayerId].isNullOrEmpty())
+        assertEquals(2, firstCards.size)
+        val firstCardTypes = firstCards.map { it.cardType }.toSet()
+        assertEquals(setOf(CardType.WHEAT_FIELD, CardType.BAKERY), firstCardTypes)
+        assertEquals(1, firstCards.first { it.cardType == CardType.BAKERY }.quantity)
+
+        val secondCards = snapshot.playerCards[secondPlayerId].orEmpty()
+        assertEquals(2, secondCards.size)
+        assertEquals(setOf(CardType.WHEAT_FIELD, CardType.BAKERY), secondCards.map { it.cardType }.toSet())
 
         // ── playerLandmarks ─────────────────────────────────────────────
-        // First player: TRAIN_STATION built, SHOPPING_MALL unbuilt.
-        // Second player: both unbuilt.
+        // All 4 landmark types are initialized. First player has TRAIN_STATION built;
+        // rest are unbuilt. Second player has all 4 unbuilt.
         val firstLandmarks = snapshot.playerLandmarks[firstPlayerId].orEmpty()
         val firstTrain = firstLandmarks.find { it.landmarkType == LandmarkType.TRAIN_STATION }
         val firstMall = firstLandmarks.find { it.landmarkType == LandmarkType.SHOPPING_MALL }
@@ -185,19 +164,17 @@ class GameSyncServiceIntegrationTest : AbstractDBSetup() {
         )
 
         val secondLandmarks = snapshot.playerLandmarks[secondPlayerId].orEmpty()
-        assertEquals(2, secondLandmarks.size)
+        assertEquals(4, secondLandmarks.size)
         assertTrue(secondLandmarks.all { !it.isBuilt })
 
         // ── marketplace ─────────────────────────────────────────────────
         // BAKERY decremented by 1 (default 6 → 5), WHEAT_FIELD still at 6.
-        // Only the two card types seeded by setup() show up — initForGame
-        // skips types whose Cards row isn't present.
         assertEquals(5, snapshot.marketplace[CardType.BAKERY])
         assertEquals(6, snapshot.marketplace[CardType.WHEAT_FIELD])
 
         // ── turnOrder ───────────────────────────────────────────────────
-        // Both players present; ordering itself is randomized by startGame.
+        // turnOrder carries user IDs — same ID space as activePlayerId.
         assertEquals(2, snapshot.turnOrder.size)
-        assertTrue(snapshot.turnOrder.containsAll(listOf(firstPlayerId, secondPlayerId)))
+        assertTrue(snapshot.turnOrder.containsAll(listOf(firstUserId, secondUserId)))
     }
 }

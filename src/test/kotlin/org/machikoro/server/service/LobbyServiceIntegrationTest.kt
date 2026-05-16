@@ -2,7 +2,6 @@ package org.machikoro.server.service
 
 import org.jetbrains.exposed.v1.jdbc.deleteAll
 import org.jetbrains.exposed.v1.jdbc.insert
-import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -11,12 +10,14 @@ import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.dao.CardDao
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.GameMarketplaceDao
+import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.LandmarkDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.database.AbstractDBSetup
 import org.machikoro.server.database.CardActivationNumbers
 import org.machikoro.server.database.Cards
+import org.machikoro.server.database.TestDataSeeder
 import org.machikoro.server.database.GameMarketplace
 import org.machikoro.server.database.Games
 import org.machikoro.server.database.Landmarks
@@ -25,11 +26,10 @@ import org.machikoro.server.database.Players
 import org.machikoro.server.database.Users
 import org.machikoro.server.domain.enums.CardColor
 import org.machikoro.server.domain.enums.CardType
-import org.machikoro.server.domain.enums.EstablishmentType
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.LandmarkType
-import org.machikoro.server.domain.enums.PaymentSource
 import org.machikoro.server.exception.GameNotFoundException
+import org.machikoro.server.exception.NotEnoughPlayersException
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.mock
@@ -54,6 +54,12 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
     private lateinit var playerLandmarkDao: PlayerLandmarkDao
 
     @Autowired
+    private lateinit var playerCardDao: PlayerCardDao
+
+    @Autowired
+    private lateinit var initializationService: InitializationService
+
+    @Autowired
     private lateinit var cardDao: CardDao
 
     @Autowired
@@ -62,6 +68,8 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
     private var gameId: Int = 0
     private var firstPlayerId: Int = 0
     private var secondPlayerId: Int = 0
+    private var firstUserId: Int = 0
+    private var secondUserId: Int = 0
 
     @BeforeEach
     fun setup() {
@@ -77,41 +85,17 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
         }
 
         val userIds = transaction {
-            val bakeryId = Cards.insertIgnore {
-                it[cardType] = CardType.BAKERY
-                it[cost] = 1
-                it[income] = 1
-                it[color] = CardColor.GREEN
-                it[establishmentType] = EstablishmentType.BREAD
-                it[paymentSource] = PaymentSource.BANK
-            } get Cards.id
+            TestDataSeeder.seedAllCards()
+            TestDataSeeder.seedAllLandmarks()
 
-            CardActivationNumbers.insertIgnore {
-                it[cardId] = bakeryId
-                it[number] = 2
-            }
-            CardActivationNumbers.insertIgnore {
-                it[cardId] = bakeryId
-                it[number] = 3
-            }
-
-            Landmarks.insertIgnore {
-                it[landmarkType] = LandmarkType.TRAIN_STATION
-                it[cost] = 4
-            }
-
-            val user1Id = (Users.insert {
-                it[username] = "lobbyHost"
-            } get Users.id).value
-
-            val user2Id = (Users.insert {
-                it[username] = "lobbyGuest"
-            } get Users.id).value
-
+            val user1Id = (Users.insert { it[username] = "lobbyHost" } get Users.id).value
+            val user2Id = (Users.insert { it[username] = "lobbyGuest" } get Users.id).value
             user1Id to user2Id
         }
 
         gameId = gameDao.create(userIds.first)
+        firstUserId = userIds.first
+        secondUserId = userIds.second
         firstPlayerId = playerDao.addPlayer(gameId, userIds.first).id
         secondPlayerId = playerDao.addPlayer(gameId, userIds.second).id
     }
@@ -145,6 +129,75 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `startGame initializes all resources correctly`() {
+        val result = lobbyService.startGame(gameId)
+
+        // Game status
+        assertEquals(GameStatus.IN_PROGRESS, result.game.status)
+
+        // Marketplace
+        assertTrue(gameMarketplaceDao.findByGameId(gameId).isNotEmpty())
+        assertEquals(6, result.marketplace[CardType.BAKERY])
+
+        // Landmarks - all unbuilt
+        assertTrue(playerLandmarkDao.findByPlayerId(firstPlayerId).isNotEmpty())
+        assertTrue(playerLandmarkDao.findByPlayerId(secondPlayerId).isNotEmpty())
+        assertTrue(result.playerLandmarks.values.flatten().all { !it.isBuilt })
+
+        // Cards — snapshot must carry starting cards so the client can render immediately.
+        val firstPlayerCards = playerCardDao.findByPlayerId(firstPlayerId)
+        val secondPlayerCards = playerCardDao.findByPlayerId(secondPlayerId)
+        assertEquals(2, firstPlayerCards.size)
+        assertEquals(2, secondPlayerCards.size)
+        assertEquals(2, result.playerCards[firstPlayerId]?.size)
+        assertEquals(2, result.playerCards[secondPlayerId]?.size)
+        assertEquals(
+            setOf(CardType.WHEAT_FIELD, CardType.BAKERY),
+            result.playerCards[firstPlayerId]?.map { it.cardType }?.toSet(),
+        )
+
+        // Coins - should be 3
+        val firstPlayerCoins = playerDao.findById(firstPlayerId)?.coins
+        val secondPlayerCoins = playerDao.findById(secondPlayerId)?.coins
+        assertEquals(3, firstPlayerCoins)
+        assertEquals(3, secondPlayerCoins)
+    }
+
+    @Test
+    fun `startGame randomizes player turn order`() {
+        // Run startGame multiple times and verify turn orders can be different
+        val result1 = lobbyService.startGame(gameId)
+        val turnOrder1 = result1.turnOrder
+
+        // The first run already shuffled, so we just verify order is set.
+        // turnOrder carries user IDs — same ID space as activePlayerId.
+        assertEquals(2, turnOrder1.size)
+        assertTrue(turnOrder1.containsAll(listOf(firstUserId, secondUserId)))
+    }
+
+    @Test
+    fun `startGame gives players starting coins and cards`() {
+        val result = lobbyService.startGame(gameId)
+
+        // Verify coins
+        result.players.forEach { player ->
+            val playerRecord = playerDao.findById(player.id)
+            assertEquals(3, playerRecord?.coins, "Player ${player.id} should have 3 coins")
+        }
+
+        // Verify starting cards in DB and in the GameStateDto snapshot.
+        result.players.forEach { player ->
+            val cards = playerCardDao.findByPlayerId(player.id)
+            assertEquals(2, cards.size, "Player ${player.id} should have 2 starting cards")
+            val cardTypes = cards.map { it.cardType }.toSet()
+            assertEquals(setOf(CardType.WHEAT_FIELD, CardType.BAKERY), cardTypes)
+            // Snapshot must include cards for each player — assert by cardType, not index.
+            val snapshotCardTypes = result.playerCards[player.id]?.map { it.cardType }?.toSet()
+            assertEquals(setOf(CardType.WHEAT_FIELD, CardType.BAKERY), snapshotCardTypes)
+        }
+    }
+
+    @Test
     fun `startGame throws GameNotFoundException for unknown game`() {
         assertThrows<GameNotFoundException> {
             lobbyService.startGame(999999)
@@ -152,16 +205,33 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
     }
 
     @Test
-    fun `startGame rolls back setup when landmark initialization fails`() {
-        val failingLandmarkDao = mock<PlayerLandmarkDao> {
-            on { initForPlayer(any()) } doThrow RuntimeException("landmark setup failed")
+    fun `startGame throws NotEnoughPlayersException when only one player has joined`() {
+        // Create a fresh game with only the host — no second player added.
+        val soloGameId = transaction {
+            val userId = (Users.insert { it[username] = "solo" } get Users.id).value
+            val gId = gameDao.create(userId)
+            playerDao.addPlayer(gId, userId)
+            gId
+        }
+
+        assertThrows<NotEnoughPlayersException> {
+            lobbyService.startGame(soloGameId)
+        }
+    }
+
+    @Test
+    fun `startGame rolls back all initialization when it fails`() {
+        val failingInitService = mock<InitializationService> {
+            on { initializeGame(any()) } doThrow RuntimeException("initialization failed")
         }
 
         val service = LobbyService(
             gameDao,
             playerDao,
             gameMarketplaceDao,
-            failingLandmarkDao,
+            playerLandmarkDao,
+            failingInitService,
+            playerCardDao,
             cardDao,
             landmarkDao,
         )

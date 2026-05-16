@@ -1,6 +1,7 @@
 package org.machikoro.server.service
 
 import org.jetbrains.exposed.v1.jdbc.deleteAll
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
@@ -17,6 +18,7 @@ import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.database.AbstractDBSetup
 import org.machikoro.server.database.CardActivationNumbers
 import org.machikoro.server.database.Cards
+import org.machikoro.server.database.TestDataSeeder
 import org.machikoro.server.database.GameMarketplace
 import org.machikoro.server.database.Games
 import org.machikoro.server.database.Landmarks
@@ -25,17 +27,15 @@ import org.machikoro.server.database.PlayerLandmarks
 import org.machikoro.server.database.Players
 import org.machikoro.server.database.Users
 import org.machikoro.server.domain.enums.CardType
-import org.machikoro.server.domain.enums.EstablishmentType
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.LandmarkType
-import org.machikoro.server.domain.enums.PaymentSource
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.dto.PurchaseType
 import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.service.interfaces.EarningsService
 import org.springframework.beans.factory.annotation.Autowired
 import org.jetbrains.exposed.v1.core.eq
-import org.machikoro.server.domain.enums.CardColor
+import org.jetbrains.exposed.v1.jdbc.select
 import kotlin.test.Test
 
 class PurchaseServiceIntegrationTest : AbstractDBSetup() {
@@ -67,42 +67,8 @@ class PurchaseServiceIntegrationTest : AbstractDBSetup() {
         }
 
         transaction {
-            val bakeryId = Cards.insert {
-                it[cardType] = CardType.BAKERY
-                it[cost] = 1
-                it[income] = 1
-                it[color] = CardColor.GREEN
-                it[establishmentType] = EstablishmentType.BREAD
-                it[paymentSource] = PaymentSource.BANK
-            } get Cards.id
-
-            CardActivationNumbers.insert {
-                it[cardId] = bakeryId
-                it[number] = 2
-            }
-            CardActivationNumbers.insert {
-                it[cardId] = bakeryId
-                it[number] = 3
-            }
-
-            Cards.insert {
-                it[cardType] = CardType.STADIUM
-                it[cost] = 6
-                it[income] = 2
-                it[color] = CardColor.PURPLE
-                it[establishmentType] = EstablishmentType.MAJOR
-                it[paymentSource] = PaymentSource.ALL_PLAYERS
-            }
-
-            Landmarks.insert {
-                it[landmarkType] = LandmarkType.TRAIN_STATION
-                it[cost] = 4
-            }
-
-            Landmarks.insert {
-                it[landmarkType] = LandmarkType.SHOPPING_MALL
-                it[cost] = 10
-            }
+            TestDataSeeder.seedAllCards()
+            TestDataSeeder.seedAllLandmarks()
 
             val user1Id = (Users.insert { it[username] = "buyer1" } get Users.id).value
             val user2Id = (Users.insert { it[username] = "buyer2" } get Users.id).value
@@ -300,6 +266,12 @@ class PurchaseServiceIntegrationTest : AbstractDBSetup() {
 
     @Test
     fun `purchase fails when card does not exist`() {
+        // Remove WHEAT_FIELD from DB to simulate missing card definition.
+        // Marketplace and PlayerCards entries must be removed first due to FK constraints.
+        transaction {
+            GameMarketplace.deleteWhere { GameMarketplace.gameId eq gameId }
+            Cards.deleteWhere { Cards.cardType eq CardType.WHEAT_FIELD }
+        }
         val before = snapshot()
 
         val ex = assertThrows<CustomWebSocketException> {
@@ -325,6 +297,15 @@ class PurchaseServiceIntegrationTest : AbstractDBSetup() {
 
     @Test
     fun `purchase fails when landmark does not exist`() {
+        // Remove RADIO_TOWER from DB to simulate missing landmark definition.
+        // PlayerLandmarks entries must be removed first due to FK constraints.
+        transaction {
+            val landmarkId = Landmarks.select(Landmarks.id)
+                .where { Landmarks.landmarkType eq LandmarkType.RADIO_TOWER }
+                .single()[Landmarks.id]
+            PlayerLandmarks.deleteWhere { PlayerLandmarks.landmarkId eq landmarkId }
+            Landmarks.deleteWhere { Landmarks.landmarkType eq LandmarkType.RADIO_TOWER }
+        }
         val before = snapshot()
 
         val ex = assertThrows<CustomWebSocketException> {
