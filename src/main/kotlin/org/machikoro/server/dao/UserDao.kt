@@ -1,6 +1,7 @@
 package org.machikoro.server.dao
 
 import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.plus
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
@@ -122,6 +123,16 @@ class UserDao {
      */
     fun findAll(): List<UserModel> = transaction {
         Users.selectAll().map { it.toModel() }
+    }
+
+    /**
+     * Returns top [limit] users sorted by wins desc, then games played desc
+     */
+    fun getLeaderboard(limit: Int): List<UserModel> = transaction {
+        Users.selectAll()
+            .orderBy(Users.totalWins to SortOrder.DESC, Users.totalGamesPlayed to SortOrder.DESC)
+            .limit(limit)
+            .map { it.toModel() }
     }
 
     /**
