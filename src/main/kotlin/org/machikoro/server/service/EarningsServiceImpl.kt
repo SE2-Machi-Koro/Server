@@ -26,7 +26,8 @@ class EarningsServiceImpl(
     private val playerDao: PlayerDao,
     private val playerCardDao: PlayerCardDao,
     private val cardDao: CardDao,
-    private val gameDao: GameDao
+    private val gameDao: GameDao,
+    private val gamePhaseService: GamePhaseService
 ) : EarningsService {
 
     fun computeEarnings(pairs: List<Pair<Int, Int>>): Int =
@@ -181,7 +182,7 @@ class EarningsServiceImpl(
         // Distribute coins
         processEarnings(gameId, diceRoll, activePlayer.id)
 
-        // Advance game state to allow active player to construct a new building
-        gameDao.updateTurnPhase(gameId, TurnPhase.BUY_OR_BUILD)
+        // Route through phase service so all transition logic is applied consistently
+        gamePhaseService.advancePhase(gameId)
     }
 }
