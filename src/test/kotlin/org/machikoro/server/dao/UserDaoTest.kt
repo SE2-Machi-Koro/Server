@@ -143,4 +143,51 @@ class UserDaoTest : AbstractDBSetup() {
             dao.delete(999999)
         }
     }
+
+    // ── getLeaderboard ───────────────────────────────────────────────────────
+
+    @Test
+    fun `getLeaderboard returns users sorted by wins descending`() {
+        val lowId = dao.create("low")
+        val highId = dao.create("high")
+        dao.incrementWins(highId)
+        dao.incrementWins(highId)
+        dao.incrementWins(lowId)
+
+        val result = dao.getLeaderboard(10)
+
+        assertEquals(listOf("high", "low"), result.map { it.username })
+    }
+
+    @Test
+    fun `getLeaderboard breaks ties by gamesPlayed descending`() {
+        val fewId = dao.create("few")
+        val manyId = dao.create("many")
+        // Both 1 win; "many" has more games played
+        dao.incrementWins(fewId)
+        dao.incrementWins(manyId)
+        dao.incrementGamesPlayed(manyId)
+        dao.incrementGamesPlayed(manyId)
+        dao.incrementGamesPlayed(fewId)
+
+        val result = dao.getLeaderboard(10)
+
+        assertEquals(listOf("many", "few"), result.map { it.username })
+    }
+
+    @Test
+    fun `getLeaderboard respects the limit`() {
+        repeat(5) { i -> dao.create("user$i") }
+
+        val result = dao.getLeaderboard(3)
+
+        assertEquals(3, result.size)
+    }
+
+    @Test
+    fun `getLeaderboard returns empty list when no users exist`() {
+        val result = dao.getLeaderboard(10)
+
+        assertTrue(result.isEmpty())
+    }
 }
