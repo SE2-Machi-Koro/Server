@@ -56,7 +56,8 @@ class GamePhaseService(
 
         winConditionService.detectWinner(gameId)?.let { winner ->
             userDao.incrementWins(winner.userId)
-            finishGame(gameId)
+            playerDao.getPlayers(gameId).forEach { userDao.incrementGamesPlayed(it.userId) }
+            gameDao.updateStatus(gameId, GameStatus.FINISHED)
             return EndTurnOutcome.Won(winner.id, game.roundNumber)
         }
 
@@ -77,21 +78,22 @@ class GamePhaseService(
         return TurnPhase.ROLL_DICE
     }
 
-    private fun finishGame(gameId: Int) {
-        cleanupFinishedGameData(gameId)
-        playerDao.getPlayers(gameId).forEach { userDao.incrementGamesPlayed(it.userId) }
-        gameDao.updateStatus(gameId, GameStatus.FINISHED)
-    }
-
     /**
-     * Runs inside endTurn's transaction so game cleanup and status changes stay
+     * Runs as transaction so game cleanup stays
      * atomic when a landmark purchase produces a winner.
      */
-    private fun cleanupFinishedGameData(gameId: Int) {
+    @Transactional
+     fun cleanupFinishedGameData(gameId: Int) {
+        gameStateGuard.ensureGameIsFinished(gameId)
+
         gameMarketplaceDao.deleteAllForGame(gameId)
+
         playerDao.getPlayers(gameId).forEach {
             playerCardDao.deleteAllByPlayerId(it.id)
             playerLandmarkDao.deleteAllByPlayerId(it.id)
         }
+        playerDao.deleteByGameId(gameId)
+
+        gameDao.delete(gameId)
     }
 }

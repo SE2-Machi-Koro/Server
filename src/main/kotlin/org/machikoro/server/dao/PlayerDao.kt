@@ -14,6 +14,7 @@ import org.machikoro.server.database.Games
 import org.machikoro.server.database.Players
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.models.PlayerModel
+import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.exception.PlayerNotFoundException
 import org.springframework.stereotype.Repository
 
@@ -138,14 +139,7 @@ class PlayerDao {
         Players.selectAll().map { it.toModel() }
     }
 
-    /**
-     * Deletes a player by their ID.
-     * @param playerId Player ID
-     */
-    fun delete(playerId: Int): Unit = transaction {
-        val deletedRows = Players.deleteWhere { Players.id eq playerId }
-        if (deletedRows == 0) throw PlayerNotFoundException("Player $playerId not found")
-    }
+
 
     /**
      * Updates the turn order for a player.
@@ -169,5 +163,23 @@ class PlayerDao {
             it[Players.lastSeenAt] = System.currentTimeMillis()
         }
         if (updatedRows == 0) throw PlayerNotFoundException("Player $playerId not found")
+    }
+
+    /**
+     * Deletes a player by their ID.
+     * @param playerId Player ID
+     */
+    fun deleteByPlayerId(playerId: Int): Unit = transaction {
+        val deletedRows = Players.deleteWhere { Players.id eq playerId }
+        if (deletedRows == 0) throw PlayerNotFoundException("Player $playerId not found")
+    }
+
+    /**
+    * Deletes all players in a given game.
+    * @param gameId Game ID
+    */
+    fun deleteByGameId(gameId: Int): Unit = transaction {
+        val deletedRows = Players.deleteWhere { Players.gameId eq gameId }
+        if (deletedRows == 0) throw PlayerNotFoundException("Game $gameId not found")
     }
 }

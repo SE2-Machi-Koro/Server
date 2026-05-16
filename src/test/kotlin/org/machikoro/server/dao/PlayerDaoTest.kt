@@ -12,6 +12,7 @@ import org.machikoro.server.database.Games
 import org.machikoro.server.database.Players
 import org.machikoro.server.database.Users
 import org.machikoro.server.domain.enums.GameStatus
+import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.exception.PlayerNotFoundException
 
 class PlayerDaoTest : AbstractDBSetup() {
@@ -93,16 +94,16 @@ class PlayerDaoTest : AbstractDBSetup() {
     }
 
     @Test
-    fun `delete removes player from db`() {
+    fun `deleteByPlayerId removes player from db`() {
         val player = playerDao.addPlayer(gameId, userId)
-        playerDao.delete(player.id)
+        playerDao.deleteByPlayerId(player.id)
         assertNull(playerDao.findById(player.id))
     }
 
     @Test
-    fun `delete throws when player does not exist`() {
+    fun `deleteByPlayerId throws when player does not exist`() {
         assertThrows<PlayerNotFoundException> {
-            playerDao.delete(999999)
+            playerDao.deleteByPlayerId(999999)
         }
     }
 
@@ -131,9 +132,10 @@ class PlayerDaoTest : AbstractDBSetup() {
     fun `countByGameId decreases after player deletion`() {
         val player = playerDao.addPlayer(gameId, userId)
         assertEquals(1, playerDao.countByGameId(gameId))
-        playerDao.delete(player.id)
+        playerDao.deleteByPlayerId(player.id)
         assertEquals(0, playerDao.countByGameId(gameId))
     }
+
 
     @Test
     fun `addPlayer assigns incrementing turn order`() {
@@ -199,4 +201,19 @@ class PlayerDaoTest : AbstractDBSetup() {
             playerDao.updateLastSeen(999999)
         }
     }
+
+    @Test
+    fun `deleteByGameId removes all players from game`() {
+        val userId2 = userDao.create("player_user_2")
+
+        playerDao.addPlayer(gameId, userId)
+        playerDao.addPlayer(gameId, userId2)
+
+        assertEquals(2, playerDao.countByGameId(gameId))
+
+        playerDao.deleteByGameId(gameId)
+
+        assertTrue(playerDao.getPlayers(gameId).isEmpty())
+    }
+
 }

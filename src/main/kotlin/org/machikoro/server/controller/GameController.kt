@@ -7,7 +7,6 @@ import org.machikoro.server.dto.EndTurnOutcome
 import org.machikoro.server.dto.AdvancePhaseRequest
 import org.machikoro.server.dto.EndTurnRequest
 import org.machikoro.server.dto.GameStateDto
-import org.machikoro.server.dto.LeaveFinishedGameRequest
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.PurchaseRequest
 import org.machikoro.server.dto.RollDiceRequest
@@ -17,7 +16,6 @@ import org.machikoro.server.service.DiceService
 import org.machikoro.server.service.GamePhaseService
 import org.machikoro.server.service.GameSyncService
 import org.machikoro.server.service.GameStateGuard
-import org.machikoro.server.service.LeaveFinishedGameService
 import org.machikoro.server.service.LobbyService
 import org.machikoro.server.service.PurchaseResult
 import org.machikoro.server.service.PurchaseService
@@ -35,7 +33,6 @@ import org.springframework.stereotype.Controller
 class GameController(
     private val gamePhaseService: GamePhaseService,
     private val messagingTemplate: SimpMessagingTemplate,
-    private val leaveFinishedGameService: LeaveFinishedGameService,
     private val purchaseService: PurchaseService,
     private val diceService: DiceService,
     private val lobbyService: LobbyService,
@@ -198,26 +195,9 @@ class GameController(
             is EndTurnOutcome.Won -> {
                 logger.info("Game ${request.gameId} finished, winner=${result.winnerId}")
                 broadcastWin(request.gameId, result.winnerId, result.roundsPlayed)
+                gamePhaseService.cleanupFinishedGameData(request.gameId)
             }
         }
-    }
-
-    /**
-     * Removes a player from a finished game.
-     *
-     * Message is sent to /app/game.leave and broadcast to /topic/game/{gameId}.
-     */
-    @MessageMapping("/game.leave")
-    @AsyncListener(operation = AsyncOperation(
-        channelName = "/game.leave",
-        description = "Removes a player from a finished game.",
-        payloadType = LeaveFinishedGameRequest::class,
-    ))
-    fun leaveFinishedGame(@Payload request: LeaveFinishedGameRequest, headerAccessor: SimpMessageHeaderAccessor) {
-        requireOwnerOfPlayer(request.gameId, request.playerId, headerAccessor)
-        leaveFinishedGameService.leaveFinishedGame(request.gameId, request.playerId)
-        logger.info("${request.playerId} left game ${request.gameId}")
-        broadcastPlayerLeftFinishedGame(request.gameId, request.playerId)
     }
 
     /**
@@ -304,17 +284,6 @@ class GameController(
                 sender = "server",
                 payload = payload,
             ),
-        )
-    }
-
-    private fun broadcastPlayerLeftFinishedGame(gameId: Int, playerId: Int) {
-        messagingTemplate.convertAndSend(
-            "/topic/game/$gameId",
-            WebSocketMessage(
-                type = MessageType.PLAYER_LEFT_FINISHED_GAME,
-                sender = "server",
-                payload = mapOf("playerId" to playerId),
-            )
         )
     }
 
