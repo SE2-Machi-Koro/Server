@@ -2,7 +2,6 @@ package org.machikoro.server.service
 
 import org.jetbrains.exposed.v1.jdbc.deleteAll
 import org.jetbrains.exposed.v1.jdbc.insert
-import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -18,6 +17,7 @@ import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.database.AbstractDBSetup
 import org.machikoro.server.database.CardActivationNumbers
 import org.machikoro.server.database.Cards
+import org.machikoro.server.database.TestDataSeeder
 import org.machikoro.server.database.GameMarketplace
 import org.machikoro.server.database.Games
 import org.machikoro.server.database.Landmarks
@@ -26,11 +26,10 @@ import org.machikoro.server.database.Players
 import org.machikoro.server.database.Users
 import org.machikoro.server.domain.enums.CardColor
 import org.machikoro.server.domain.enums.CardType
-import org.machikoro.server.domain.enums.EstablishmentType
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.LandmarkType
-import org.machikoro.server.domain.enums.PaymentSource
 import org.machikoro.server.exception.GameNotFoundException
+import org.machikoro.server.exception.NotEnoughPlayersException
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.mock
@@ -69,6 +68,8 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
     private var gameId: Int = 0
     private var firstPlayerId: Int = 0
     private var secondPlayerId: Int = 0
+    private var firstUserId: Int = 0
+    private var secondUserId: Int = 0
 
     @BeforeEach
     fun setup() {
@@ -84,49 +85,17 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
         }
 
         val userIds = transaction {
-            val bakeryId = Cards.insertIgnore {
-                it[cardType] = CardType.BAKERY
-                it[cost] = 1
-                it[income] = 1
-                it[color] = CardColor.GREEN
-                it[establishmentType] = EstablishmentType.BREAD
-                it[paymentSource] = PaymentSource.BANK
-            } get Cards.id
+            TestDataSeeder.seedAllCards()
+            TestDataSeeder.seedAllLandmarks()
 
-            CardActivationNumbers.insertIgnore {
-                it[cardId] = bakeryId
-                it[number] = 2
-            }
-            CardActivationNumbers.insertIgnore {
-                it[cardId] = bakeryId
-                it[number] = 3
-            }
-            Cards.insertIgnore {
-                it[cardType] = CardType.WHEAT_FIELD
-                it[cost] = 1
-                it[income] = 1
-                it[color] = CardColor.BLUE
-                it[establishmentType] = EstablishmentType.WHEAT
-                it[paymentSource] = PaymentSource.BANK
-            }
-
-            Landmarks.insertIgnore {
-                it[landmarkType] = LandmarkType.TRAIN_STATION
-                it[cost] = 4
-            }
-
-            val user1Id = (Users.insert {
-                it[username] = "lobbyHost"
-            } get Users.id).value
-
-            val user2Id = (Users.insert {
-                it[username] = "lobbyGuest"
-            } get Users.id).value
-
+            val user1Id = (Users.insert { it[username] = "lobbyHost" } get Users.id).value
+            val user2Id = (Users.insert { it[username] = "lobbyGuest" } get Users.id).value
             user1Id to user2Id
         }
 
         gameId = gameDao.create(userIds.first)
+        firstUserId = userIds.first
+        secondUserId = userIds.second
         firstPlayerId = playerDao.addPlayer(gameId, userIds.first).id
         secondPlayerId = playerDao.addPlayer(gameId, userIds.second).id
     }
@@ -200,9 +169,10 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
         val result1 = lobbyService.startGame(gameId)
         val turnOrder1 = result1.turnOrder
 
-        // The first run already shuffled, so we just verify order is set
+        // The first run already shuffled, so we just verify order is set.
+        // turnOrder carries user IDs — same ID space as activePlayerId.
         assertEquals(2, turnOrder1.size)
-        assertTrue(turnOrder1.containsAll(listOf(firstPlayerId, secondPlayerId)))
+        assertTrue(turnOrder1.containsAll(listOf(firstUserId, secondUserId)))
     }
 
     @Test
@@ -231,6 +201,21 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
     fun `startGame throws GameNotFoundException for unknown game`() {
         assertThrows<GameNotFoundException> {
             lobbyService.startGame(999999)
+        }
+    }
+
+    @Test
+    fun `startGame throws NotEnoughPlayersException when only one player has joined`() {
+        // Create a fresh game with only the host — no second player added.
+        val soloGameId = transaction {
+            val userId = (Users.insert { it[username] = "solo" } get Users.id).value
+            val gId = gameDao.create(userId)
+            playerDao.addPlayer(gId, userId)
+            gId
+        }
+
+        assertThrows<NotEnoughPlayersException> {
+            lobbyService.startGame(soloGameId)
         }
     }
 

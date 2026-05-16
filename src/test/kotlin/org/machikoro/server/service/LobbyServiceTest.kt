@@ -21,6 +21,7 @@ import org.machikoro.server.exception.GameFinishedException
 import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.exception.LobbyFullException
+import org.machikoro.server.exception.NotEnoughPlayersException
 import org.machikoro.server.exception.NotHostException
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
@@ -265,6 +266,7 @@ class LobbyServiceTest {
         )
 
         whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING))
+        whenever(playerDao.getPlayers(gameId)).thenReturn(players)
         whenever(initializationService.initializeGame(gameId)).thenReturn(players)
         whenever(gameDao.findById(gameId)).thenReturn(updatedGame)
         whenever(playerCardDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(1 to p1Cards, 2 to p2Cards))
@@ -280,6 +282,32 @@ class LobbyServiceTest {
         assertEquals(2, result.playerCards[1]?.size)
         assertEquals(2, result.playerCards[2]?.size)
         assertEquals(setOf(CardType.WHEAT_FIELD, CardType.BAKERY), result.playerCards[1]?.map { it.cardType }?.toSet())
+    }
+
+    @Test
+    fun `startGame throws NotEnoughPlayersException with only 1 player`() {
+        val gameId = 1
+        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING))
+        whenever(playerDao.getPlayers(gameId)).thenReturn(listOf(player(1)))
+
+        assertThrows<NotEnoughPlayersException> {
+            lobbyService.startGame(gameId)
+        }
+
+        verify(initializationService, never()).initializeGame(any())
+    }
+
+    @Test
+    fun `startGame throws NotEnoughPlayersException with no players`() {
+        val gameId = 1
+        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING))
+        whenever(playerDao.getPlayers(gameId)).thenReturn(emptyList())
+
+        assertThrows<NotEnoughPlayersException> {
+            lobbyService.startGame(gameId)
+        }
+
+        verify(initializationService, never()).initializeGame(any())
     }
 
     @Test
