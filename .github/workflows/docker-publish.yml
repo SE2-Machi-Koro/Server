@@ -118,8 +118,8 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: 53200
-          # Pull new image and restart only the backend container
+          # Pull new image and restart only the backend; .env lives next to compose.yaml
           script: |
-            cd /var/lib/docker/volumes/doco-cd-setup_data/_data/github.com/SE2-Machi-Koro/Server
+            cd ~/machi-koro-server-deploy
             docker compose pull backend
             docker compose up -d --no-deps backend
