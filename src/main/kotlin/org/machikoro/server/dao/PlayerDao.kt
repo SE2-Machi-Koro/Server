@@ -14,7 +14,6 @@ import org.machikoro.server.database.Games
 import org.machikoro.server.database.Players
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.models.PlayerModel
-import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.exception.PlayerNotFoundException
 import org.springframework.stereotype.Repository
 
@@ -139,8 +138,6 @@ class PlayerDao {
         Players.selectAll().map { it.toModel() }
     }
 
-
-
     /**
      * Updates the turn order for a player.
      * @param playerId Player ID
@@ -179,7 +176,6 @@ class PlayerDao {
     * @param gameId Game ID
     */
     fun deleteByGameId(gameId: Int): Unit = transaction {
-        val deletedRows = Players.deleteWhere { Players.gameId eq gameId }
-        if (deletedRows == 0) throw PlayerNotFoundException("Game $gameId not found")
+        Players.deleteWhere { Players.gameId eq gameId }
     }
 }
