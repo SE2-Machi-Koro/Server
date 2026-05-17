@@ -216,4 +216,8 @@ class PlayerDaoTest : AbstractDBSetup() {
         assertTrue(playerDao.getPlayers(gameId).isEmpty())
     }
 
+    @Test
+    fun `deleteByGameId does not throw when game has no players`() {
+        assertDoesNotThrow { playerDao.deleteByGameId(gameId) }
+    }
 }
