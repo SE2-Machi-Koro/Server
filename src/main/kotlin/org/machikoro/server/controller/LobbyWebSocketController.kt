@@ -129,6 +129,7 @@ class LobbyWebSocketController(
             payload = mapOf(
                 "playerId" to player.id,
                 "userId" to player.userId,
+                "username" to principal.username,
                 "gameId" to player.gameId,
                 "coins" to player.coins
             )
