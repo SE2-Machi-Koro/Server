@@ -45,4 +45,21 @@ This document outlines the procedure to verify that an in-progress Machi Koro ga
 
 ## Evidence for Sprint 2
 
-*(Include screenshots of the client interface or logs from the WS client showing the `/app/game.sync` payload before and after the restart matching exactly, or refer to the `SpringContextRestartRecoveryIntegrationTest` automated suite for Spring context level recovery testing.)*
+Automated coverage:
+
+- `SpringContextRestartRecoveryIntegrationTest` creates an in-progress game in a Testcontainers-backed Postgres database, mutates persisted fields, forces a Spring application context restart, and then re-enters the `/app/game.sync` controller path.
+- The recovered `SYNC` payload verifies the same game id, `IN_PROGRESS` status, `BUY_OR_BUILD` phase, dice roll, round number, player coins, owned cards, built landmark, marketplace quantities, active player, and turn order.
+
+Last local verification:
+
+```bash
+./gradlew test --tests org.machikoro.server.service.SpringContextRestartRecoveryIntegrationTest
+./gradlew test
+```
+
+Both commands passed on 2026-05-18.
+
+Manual demo evidence:
+
+- During the Sprint 2 demo, capture the `/app/game.sync` payload before and after `docker compose restart backend`.
+- The fields listed in "Verify Game State" above must match exactly, and the game must continue from the recovered turn.

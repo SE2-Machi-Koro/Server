@@ -5,6 +5,8 @@ import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.machikoro.server.auth.UserPrincipal
+import org.machikoro.server.controller.WebSocketController
 import org.junit.jupiter.api.MethodOrderer
 import org.junit.jupiter.api.Order
 import org.junit.jupiter.api.Test
@@ -27,8 +29,18 @@ import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.LandmarkType
 import org.machikoro.server.domain.enums.TurnPhase
+import org.machikoro.server.dto.MessageType
+import org.machikoro.server.dto.SyncGameRequest
+import org.machikoro.server.dto.WebSocketMessage
+import org.mockito.kotlin.any
+import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.eq
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.verify
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.messaging.simp.SimpMessageHeaderAccessor
+import org.springframework.messaging.simp.SimpMessagingTemplate
 import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
@@ -46,6 +58,9 @@ class SpringContextRestartRecoveryIntegrationTest {
 
     @Autowired
     private lateinit var lobbyService: LobbyService
+
+    @Autowired
+    private lateinit var connectionTracker: WebSocketConnectionTracker
 
     @Autowired
     private lateinit var gameDao: GameDao
@@ -82,6 +97,8 @@ class SpringContextRestartRecoveryIntegrationTest {
 
         var sharedGameId: Int = 0
         var firstPlayerId: Int = 0
+        var hostUserId: Int = 0
+        var guestUserId: Int = 0
     }
 
     @Test
@@ -102,8 +119,8 @@ class SpringContextRestartRecoveryIntegrationTest {
             TestDataSeeder.seedAllLandmarks()
         }
 
-        val hostUserId = transaction { Users.insert { it[Users.username] = "crashHost" } get Users.id }.value
-        val guestUserId = transaction { Users.insert { it[Users.username] = "crashGuest" } get Users.id }.value
+        hostUserId = transaction { Users.insert { it[Users.username] = "crashHost" } get Users.id }.value
+        guestUserId = transaction { Users.insert { it[Users.username] = "crashGuest" } get Users.id }.value
 
         sharedGameId = gameDao.create(hostUserId)
         
@@ -128,16 +145,51 @@ class SpringContextRestartRecoveryIntegrationTest {
 
     @Test
     @Order(2)
-    fun `step 2 - after context restart, game state is fully recovered from db`() {
+    fun `step 2 - after context restart, game sync returns fully recovered db state`() {
         assertTrue(sharedGameId > 0, "Game ID must have survived JVM static scope")
-        
-        val snapshot = gameSyncService.buildSnapshot(sharedGameId)
-        
+
+        val messagingTemplate = mock<SimpMessagingTemplate>()
+        val controller = WebSocketController(
+            lobbyService = lobbyService,
+            connectionTracker = connectionTracker,
+            gameSyncService = gameSyncService,
+            messagingTemplate = messagingTemplate,
+        )
+        val accessor = SimpMessageHeaderAccessor.create().apply {
+            sessionId = "reconnected-session"
+            sessionAttributes = mutableMapOf()
+            user = UserPrincipal(userId = snapshotUserId(), username = "crashHost")
+        }
+
+        controller.syncGameState(SyncGameRequest(gameId = sharedGameId), accessor)
+
+        val messageCaptor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSendToUser(
+            eq("crashHost"),
+            eq("/queue/game-sync"),
+            messageCaptor.capture(),
+            any<Map<String, Any>>(),
+        )
+
+        assertEquals(MessageType.SYNC, messageCaptor.firstValue.type)
+        assertEquals(sharedGameId, messageCaptor.firstValue.gameId)
+
+        @Suppress("UNCHECKED_CAST")
+        val payload = messageCaptor.firstValue.payload as Map<String, Any?>
+        assertEquals(snapshotUserId(), payload["targetUserId"])
+        assertEquals("reconnected-session", payload["targetSessionId"])
+
+        val snapshot = payload["state"] as org.machikoro.server.dto.GameStateDto
+
         assertEquals(sharedGameId, snapshot.game.id)
         assertEquals(GameStatus.IN_PROGRESS, snapshot.game.status)
         assertEquals(TurnPhase.BUY_OR_BUILD, snapshot.game.turnPhase)
         assertEquals(9, snapshot.game.lastDiceRoll)
         assertEquals(5, snapshot.game.roundNumber)
+        assertEquals(1, snapshot.game.currentTurnIndex)
+        assertEquals(snapshot.players.sortedBy { it.turnOrder }.map { it.userId }, snapshot.turnOrder)
+        assertEquals(snapshot.turnOrder[1], snapshot.activePlayerId)
+        assertTrue(snapshot.turnOrder.containsAll(listOf(hostUserId, guestUserId)))
         
         val firstPlayer = snapshot.players.first { it.id == firstPlayerId }
         assertEquals(42, firstPlayer.coins)
@@ -153,4 +205,7 @@ class SpringContextRestartRecoveryIntegrationTest {
         assertEquals(5, snapshot.marketplace[CardType.CAFE], "Marketplace quantities must survive restart")
         assertEquals(6, snapshot.marketplace[CardType.WHEAT_FIELD])
     }
+
+    private fun snapshotUserId(): Int =
+        playerDao.getPlayers(sharedGameId).first { it.id == firstPlayerId }.userId
 }
