@@ -106,6 +106,9 @@ class BackendRestartRecoveryIntegrationTest {
         val guestUserId = transaction { Users.insert { it[Users.username] = "crashGuest" } get Users.id }.value
 
         sharedGameId = gameDao.create(hostUserId)
+        
+        // Add host and guest to the lobby
+        lobbyService.addUserToLobby(sharedGameId, hostUserId)
         val gameCode = gameDao.findById(sharedGameId)!!.lobbyCode
         lobbyService.joinLobby(gameCode, guestUserId)
         
