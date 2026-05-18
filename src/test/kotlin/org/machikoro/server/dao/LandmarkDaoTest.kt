@@ -19,8 +19,6 @@ class LandmarkDaoTest : AbstractDBSetup() {
     @BeforeEach
     fun seed() {
         transaction {
-            // Clear DataSeeder's pre-populated rows so each test controls exactly which landmarks exist
-            Landmarks.deleteAll()
             Landmarks.insert {
                 it[landmarkType] = LandmarkType.TRAIN_STATION
                 it[cost] = 4
