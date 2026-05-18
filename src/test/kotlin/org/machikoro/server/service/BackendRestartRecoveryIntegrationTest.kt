@@ -102,11 +102,11 @@ class BackendRestartRecoveryIntegrationTest {
             TestDataSeeder.seedAllLandmarks()
         }
 
-        val hostUserId = transaction { Users.insert { it[username] = "crashHost" } get Users.id }.value
-        val guestUserId = transaction { Users.insert { it[username] = "crashGuest" } get Users.id }.value
+        val hostUserId = transaction { Users.insert { it[Users.username] = "crashHost" } get Users.id }.value
+        val guestUserId = transaction { Users.insert { it[Users.username] = "crashGuest" } get Users.id }.value
 
         sharedGameId = gameDao.create(hostUserId)
-        val gameCode = gameDao.getGame(sharedGameId).lobbyCode
+        val gameCode = gameDao.findById(sharedGameId)!!.lobbyCode
         lobbyService.joinLobby(gameCode, guestUserId)
         
         lobbyService.startGame(sharedGameId)
