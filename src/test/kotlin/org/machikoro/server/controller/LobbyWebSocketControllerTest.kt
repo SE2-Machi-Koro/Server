@@ -92,6 +92,23 @@ class LobbyWebSocketControllerTest {
     }
 
     @Test
+    fun `createLobby does nothing when sessionId is missing`() {
+        // Accessor has a principal but no sessionId — edge case for connections mid-handshake
+        val accessor = SimpMessageHeaderAccessor.create().apply {
+            user = UserPrincipal(userId = 10, username = "Player1")
+            // sessionId intentionally not set
+        }
+        whenever(lobbyService.createLobby(10)).thenReturn(game())
+
+        controller.createLobby(
+            WebSocketMessage(type = MessageType.JOIN, sender = "Player1", content = "create lobby"),
+            accessor,
+        )
+
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+    }
+
+    @Test
     fun `createLobby throws when no authenticated principal is present`() {
         val accessor = SimpMessageHeaderAccessor.create().apply { sessionId = "sess-1" }
 
@@ -189,6 +206,23 @@ class LobbyWebSocketControllerTest {
         }
 
         assertEquals("UNAUTHENTICATED", ex.errorCode)
+        verify(lobbyService, never()).joinLobby(any(), any())
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+    }
+
+    @Test
+    fun `joinLobby throws when payload is not a Map`() {
+        val accessor = authenticatedAccessor(userId = 20, username = "Player2")
+
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.joinLobby(
+                // String payload instead of a Map — triggers INVALID_PAYLOAD guard
+                WebSocketMessage(type = MessageType.JOIN, sender = "ignored-by-server", payload = "not-a-map"),
+                accessor,
+            )
+        }
+
+        assertEquals("INVALID_PAYLOAD", ex.errorCode)
         verify(lobbyService, never()).joinLobby(any(), any())
         verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }
