@@ -26,7 +26,7 @@ This document outlines the procedure to verify that an in-progress Machi Koro ga
    - Leave both client sessions open.
    - Stop and start the backend container using Docker Compose:
      ```bash
-     docker compose restart machikoro-server
+     docker compose restart backend
      ```
      *(This restarts only the backend server, keeping the Postgres database container running and preserving state, exactly as it would happen in production if the server crashed).*
 
@@ -45,4 +45,4 @@ This document outlines the procedure to verify that an in-progress Machi Koro ga
 
 ## Evidence for Sprint 2
 
-*(Include screenshots of the client interface or logs from the WS client showing the `/app/game.sync` payload before and after the restart matching exactly, or refer to the `BackendRestartRecoveryIntegrationTest` automated suite.)*
+*(Include screenshots of the client interface or logs from the WS client showing the `/app/game.sync` payload before and after the restart matching exactly, or refer to the `SpringContextRestartRecoveryIntegrationTest` automated suite for Spring context level recovery testing.)*
