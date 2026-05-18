@@ -270,4 +270,26 @@ class LobbyWebSocketControllerTest {
         val payload = msg.payload as? Map<*, *> ?: throw AssertionError("Payload is not a Map")
         assertEquals("INVALID_LOBBY_CODE", payload["errorCode"])
     }
+
+    @Test
+    fun `joinLobby skips LOBBY_ROSTER when sessionId is null`() {
+        whenever(lobbyService.joinLobby("ABC1234", 20)).thenReturn(player())
+
+        // Accessor with no sessionId — LOBBY_JOINED still broadcasts, LOBBY_ROSTER is skipped
+        val accessor = SimpMessageHeaderAccessor.create().apply {
+            user = UserPrincipal(userId = 20, username = "Player2")
+        }
+
+        controller.joinLobby(
+            WebSocketMessage(type = MessageType.JOIN, sender = "ignored-by-server", payload = mapOf("lobbyCode" to "ABC1234")),
+            accessor,
+        )
+
+        val destCaptor = argumentCaptor<String>()
+        val msgCaptor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(destCaptor.capture(), msgCaptor.capture())
+        assertEquals("/topic/game/1", destCaptor.firstValue)
+        assertEquals(MessageType.LOBBY_JOINED, msgCaptor.firstValue.type)
+        verify(lobbyService, never()).getLobbyRoster(any())
+    }
 }
