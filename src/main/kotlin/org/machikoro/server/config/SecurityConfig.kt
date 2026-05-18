@@ -29,6 +29,7 @@ class SecurityConfig {
                 csrf.ignoringRequestMatchers(
                     "/ws", "/ws/**", "/ws-sockjs", "/ws-sockjs/**",
                     "/auth/**",
+                    "/debug/**",
                 )
             }
             .authorizeHttpRequests { auth ->
@@ -45,6 +46,8 @@ class SecurityConfig {
                     "/springwolf/**"
                 ).permitAll()
                 auth.requestMatchers("/auth/**").permitAll()
+                // Debug endpoint is open so frontend can call it without a session
+                auth.requestMatchers("/debug/**").permitAll()
                 auth.requestMatchers("/api/**").authenticated()
                 auth.anyRequest().authenticated()
             }
