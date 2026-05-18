@@ -164,11 +164,9 @@ class SpringContextRestartRecoveryIntegrationTest {
         controller.syncGameState(SyncGameRequest(gameId = sharedGameId), accessor)
 
         val messageCaptor = argumentCaptor<WebSocketMessage>()
-        verify(messagingTemplate).convertAndSendToUser(
-            eq("crashHost"),
-            eq("/queue/game-sync"),
+        verify(messagingTemplate).convertAndSend(
+            eq("/queue/game-sync-userreconnected-session"),
             messageCaptor.capture(),
-            any<Map<String, Any>>(),
         )
 
         assertEquals(MessageType.SYNC, messageCaptor.firstValue.type)

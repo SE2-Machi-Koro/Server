@@ -47,12 +47,14 @@ This document outlines the procedure to verify that an in-progress Machi Koro ga
 
 Automated coverage:
 
+- `scripts/backend-restart-recovery-smoke.sh` builds and starts the backend with Docker Compose, creates two authenticated STOMP clients, starts a game, buys an establishment, builds a landmark, restarts the `backend` container, reconnects with the same session token, and re-issues `/app/game.sync`.
 - `SpringContextRestartRecoveryIntegrationTest` creates an in-progress game in a Testcontainers-backed Postgres database, mutates persisted fields, forces a Spring application context restart, and then re-enters the `/app/game.sync` controller path.
 - The recovered `SYNC` payload verifies the same game id, `IN_PROGRESS` status, `BUY_OR_BUILD` phase, dice roll, round number, player coins, owned cards, built landmark, marketplace quantities, active player, and turn order.
 
 Last local verification:
 
 ```bash
+./scripts/backend-restart-recovery-smoke.sh
 ./gradlew test --tests org.machikoro.server.service.SpringContextRestartRecoveryIntegrationTest
 ./gradlew test
 ```

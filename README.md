@@ -294,6 +294,12 @@ For detailed API documentation, the server exposes both standard REST and asynch
 - **WebSocket Endpoint:** `ws://localhost:8080/ws`
 - **Backend Restart Recovery:** The manual restart procedure and `/app/game.sync` verification checklist are documented in [docs/backend-restart-recovery.md](docs/backend-restart-recovery.md).
 
+Run the backend restart recovery smoke test with:
+
+```bash
+./scripts/backend-restart-recovery-smoke.sh
+```
+
 ---
 
 For advanced usage, message formats, and integration details, refer to the dedicated documentation.

@@ -17,7 +17,6 @@ import org.springframework.messaging.handler.annotation.Payload
 import org.springframework.messaging.handler.annotation.SendTo
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor
 import org.springframework.messaging.simp.SimpMessagingTemplate
-import org.springframework.messaging.simp.SimpMessageType
 import org.springframework.stereotype.Controller
 import org.slf4j.LoggerFactory
 import java.util.concurrent.TimeUnit
@@ -116,7 +115,6 @@ class WebSocketController(
             if (syncGameId != null && sessionId != null) {
                 emitSyncWithTelemetry(
                     source = "chat.addUser",
-                    principalName = principal.name,
                     sessionId = sessionId,
                     userId = principal.userId,
                     gameId = syncGameId,
@@ -177,7 +175,6 @@ class WebSocketController(
 
         emitSyncWithTelemetry(
             source = GAME_SYNC_SOURCE,
-            principalName = principal.name,
             sessionId = sessionId,
             userId = userId,
             gameId = resolvedGameId,
@@ -186,13 +183,12 @@ class WebSocketController(
 
     private fun emitSyncWithTelemetry(
         source: String,
-        principalName: String,
         sessionId: String,
         userId: Int,
         gameId: Int,
     ) {
         val startedNs = System.nanoTime()
-        runCatching { publishSync(principalName, sessionId, userId, gameId) }
+        runCatching { publishSync(sessionId, userId, gameId) }
             .onSuccess {
                 val elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNs)
                 Metrics.counter(SYNC_SUCCESS_METRIC, "source", source).increment()
@@ -225,34 +221,34 @@ class WebSocketController(
     /**
      * Builds and delivers the game-state snapshot to a single reconnecting user.
      *
-     * [principalName] is the value from [UserPrincipal.name] (i.e. the username),
-     * which is what Spring's [org.springframework.messaging.simp.user.UserDestinationResolver]
-     * uses to look up the subscriber's session.  Passing a raw STOMP sessionId here
-     * would cause the message to be silently dropped in production because the resolver
-     * resolves destinations by principal, not by session ID directly.
+     * Clients subscribe to `/user/queue/game-sync`. Spring resolves that user
+     * destination to a session-scoped broker destination with the `-user{sessionId}`
+     * suffix. Sending to that resolved destination avoids depending on username
+     * lookup in the user registry during reconnect recovery while still targeting
+     * only the requesting WebSocket session.
      */
-    private fun publishSync(principalName: String, sessionId: String, userId: Int, gameId: Int) {
-        val snapshot = gameSyncService.buildSnapshot(gameId)
-        val headers = SimpMessageHeaderAccessor.create(SimpMessageType.MESSAGE).apply {
-            setSessionId(sessionId)
-            setLeaveMutable(true)
-        }.messageHeaders
+    private fun publishSync(sessionId: String, userId: Int, gameId: Int) {
+        messagingTemplate.convertAndSend(
+            sessionScopedGameSyncDestination(sessionId),
+            buildSyncMessage(sessionId, userId, gameId),
+        )
+    }
 
-        messagingTemplate.convertAndSendToUser(
-            principalName,
-            "/queue/game-sync",
-            WebSocketMessage(
-                type = MessageType.SYNC,
-                sender = "server",
-                content = "State sync for reconnecting player",
-                payload = mapOf(
-                    "targetUserId" to userId,
-                    "targetSessionId" to sessionId,
-                    "state" to snapshot,
-                ),
-                gameId = gameId,
+    private fun sessionScopedGameSyncDestination(sessionId: String): String =
+        "/queue/game-sync-user$sessionId"
+
+    private fun buildSyncMessage(sessionId: String, userId: Int, gameId: Int): WebSocketMessage {
+        val snapshot = gameSyncService.buildSnapshot(gameId)
+        return WebSocketMessage(
+            type = MessageType.SYNC,
+            sender = "server",
+            content = "State sync for reconnecting player",
+            payload = mapOf(
+                "targetUserId" to userId,
+                "targetSessionId" to sessionId,
+                "state" to snapshot,
             ),
-            headers,
+            gameId = gameId,
         )
     }
 }
