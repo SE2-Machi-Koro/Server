@@ -292,6 +292,13 @@ For detailed API documentation, the server exposes both standard REST and asynch
 - **Swagger UI (REST):** Accessible at `http://localhost:8080/swagger-ui.html`. Powered by Springdoc OpenAPI, this interface provides interactive documentation for our standard REST endpoints.
 - **Springwolf UI (AsyncAPI/WebSockets):** Accessible at `http://localhost:8080/springwolf/asyncapi-ui.html`. Powered by Springwolf, this provides interactive documentation and an event publisher for our STOMP over WebSocket channels, which are the backbone of our real-time game communications.
 - **WebSocket Endpoint:** `ws://localhost:8080/ws`
+- **Backend Restart Recovery:** The manual restart procedure and `/app/game.sync` verification checklist are documented in [docs/backend-restart-recovery.md](docs/backend-restart-recovery.md).
+
+Run the backend restart recovery smoke test with:
+
+```bash
+./scripts/backend-restart-recovery-smoke.sh
+```
 
 ---
 

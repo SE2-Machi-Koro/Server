@@ -2,7 +2,6 @@ package org.machikoro.server.auth
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
-import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.dao.UserDao
@@ -24,15 +23,28 @@ class StompAuthChannelInterceptorTest {
     private val interceptor = StompAuthChannelInterceptor(userDao)
 
     @Test
-    fun `non-CONNECT frames pass through unchanged without touching UserDao`() {
+    fun `non-CONNECT frames pass through unchanged when no session principal exists`() {
         val original = stompMessage(StompCommand.SEND, headers = emptyMap())
 
         val result = interceptor.preSend(original, mock())
 
-        // Reference equality — the interceptor MUST return the same instance for
-        // non-CONNECT frames, otherwise it's silently rebuilding messages on the
-        // hot path (every SEND, every SUBSCRIBE).
-        assertSame(original, result)
+        assertEquals(original, result)
+        verify(userDao, never()).findBySessionToken(any())
+    }
+
+    @Test
+    fun `non-CONNECT frames restore UserPrincipal from session attributes without touching UserDao`() {
+        val principal = UserPrincipal(userId = 9, username = "restored")
+        val original = stompMessage(
+            StompCommand.SEND,
+            headers = emptyMap(),
+            sessionAttributes = mutableMapOf(USER_PRINCIPAL_KEY to principal),
+        )
+
+        val result = interceptor.preSend(original, mock())
+
+        assertNotNull(result)
+        assertEquals(principal, StompHeaderAccessor.wrap(result!!).user)
         verify(userDao, never()).findBySessionToken(any())
     }
 
