@@ -155,12 +155,9 @@ class WebSocketControllerTests {
         verify(connectionTracker).register("session-rejoin", 11, 7)
 
         val captor = argumentCaptor<WebSocketMessage>()
-        // convertAndSendToUser first arg must be the principal name, not the sessionId
-        verify(messagingTemplate).convertAndSendToUser(
-            eq("gina"),
-            eq("/queue/game-sync"),
+        verify(messagingTemplate).convertAndSend(
+            eq("/queue/game-sync-usersession-rejoin"),
             captor.capture(),
-            any<Map<String, Any>>(),
         )
         assertEquals(MessageType.SYNC, captor.firstValue.type)
         assertEquals(7, captor.firstValue.gameId)
@@ -183,11 +180,9 @@ class WebSocketControllerTests {
 
         verify(connectionTracker).register("session-race", 12, 3)
         val captor = argumentCaptor<WebSocketMessage>()
-        verify(messagingTemplate).convertAndSendToUser(
-            eq("harry"),
-            eq("/queue/game-sync"),
+        verify(messagingTemplate).convertAndSend(
+            eq("/queue/game-sync-usersession-race"),
             captor.capture(),
-            any<Map<String, Any>>(),
         )
         assertEquals(MessageType.SYNC, captor.firstValue.type)
         @Suppress("UNCHECKED_CAST")
@@ -207,12 +202,9 @@ class WebSocketControllerTests {
         controller.syncGameState(SyncGameRequest(gameId = null), accessor)
 
         val captor = argumentCaptor<WebSocketMessage>()
-        // First arg must be the principal name, not the sessionId
-        verify(messagingTemplate).convertAndSendToUser(
-            eq("sync-user"),
-            eq("/queue/game-sync"),
+        verify(messagingTemplate).convertAndSend(
+            eq("/queue/game-sync-usersession-sync"),
             captor.capture(),
-            any<Map<String, Any>>(),
         )
         assertEquals(MessageType.SYNC, captor.firstValue.type)
         assertEquals(8, captor.firstValue.gameId)
@@ -231,11 +223,9 @@ class WebSocketControllerTests {
 
         controller.syncGameState(SyncGameRequest(gameId = 1), accessor)
 
-        verify(messagingTemplate, never()).convertAndSendToUser(
-            any<String>(),
+        verify(messagingTemplate, never()).convertAndSend(
             any<String>(),
             any<WebSocketMessage>(),
-            any<Map<String, Any>>(),
         )
     }
 
@@ -247,13 +237,10 @@ class WebSocketControllerTests {
 
         controller.syncGameState(SyncGameRequest(gameId = 99), accessor)
 
-        verify(messagingTemplate, never()).convertAndSendToUser(
-            any<String>(),
+        verify(messagingTemplate, never()).convertAndSend(
             any<String>(),
             any<WebSocketMessage>(),
-            any<Map<String, Any>>(),
         )
         verify(gameSyncService, never()).buildSnapshot(any())
     }
 }
-

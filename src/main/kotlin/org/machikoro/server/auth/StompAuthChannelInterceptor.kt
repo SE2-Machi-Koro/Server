@@ -42,7 +42,14 @@ class StompAuthChannelInterceptor(
 
     override fun preSend(message: Message<*>, channel: MessageChannel): Message<*>? {
         val accessor = StompHeaderAccessor.wrap(message)
-        if (accessor.command != StompCommand.CONNECT) return message
+        if (accessor.command != StompCommand.CONNECT) {
+            val principal = accessor.sessionAttributes?.get(USER_PRINCIPAL_KEY) as? UserPrincipal
+            if (principal != null && accessor.user == null) {
+                accessor.user = principal
+                return MessageBuilder.createMessage(message.payload, accessor.messageHeaders)
+            }
+            return message
+        }
 
         val rawHeader = accessor.getFirstNativeHeader(AUTH_HEADER)
         // Strict: require the "Bearer " prefix. Some clients send the bare token,
