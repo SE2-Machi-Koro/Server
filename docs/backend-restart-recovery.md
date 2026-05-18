@@ -59,7 +59,7 @@ Last local verification:
 ./gradlew test
 ```
 
-Both commands passed on 2026-05-18.
+All commands passed on 2026-05-18.
 
 Manual demo evidence:
 

@@ -64,4 +64,4 @@ MACHIKORO_SMOKE_DB_PASSWORD="smoke" \
 MACHIKORO_SMOKE_COMPOSE_PROJECT="${PROJECT_NAME}" \
 MACHIKORO_SMOKE_ENV_FILE="${ENV_FILE}" \
 MACHIKORO_SMOKE_ROOT="${ROOT_DIR}" \
-  ./gradlew test --tests org.machikoro.server.service.BackendContainerRestartRecoverySmokeTest
+  ./gradlew test --rerun-tasks --tests org.machikoro.server.service.BackendContainerRestartRecoverySmokeTest
