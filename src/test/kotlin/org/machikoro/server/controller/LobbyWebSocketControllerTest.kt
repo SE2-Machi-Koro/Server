@@ -18,6 +18,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor
@@ -135,7 +136,9 @@ class LobbyWebSocketControllerTest {
 
     @Test
     fun `joinLobby broadcasts LOBBY_JOINED to the lobby's game topic`() {
+        val roster = listOf(mapOf("playerId" to 5, "userId" to 20, "username" to "Player2", "coins" to 3))
         whenever(lobbyService.joinLobby("ABC1234", 20)).thenReturn(player())
+        whenever(lobbyService.getLobbyRoster(1)).thenReturn(roster)
 
         val accessor = authenticatedAccessor(userId = 20, username = "Player2", sessionId = "sess-77")
 
@@ -146,24 +149,32 @@ class LobbyWebSocketControllerTest {
 
         val destCaptor = argumentCaptor<String>()
         val msgCaptor = argumentCaptor<WebSocketMessage>()
-        verify(messagingTemplate).convertAndSend(destCaptor.capture(), msgCaptor.capture())
+        // Expect two sends: LOBBY_JOINED to topic, then LOBBY_ROSTER to the joiner's queue
+        verify(messagingTemplate, times(2)).convertAndSend(destCaptor.capture(), msgCaptor.capture())
 
-        // Must go to the lobby's game topic, not a global or private destination
-        assertEquals("/topic/game/1", destCaptor.firstValue)
+        // First send: LOBBY_JOINED to the lobby's game topic
+        assertEquals("/topic/game/1", destCaptor.allValues[0])
+        val joinMsg = msgCaptor.allValues[0]
+        assertEquals(MessageType.LOBBY_JOINED, joinMsg.type)
+        assertEquals("SERVER", joinMsg.sender)
+        assertEquals("Player joined lobby", joinMsg.content)
+        assertEquals(1, joinMsg.gameId)
+        val joinPayload = joinMsg.payload as? Map<*, *> ?: throw AssertionError("Payload is not a Map")
+        assertEquals(5, joinPayload["playerId"])
+        assertEquals(20, joinPayload["userId"])
+        assertEquals(1, joinPayload["gameId"])
+        assertEquals(3, joinPayload["coins"])
 
-        val msg = msgCaptor.firstValue
-        assertEquals(MessageType.LOBBY_JOINED, msg.type)
-        assertEquals("SERVER", msg.sender)
-        assertEquals("Player joined lobby", msg.content)
-        assertEquals(1, msg.gameId)
-
-        val payload = msg.payload as? Map<*, *> ?: throw AssertionError("Payload is not a Map")
-        assertEquals(5, payload["playerId"])
-        assertEquals(20, payload["userId"])
-        assertEquals(1, payload["gameId"])
-        assertEquals(3, payload["coins"])
+        // Second send: LOBBY_ROSTER only to the joiner's session queue
+        assertEquals("/queue/lobby-usersess-77", destCaptor.allValues[1])
+        val rosterMsg = msgCaptor.allValues[1]
+        assertEquals(MessageType.LOBBY_ROSTER, rosterMsg.type)
+        assertEquals("SERVER", rosterMsg.sender)
+        assertEquals(1, rosterMsg.gameId)
+        assertEquals(roster, rosterMsg.payload)
 
         verify(lobbyService).joinLobby("ABC1234", 20)
+        verify(lobbyService).getLobbyRoster(1)
     }
 
     @Test

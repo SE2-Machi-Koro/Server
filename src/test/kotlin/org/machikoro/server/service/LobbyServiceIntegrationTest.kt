@@ -14,6 +14,7 @@ import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.LandmarkDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
+import org.machikoro.server.dao.UserDao
 import org.machikoro.server.database.AbstractDBSetup
 import org.machikoro.server.database.CardActivationNumbers
 import org.machikoro.server.database.Cards
@@ -46,6 +47,9 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
 
     @Autowired
     private lateinit var playerDao: PlayerDao
+
+    @Autowired
+    private lateinit var userDao: UserDao
 
     @Autowired
     private lateinit var gameMarketplaceDao: GameMarketplaceDao
@@ -228,6 +232,7 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
         val service = LobbyService(
             gameDao,
             playerDao,
+            userDao,
             gameMarketplaceDao,
             playerLandmarkDao,
             failingInitService,

@@ -12,6 +12,7 @@ import org.machikoro.server.dao.LandmarkDao
 import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
+import org.machikoro.server.dao.UserDao
 import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.models.PlayerCardModel
 import org.machikoro.server.domain.enums.GameStatus
@@ -40,6 +41,7 @@ class LobbyServiceTest {
 
     private val gameDao = mock<GameDao>()
     private val playerDao = mock<PlayerDao>()
+    private val userDao = mock<UserDao>()
     private val gameMarketplaceDao = mock<GameMarketplaceDao>()
     private val playerLandmarkDao = mock<PlayerLandmarkDao>()
     private val initializationService = mock<InitializationService>()
@@ -53,6 +55,7 @@ class LobbyServiceTest {
     private val lobbyService = object : LobbyService(
         gameDao,
         playerDao,
+        userDao,
         gameMarketplaceDao,
         playerLandmarkDao,
         initializationService,
