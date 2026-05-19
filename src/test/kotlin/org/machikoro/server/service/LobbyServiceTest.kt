@@ -1,7 +1,9 @@
 package org.machikoro.server.service
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -352,6 +354,67 @@ class LobbyServiceTest {
         }
 
         verify(initializationService, never()).initializeGame(any())
+    }
+
+    // === leaveLobby() ===
+
+    @Test
+    fun `leaveLobby returns null when player is not in the game`() {
+        whenever(playerDao.findByGameIdAndUserId(1, 99)).thenReturn(null)
+
+        val result = lobbyService.leaveLobby(1, 99)
+
+        assertNull(result)
+        verify(playerDao, never()).deleteByPlayerId(any())
+    }
+
+    @Test
+    fun `leaveLobby returns gameDeleted=false when real players still remain`() {
+        val p = player(5).copy(gameId = 1, userId = 10)
+        whenever(playerDao.findByGameIdAndUserId(1, 10)).thenReturn(p)
+        whenever(playerDao.getLobbyRoster(1)).thenReturn(
+            listOf(rosterEntry(6, "alice", 1))
+        )
+
+        val result = lobbyService.leaveLobby(1, 10)
+
+        assertNotNull(result)
+        assertEquals(5, result!!.playerId)
+        assertFalse(result.gameDeleted)
+        verify(playerDao).deleteByPlayerId(5)
+        verify(gameDao, never()).delete(any())
+    }
+
+    @Test
+    fun `leaveLobby returns gameDeleted=true and purges game when only dummy players remain`() {
+        val p = player(5).copy(gameId = 1, userId = 10)
+        whenever(playerDao.findByGameIdAndUserId(1, 10)).thenReturn(p)
+        whenever(playerDao.getLobbyRoster(1)).thenReturn(
+            listOf(rosterEntry(2, "debug_player2", 1))
+        )
+
+        val result = lobbyService.leaveLobby(1, 10)
+
+        assertNotNull(result)
+        assertEquals(5, result!!.playerId)
+        assertTrue(result.gameDeleted)
+        verify(playerDao).deleteByPlayerId(5)
+        verify(playerDao).deleteByGameId(1)
+        verify(gameDao).delete(1)
+    }
+
+    @Test
+    fun `leaveLobby returns gameDeleted=true when roster is empty after player leaves`() {
+        val p = player(5).copy(gameId = 1, userId = 10)
+        whenever(playerDao.findByGameIdAndUserId(1, 10)).thenReturn(p)
+        whenever(playerDao.getLobbyRoster(1)).thenReturn(emptyList())
+
+        val result = lobbyService.leaveLobby(1, 10)
+
+        assertNotNull(result)
+        assertTrue(result!!.gameDeleted)
+        verify(playerDao).deleteByGameId(1)
+        verify(gameDao).delete(1)
     }
 
     // === resetLobby() ===

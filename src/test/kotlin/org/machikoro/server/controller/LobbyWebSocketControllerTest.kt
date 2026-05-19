@@ -276,6 +276,108 @@ class LobbyWebSocketControllerTest {
         assertEquals("INVALID_LOBBY_CODE", payload["errorCode"])
     }
 
+    // === leaveLobby() ===
+
+    @Test
+    fun `leaveLobby throws when no authenticated principal is present`() {
+        val accessor = SimpMessageHeaderAccessor.create().apply { sessionId = "sess-1" }
+
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.leaveLobby(
+                WebSocketMessage(type = MessageType.JOIN, sender = "ghost", payload = mapOf("gameId" to 1)),
+                accessor,
+            )
+        }
+
+        assertEquals("UNAUTHENTICATED", ex.errorCode)
+        verify(lobbyService, never()).leaveLobby(any(), any())
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+    }
+
+    @Test
+    fun `leaveLobby throws when payload is not a Map`() {
+        val accessor = authenticatedAccessor(userId = 10, username = "Player1")
+
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.leaveLobby(
+                WebSocketMessage(type = MessageType.JOIN, sender = "Player1", payload = "not-a-map"),
+                accessor,
+            )
+        }
+
+        assertEquals("INVALID_PAYLOAD", ex.errorCode)
+        verify(lobbyService, never()).leaveLobby(any(), any())
+    }
+
+    @Test
+    fun `leaveLobby throws when gameId is missing from payload`() {
+        val accessor = authenticatedAccessor(userId = 10, username = "Player1")
+
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.leaveLobby(
+                WebSocketMessage(type = MessageType.JOIN, sender = "Player1", payload = emptyMap<String, Any>()),
+                accessor,
+            )
+        }
+
+        assertEquals("MISSING_GAME_ID", ex.errorCode)
+        verify(lobbyService, never()).leaveLobby(any(), any())
+    }
+
+    @Test
+    fun `leaveLobby does nothing when player is not in game`() {
+        whenever(lobbyService.leaveLobby(1, 10)).thenReturn(null)
+        val accessor = authenticatedAccessor(userId = 10, username = "Player1")
+
+        controller.leaveLobby(
+            WebSocketMessage(type = MessageType.JOIN, sender = "Player1", payload = mapOf("gameId" to 1)),
+            accessor,
+        )
+
+        verify(lobbyService).leaveLobby(1, 10)
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+    }
+
+    @Test
+    fun `leaveLobby broadcasts LOBBY_LEFT to game topic when lobby persists`() {
+        val result = LobbyService.LeaveLobbyResult(playerId = 5, gameDeleted = false)
+        whenever(lobbyService.leaveLobby(1, 10)).thenReturn(result)
+        val accessor = authenticatedAccessor(userId = 10, username = "Player1", sessionId = "sess-leave")
+
+        controller.leaveLobby(
+            WebSocketMessage(type = MessageType.JOIN, sender = "Player1", payload = mapOf("gameId" to 1)),
+            accessor,
+        )
+
+        val destCaptor = argumentCaptor<String>()
+        val msgCaptor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(destCaptor.capture(), msgCaptor.capture())
+
+        assertEquals("/topic/game/1", destCaptor.firstValue)
+        val msg = msgCaptor.firstValue
+        assertEquals(MessageType.LOBBY_LEFT, msg.type)
+        assertEquals("SERVER", msg.sender)
+        assertEquals(1, msg.gameId)
+        val payload = msg.payload as? Map<*, *> ?: throw AssertionError("Payload is not a Map")
+        assertEquals(5, payload["playerId"])
+        assertEquals(10, payload["userId"])
+        assertEquals("Player1", payload["username"])
+    }
+
+    @Test
+    fun `leaveLobby does not broadcast when game was deleted`() {
+        val result = LobbyService.LeaveLobbyResult(playerId = 5, gameDeleted = true)
+        whenever(lobbyService.leaveLobby(1, 10)).thenReturn(result)
+        val accessor = authenticatedAccessor(userId = 10, username = "Player1")
+
+        controller.leaveLobby(
+            WebSocketMessage(type = MessageType.JOIN, sender = "Player1", payload = mapOf("gameId" to 1)),
+            accessor,
+        )
+
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+    }
+
     @Test
     fun `joinLobby skips LOBBY_ROSTER when sessionId is null`() {
         whenever(lobbyService.joinLobby("ABC1234", 20)).thenReturn(player())
