@@ -262,6 +262,7 @@ open class LobbyService(
                 val marketplace = gameMarketplaceDao.findByGameIdAsMap(gameId)
                 val cardDefinitions = cardDao.findAll().map { it.toDefinitionDto() }
                 val landmarkDefinitions = landmarkDao.findAll().map { it.toDefinitionDto() }
+                val playerUsernames = playerDao.getLobbyRoster(gameId).associate { it.playerId to it.username }
 
                 GameStateDto(
                     game = updatedGame,
@@ -273,6 +274,7 @@ open class LobbyService(
                     landmarkDefinitions = landmarkDefinitions,
                     turnOrder = shuffled.map { it.userId },
                     activePlayerId = shuffled.firstOrNull()?.userId,
+                    playerUsernames = playerUsernames,
                 )
             }
         }

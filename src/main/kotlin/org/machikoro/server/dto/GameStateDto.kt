@@ -50,4 +50,7 @@ data class GameStateDto(
 
     @Schema(description = "userId of the player whose turn it is (matches the userId the client received at login)")
     val activePlayerId: Int? = null,
+
+    @Schema(description = "Map of playerId to username for display name resolution on the client")
+    val playerUsernames: Map<Int, String> = emptyMap(),
 )

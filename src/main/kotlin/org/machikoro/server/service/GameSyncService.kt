@@ -46,6 +46,7 @@ class GameSyncService(
         val marketplace = gameMarketplaceDao.findByGameIdAsMap(gameId)
         val cardDefinitions = cardDao.findAll().map { it.toDefinitionDto() }
         val landmarkDefinitions = landmarkDao.findAll().map { it.toDefinitionDto() }
+        val playerUsernames = playerDao.getLobbyRoster(gameId).associate { it.playerId to it.username }
 
         val sortedPlayers = players.sortedBy { it.turnOrder }
         return GameStateDto(
@@ -58,6 +59,7 @@ class GameSyncService(
             landmarkDefinitions = landmarkDefinitions,
             turnOrder = sortedPlayers.map { it.userId },
             activePlayerId = sortedPlayers.getOrNull(game.currentTurnIndex)?.userId,
+            playerUsernames = playerUsernames,
         )
     }
 
