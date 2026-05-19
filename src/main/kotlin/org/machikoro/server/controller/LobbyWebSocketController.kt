@@ -157,5 +157,20 @@ class LobbyWebSocketController(
                 )
             )
         )
+
+        // Send current roster only to the joining player so they see who is already in the lobby
+        if (sessionId != null) {
+            val roster = lobbyService.getLobbyRoster(player.gameId)
+            messagingTemplate.convertAndSend(
+                "/queue/lobby-user$sessionId",
+                WebSocketMessage(
+                    type = MessageType.LOBBY_ROSTER,
+                    sender = "SERVER",
+                    content = "Lobby roster",
+                    gameId = player.gameId,
+                    payload = roster
+                )
+            )
+        }
     }
 }
