@@ -46,12 +46,8 @@ sonar {
         property("sonar.coverage.exclusions", "src/main/kotlin/**/dto/**,src/main/kotlin/**/config/**,src/main/kotlin/**/ServerApplication.kt")
         property("sonar.newCode.referenceBranch", "main")
         property("sonar.qualitygate.wait", "true")
-        property("sonar.issue.ignore.multicriteria", "e1")
-        property("sonar.issue.ignore.multicriteria.e1.ruleKey", "sql:S1192")
-        property(
-            "sonar.issue.ignore.multicriteria.e1.resourceKey",
-            "src/main/resources/db/migration/V1__init_schema.sql",
-        )
+        // Exclude Flyway SQL migrations — plain DDL, not PL/SQL; no data dictionary needed
+        property("sonar.exclusions", "src/main/resources/db/migration/**")
     }
 }
 
