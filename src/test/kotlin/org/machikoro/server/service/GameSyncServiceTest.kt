@@ -26,7 +26,9 @@ import org.machikoro.server.domain.models.LandmarkModel
 import org.machikoro.server.domain.models.PlayerCardModel
 import org.machikoro.server.domain.models.PlayerLandmarkModel
 import org.machikoro.server.domain.models.PlayerModel
+import org.machikoro.server.dto.LobbyRosterPlayerDto
 import org.machikoro.server.exception.GameNotFoundException
+import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -194,5 +196,30 @@ class GameSyncServiceTest {
 
         assertTrue(service.isUserInGame(50, 5))
         assertFalse(service.isUserInGame(50, 6))
+    }
+
+    @Test
+    fun `buildSnapshot playerUsernames populated from getLobbyRoster`() {
+        val gameId = 10
+        val p1 = PlayerModel(id = 1, gameId = gameId, userId = 11, turnOrder = 0, coins = 3, lastSeenAt = null)
+        val p2 = PlayerModel(id = 2, gameId = gameId, userId = 22, turnOrder = 1, coins = 3, lastSeenAt = null)
+
+        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.IN_PROGRESS))
+        whenever(playerDao.getPlayers(gameId)).thenReturn(listOf(p1, p2))
+        whenever(playerCardDao.findByPlayerIds(any())).thenReturn(emptyMap())
+        whenever(playerLandmarkDao.findByPlayerId(any())).thenReturn(emptyList())
+        whenever(gameMarketplaceDao.findByGameIdAsMap(gameId)).thenReturn(emptyMap())
+        whenever(cardDao.findAll()).thenReturn(emptyList())
+        whenever(landmarkDao.findAll()).thenReturn(emptyList())
+        whenever(playerDao.getLobbyRoster(gameId)).thenReturn(
+            listOf(
+                LobbyRosterPlayerDto(playerId = 1, userId = 11, username = "alice", gameId = gameId, turnOrder = 0, coins = 3),
+                LobbyRosterPlayerDto(playerId = 2, userId = 22, username = "bob", gameId = gameId, turnOrder = 1, coins = 3),
+            )
+        )
+
+        val snapshot = service.buildSnapshot(gameId)
+
+        assertEquals(mapOf(1 to "alice", 2 to "bob"), snapshot.playerUsernames)
     }
 }

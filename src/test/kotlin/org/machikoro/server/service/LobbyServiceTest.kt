@@ -3,6 +3,7 @@ package org.machikoro.server.service
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertSame
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.dao.CardDao
@@ -80,6 +81,9 @@ class LobbyServiceTest {
 
     private fun player(id: Int) =
         PlayerModel(id = id, gameId = 1, userId = id, turnOrder = 0, coins = 3, lastSeenAt = null)
+
+    private fun rosterEntry(playerId: Int, username: String, gameId: Int = 1) =
+        LobbyRosterPlayerDto(playerId = playerId, userId = playerId, username = username, gameId = gameId, turnOrder = playerId - 1, coins = 3)
 
     @Test
     fun `addUserToLobby adds player successfully`() {
@@ -348,5 +352,101 @@ class LobbyServiceTest {
         }
 
         verify(initializationService, never()).initializeGame(any())
+    }
+
+    // === resetLobby() ===
+
+    @Test
+    fun `resetLobby removes only dummy players and returns their roster entries`() {
+        val lobbyCode = "ABC123"
+        val gameId = 1
+        whenever(gameDao.findByLobbyCode(lobbyCode)).thenReturn(game(gameId, GameStatus.WAITING))
+        val dummies = listOf(rosterEntry(2, "debug_player2", gameId), rosterEntry(3, "debug_player3", gameId))
+        whenever(playerDao.getLobbyRoster(gameId)).thenReturn(listOf(rosterEntry(1, "alice", gameId)) + dummies)
+
+        val removed = lobbyService.resetLobby(lobbyCode)
+
+        assertEquals(2, removed.size)
+        assertEquals("debug_player2", removed[0].username)
+        assertEquals("debug_player3", removed[1].username)
+        verify(playerDao).deleteByPlayerId(2)
+        verify(playerDao).deleteByPlayerId(3)
+        verify(playerDao, never()).deleteByPlayerId(1)
+    }
+
+    @Test
+    fun `resetLobby returns empty list when no dummy players are present`() {
+        val lobbyCode = "ABC123"
+        val gameId = 1
+        whenever(gameDao.findByLobbyCode(lobbyCode)).thenReturn(game(gameId, GameStatus.WAITING))
+        whenever(playerDao.getLobbyRoster(gameId)).thenReturn(
+            listOf(rosterEntry(1, "alice", gameId), rosterEntry(2, "bob", gameId))
+        )
+
+        val removed = lobbyService.resetLobby(lobbyCode)
+
+        assertTrue(removed.isEmpty())
+        verify(playerDao, never()).deleteByPlayerId(any())
+    }
+
+    @Test
+    fun `resetLobby throws GameNotFoundException when lobby code does not exist`() {
+        whenever(gameDao.findByLobbyCode("NOPE")).thenReturn(null)
+
+        assertThrows<GameNotFoundException> {
+            lobbyService.resetLobby("NOPE")
+        }
+
+        verify(playerDao, never()).getLobbyRoster(any())
+        verify(playerDao, never()).deleteByPlayerId(any())
+    }
+
+    // === purgeAllGames() ===
+
+    @Test
+    fun `purgeAllGames deletes players then game for every game and returns count`() {
+        val games = listOf(game(1, GameStatus.IN_PROGRESS), game(2, GameStatus.WAITING))
+        whenever(gameDao.findAll()).thenReturn(games)
+
+        val count = lobbyService.purgeAllGames()
+
+        assertEquals(2, count)
+        verify(playerDao).deleteByGameId(1)
+        verify(playerDao).deleteByGameId(2)
+        verify(gameDao).delete(1)
+        verify(gameDao).delete(2)
+    }
+
+    @Test
+    fun `purgeAllGames returns 0 and makes no deletions when no games exist`() {
+        whenever(gameDao.findAll()).thenReturn(emptyList())
+
+        val count = lobbyService.purgeAllGames()
+
+        assertEquals(0, count)
+        verify(playerDao, never()).deleteByGameId(any())
+        verify(gameDao, never()).delete(any())
+    }
+
+    // === startGame() — playerUsernames ===
+
+    @Test
+    fun `startGame snapshot includes playerUsernames resolved from getLobbyRoster`() {
+        val gameId = 1
+        val players = listOf(player(1), player(2))
+        val updatedGame = game(gameId, GameStatus.IN_PROGRESS)
+        whenever(gameDao.findById(gameId)).thenReturn(updatedGame)
+        whenever(playerDao.getPlayers(gameId)).thenReturn(players)
+        whenever(initializationService.initializeGame(gameId)).thenReturn(players)
+        whenever(playerCardDao.findByPlayerIds(any())).thenReturn(emptyMap())
+        whenever(playerLandmarkDao.findByPlayerId(any())).thenReturn(emptyList())
+        whenever(gameMarketplaceDao.findByGameIdAsMap(gameId)).thenReturn(emptyMap())
+        whenever(playerDao.getLobbyRoster(gameId)).thenReturn(
+            listOf(rosterEntry(1, "alice", gameId), rosterEntry(2, "bob", gameId))
+        )
+
+        val result = lobbyService.startGame(gameId)
+
+        assertEquals(mapOf(1 to "alice", 2 to "bob"), result.playerUsernames)
     }
 }

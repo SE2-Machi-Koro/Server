@@ -35,11 +35,13 @@ class LobbyWebSocketController(
      * username spoofing.
      */
     @MessageMapping("/lobby.create")
-    @AsyncListener(operation = AsyncOperation(
-        channelName = "/lobby.create",
-        description = "Creates a new lobby for the authenticated user and delivers LOBBY_CREATED only to the creator.",
-        payloadType = WebSocketMessage::class,
-    ))
+    @AsyncListener(
+        operation = AsyncOperation(
+            channelName = "/lobby.create",
+            description = "Creates a new lobby for the authenticated user and delivers LOBBY_CREATED only to the creator.",
+            payloadType = WebSocketMessage::class,
+        )
+    )
     @Suppress("UNUSED_PARAMETER") // Spring requires a @Payload parameter to deserialize the STOMP frame body
     fun createLobby(
         @Payload message: WebSocketMessage,
@@ -90,11 +92,13 @@ class LobbyWebSocketController(
      * the WebSocket payload is ignored to prevent username spoofing.
      */
     @MessageMapping("/lobby.join")
-    @AsyncListener(operation = AsyncOperation(
-        channelName = "/lobby.join",
-        description = "Joins an existing lobby by lobby code and broadcasts LOBBY_JOINED to /topic/game/{gameId}.",
-        payloadType = WebSocketMessage::class,
-    ))
+    @AsyncListener(
+        operation = AsyncOperation(
+            channelName = "/lobby.join",
+            description = "Joins an existing lobby by lobby code and broadcasts LOBBY_JOINED to /topic/game/{gameId}.",
+            payloadType = WebSocketMessage::class,
+        )
+    )
     fun joinLobby(
         @Payload message: WebSocketMessage,
         headerAccessor: SimpMessageHeaderAccessor,

@@ -25,6 +25,7 @@ class DebugService(
     companion object {
         // Fixed credentials so callers always know which users own the debug game
         private val PLAYER_USERNAMES = listOf("debug_player1", "debug_player2", "debug_player3", "debug_player4")
+
         // Dummy players used to fill an existing lobby (skips debug_player1 who is the seed host)
         private val FILL_USERNAMES = listOf("debug_player2", "debug_player3", "debug_player4")
         private const val DEBUG_PASSWORD = "debug_password"
