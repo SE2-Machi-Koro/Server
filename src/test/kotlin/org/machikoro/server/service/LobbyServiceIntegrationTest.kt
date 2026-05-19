@@ -232,7 +232,6 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
         val service = LobbyService(
             gameDao,
             playerDao,
-            userDao,
             gameMarketplaceDao,
             playerLandmarkDao,
             failingInitService,

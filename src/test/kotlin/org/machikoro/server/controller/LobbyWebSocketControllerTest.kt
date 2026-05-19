@@ -13,6 +13,8 @@ import org.machikoro.server.service.LobbyService
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.machikoro.server.domain.models.PlayerModel
+import org.machikoro.server.dto.LobbyRosterDto
+import org.machikoro.server.dto.LobbyRosterPlayerDto
 import org.machikoro.server.exception.GameNotFoundException
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
@@ -153,7 +155,10 @@ class LobbyWebSocketControllerTest {
 
     @Test
     fun `joinLobby broadcasts LOBBY_JOINED to the lobby's game topic`() {
-        val roster = listOf(mapOf("playerId" to 5, "userId" to 20, "username" to "Player2", "coins" to 3))
+        val roster = listOf(
+            LobbyRosterPlayerDto(playerId = 1, userId = 10, username = "Player1", gameId = 1, turnOrder = 0, coins = 3),
+            LobbyRosterPlayerDto(playerId = 5, userId = 20, username = "Player2", gameId = 1, turnOrder = 1, coins = 3),
+        )
         whenever(lobbyService.joinLobby("ABC1234", 20)).thenReturn(player())
         whenever(lobbyService.getLobbyRoster(1)).thenReturn(roster)
 
@@ -166,12 +171,20 @@ class LobbyWebSocketControllerTest {
 
         val destCaptor = argumentCaptor<String>()
         val msgCaptor = argumentCaptor<WebSocketMessage>()
-        // Expect two sends: LOBBY_JOINED to topic, then LOBBY_ROSTER to the joiner's queue
+        // Expect two sends: LOBBY_ROSTER to the joiner's queue, then LOBBY_JOINED to the topic
         verify(messagingTemplate, times(2)).convertAndSend(destCaptor.capture(), msgCaptor.capture())
 
-        // First send: LOBBY_JOINED to the lobby's game topic
-        assertEquals("/topic/game/1", destCaptor.allValues[0])
-        val joinMsg = msgCaptor.allValues[0]
+        // First send: LOBBY_ROSTER only to the joiner's session queue
+        assertEquals("/queue/lobby-usersess-77", destCaptor.allValues[0])
+        val rosterMsg = msgCaptor.allValues[0]
+        assertEquals(MessageType.LOBBY_ROSTER, rosterMsg.type)
+        assertEquals("SERVER", rosterMsg.sender)
+        assertEquals(1, rosterMsg.gameId)
+        assertEquals(LobbyRosterDto(players = roster), rosterMsg.payload)
+
+        // Second send: LOBBY_JOINED to the lobby's game topic
+        assertEquals("/topic/game/1", destCaptor.allValues[1])
+        val joinMsg = msgCaptor.allValues[1]
         assertEquals(MessageType.LOBBY_JOINED, joinMsg.type)
         assertEquals("SERVER", joinMsg.sender)
         assertEquals("Player joined lobby", joinMsg.content)
@@ -181,14 +194,6 @@ class LobbyWebSocketControllerTest {
         assertEquals(20, joinPayload["userId"])
         assertEquals(1, joinPayload["gameId"])
         assertEquals(3, joinPayload["coins"])
-
-        // Second send: LOBBY_ROSTER only to the joiner's session queue
-        assertEquals("/queue/lobby-usersess-77", destCaptor.allValues[1])
-        val rosterMsg = msgCaptor.allValues[1]
-        assertEquals(MessageType.LOBBY_ROSTER, rosterMsg.type)
-        assertEquals("SERVER", rosterMsg.sender)
-        assertEquals(1, rosterMsg.gameId)
-        assertEquals(roster, rosterMsg.payload)
 
         verify(lobbyService).joinLobby("ABC1234", 20)
         verify(lobbyService).getLobbyRoster(1)

@@ -70,6 +70,30 @@ class PlayerDaoTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `getLobbyRoster returns usernames and preserves turn order`() {
+        val userId2 = userDao.create("player_user_2")
+        val player1 = playerDao.addPlayer(gameId, userId)
+        val player2 = playerDao.addPlayer(gameId, userId2)
+        playerDao.updateCoins(player2.id, 7)
+
+        val roster = playerDao.getLobbyRoster(gameId)
+
+        assertEquals(2, roster.size)
+        assertEquals(player1.id, roster[0].playerId)
+        assertEquals(userId, roster[0].userId)
+        assertEquals("player_user", roster[0].username)
+        assertEquals(gameId, roster[0].gameId)
+        assertEquals(0, roster[0].turnOrder)
+        assertEquals(3, roster[0].coins)
+        assertEquals(player2.id, roster[1].playerId)
+        assertEquals(userId2, roster[1].userId)
+        assertEquals("player_user_2", roster[1].username)
+        assertEquals(gameId, roster[1].gameId)
+        assertEquals(1, roster[1].turnOrder)
+        assertEquals(7, roster[1].coins)
+    }
+
+    @Test
     fun `updateCoins sets new coin count`() {
         val player = playerDao.addPlayer(gameId, userId)
         playerDao.updateCoins(player.id, 10)
