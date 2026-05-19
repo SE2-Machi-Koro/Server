@@ -12,8 +12,10 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
 import org.machikoro.server.database.Games
 import org.machikoro.server.database.Players
+import org.machikoro.server.database.Users
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.models.PlayerModel
+import org.machikoro.server.dto.LobbyRosterPlayerDto
 import org.machikoro.server.exception.PlayerNotFoundException
 import org.springframework.stereotype.Repository
 
@@ -51,6 +53,30 @@ class PlayerDao {
             .where { Players.gameId eq gameId }
             .orderBy(Players.turnOrder to SortOrder.ASC)
             .map { it.toModel() }
+    }
+
+    /**
+     * Retrieves the current lobby roster with usernames for a given game.
+     */
+    fun getLobbyRoster(gameId: Int): List<LobbyRosterPlayerDto> = transaction {
+        Players.join(
+            Users,
+            JoinType.INNER,
+            additionalConstraint = { Players.userId eq Users.id }
+        )
+            .selectAll()
+            .where { Players.gameId eq gameId }
+            .orderBy(Players.turnOrder to SortOrder.ASC)
+            .map {
+                LobbyRosterPlayerDto(
+                    playerId = it[Players.id].value,
+                    userId = it[Players.userId].value,
+                    username = it[Users.username],
+                    gameId = it[Players.gameId].value,
+                    turnOrder = it[Players.turnOrder],
+                    coins = it[Players.coins],
+                )
+            }
     }
 
     /**
