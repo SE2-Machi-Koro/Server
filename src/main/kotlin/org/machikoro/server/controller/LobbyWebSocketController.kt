@@ -3,6 +3,7 @@ package org.machikoro.server.controller
 import io.github.springwolf.core.asyncapi.annotations.AsyncListener
 import io.github.springwolf.core.asyncapi.annotations.AsyncOperation
 import org.machikoro.server.auth.userPrincipal
+import org.machikoro.server.dto.LobbyRosterDto
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.CustomWebSocketException
@@ -140,6 +141,21 @@ class LobbyWebSocketController(
             return
         }
 
+        // Send current roster only to the joining player so they see who is already in the lobby
+        if (sessionId != null) {
+            val roster = lobbyService.getLobbyRoster(player.gameId)
+            messagingTemplate.convertAndSend(
+                "/queue/lobby-user$sessionId",
+                WebSocketMessage(
+                    type = MessageType.LOBBY_ROSTER,
+                    sender = "SERVER",
+                    content = "Lobby roster",
+                    gameId = player.gameId,
+                    payload = LobbyRosterDto(players = roster)
+                )
+            )
+        }
+
         // Broadcast join to all members already subscribed to this lobby's topic
         messagingTemplate.convertAndSend(
             "/topic/game/${player.gameId}",
@@ -157,20 +173,5 @@ class LobbyWebSocketController(
                 )
             )
         )
-
-        // Send current roster only to the joining player so they see who is already in the lobby
-        if (sessionId != null) {
-            val roster = lobbyService.getLobbyRoster(player.gameId)
-            messagingTemplate.convertAndSend(
-                "/queue/lobby-user$sessionId",
-                WebSocketMessage(
-                    type = MessageType.LOBBY_ROSTER,
-                    sender = "SERVER",
-                    content = "Lobby roster",
-                    gameId = player.gameId,
-                    payload = roster
-                )
-            )
-        }
     }
 }
