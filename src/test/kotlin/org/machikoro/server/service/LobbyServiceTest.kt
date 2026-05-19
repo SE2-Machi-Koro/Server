@@ -12,13 +12,12 @@ import org.machikoro.server.dao.LandmarkDao
 import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
-import org.machikoro.server.dao.UserDao
-import org.machikoro.server.domain.models.UserModel
 import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.models.PlayerCardModel
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
+import org.machikoro.server.dto.LobbyRosterPlayerDto
 import org.machikoro.server.exception.GameFinishedException
 import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.exception.GameStartedException
@@ -42,7 +41,6 @@ class LobbyServiceTest {
 
     private val gameDao = mock<GameDao>()
     private val playerDao = mock<PlayerDao>()
-    private val userDao = mock<UserDao>()
     private val gameMarketplaceDao = mock<GameMarketplaceDao>()
     private val playerLandmarkDao = mock<PlayerLandmarkDao>()
     private val initializationService = mock<InitializationService>()
@@ -56,7 +54,6 @@ class LobbyServiceTest {
     private val lobbyService = object : LobbyService(
         gameDao,
         playerDao,
-        userDao,
         gameMarketplaceDao,
         playerLandmarkDao,
         initializationService,
@@ -301,52 +298,28 @@ class LobbyServiceTest {
         verify(initializationService, never()).initializeGame(any())
     }
 
-    private fun user(id: Int) = UserModel(
-        id = id,
-        username = "user$id",
-        passwordHash = null,
-        sessionToken = null,
-        totalWins = 0,
-        totalGamesPlayed = 0,
-    )
-
     @Test
-    fun `getLobbyRoster returns mapped entries for all players whose user record exists`() {
-        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(10), player(20)))
-        whenever(userDao.findById(10)).thenReturn(user(10))
-        whenever(userDao.findById(20)).thenReturn(user(20))
+    fun `getLobbyRoster returns player dao roster`() {
+        val expected = listOf(
+            LobbyRosterPlayerDto(playerId = 10, userId = 10, username = "user10", gameId = 1, turnOrder = 0, coins = 3),
+            LobbyRosterPlayerDto(playerId = 20, userId = 20, username = "user20", gameId = 1, turnOrder = 1, coins = 3),
+        )
+        whenever(playerDao.getLobbyRoster(1)).thenReturn(expected)
 
         val roster = lobbyService.getLobbyRoster(1)
 
-        assertEquals(2, roster.size)
-        assertEquals(10, roster[0]["playerId"])
-        assertEquals(10, roster[0]["userId"])
-        assertEquals("user10", roster[0]["username"])
-        assertEquals(3, roster[0]["coins"])
-        assertEquals(20, roster[1]["playerId"])
-        assertEquals("user20", roster[1]["username"])
-    }
-
-    @Test
-    fun `getLobbyRoster silently skips players whose user record is not found`() {
-        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(10), player(99)))
-        whenever(userDao.findById(10)).thenReturn(user(10))
-        whenever(userDao.findById(99)).thenReturn(null)
-
-        val roster = lobbyService.getLobbyRoster(1)
-
-        // Player 99 has no user record — must be skipped, not cause an error
-        assertEquals(1, roster.size)
-        assertEquals(10, roster[0]["playerId"])
+        assertEquals(expected, roster)
+        verify(playerDao).getLobbyRoster(1)
     }
 
     @Test
     fun `getLobbyRoster returns empty list when game has no players`() {
-        whenever(playerDao.getPlayers(1)).thenReturn(emptyList())
+        whenever(playerDao.getLobbyRoster(1)).thenReturn(emptyList())
 
         val roster = lobbyService.getLobbyRoster(1)
 
         assertEquals(0, roster.size)
+        verify(playerDao).getLobbyRoster(1)
     }
 
     @Test

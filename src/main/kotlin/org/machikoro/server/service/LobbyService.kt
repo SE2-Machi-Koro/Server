@@ -8,11 +8,11 @@ import org.machikoro.server.dao.LandmarkDao
 import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
-import org.machikoro.server.dao.UserDao
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.dto.GameStateDto
+import org.machikoro.server.dto.LobbyRosterPlayerDto
 import org.machikoro.server.dto.toDefinitionDto
 import org.machikoro.server.exception.GameFinishedException
 import org.machikoro.server.exception.GameNotFoundException
@@ -27,7 +27,6 @@ import java.util.concurrent.ConcurrentHashMap
 open class LobbyService(
     private val gameDao: GameDao,
     private val playerDao: PlayerDao,
-    private val userDao: UserDao,
     private val gameMarketplaceDao: GameMarketplaceDao,
     private val playerLandmarkDao: PlayerLandmarkDao,
     private val initializationService: InitializationService,
@@ -96,20 +95,10 @@ open class LobbyService(
     }
 
     /**
-     * Returns the current lobby roster for [gameId] as a list of player maps.
-     * Each entry contains playerId, userId, username, and coins.
-     * Players whose user record cannot be found are silently skipped.
+     * Returns the current lobby roster for [gameId], including usernames, ordered by turn order.
      */
-    fun getLobbyRoster(gameId: Int): List<Map<String, Any>> = runInTransaction {
-        playerDao.getPlayers(gameId).mapNotNull { player ->
-            val user = userDao.findById(player.userId) ?: return@mapNotNull null
-            mapOf(
-                "playerId" to player.id,
-                "userId" to player.userId,
-                "username" to user.username,
-                "coins" to player.coins,
-            )
-        }
+    fun getLobbyRoster(gameId: Int): List<LobbyRosterPlayerDto> = runInTransaction {
+        playerDao.getLobbyRoster(gameId)
     }
 
     /**
