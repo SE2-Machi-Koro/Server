@@ -61,4 +61,17 @@ class DebugController(private val debugService: DebugService) {
             ResponseEntity.internalServerError().build()
         }
     }
+
+    @PostMapping("/reset-lobby")
+    @Operation(summary = "Remove all dummy players from a lobby and broadcast LOBBY_LEFT events")
+    fun resetLobby(@RequestBody request: FillLobbyRequest): ResponseEntity<Map<String, Int>> {
+        return try {
+            val removed = debugService.resetLobby(request.lobbyCode)
+            logger.info("Reset lobby '{}': removed {} dummy players", request.lobbyCode, removed)
+            ResponseEntity.ok(mapOf("removedPlayers" to removed))
+        } catch (e: Exception) {
+            logger.error("Reset lobby failed for '{}': {}", request.lobbyCode, e.message)
+            ResponseEntity.internalServerError().build()
+        }
+    }
 }

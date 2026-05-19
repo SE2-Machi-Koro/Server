@@ -204,6 +204,18 @@ open class LobbyService(
     }
 
     /**
+     * Removes all dummy players from the lobby and returns their roster entries.
+     */
+    fun resetLobby(lobbyCode: String): List<LobbyRosterPlayerDto> = runInTransaction {
+        val game = gameDao.findByLobbyCode(lobbyCode)
+            ?: throw GameNotFoundException("Lobby with code $lobbyCode not found")
+        val dummies = playerDao.getLobbyRoster(game.id)
+            .filter { it.username.startsWith(DEBUG_USER_PREFIX) }
+        dummies.forEach { playerDao.deleteByPlayerId(it.playerId) }
+        dummies
+    }
+
+    /**
      * Starts the game identified by [gameId].
      *
      * When [requestingUserId] is provided, the caller must be the lobby host —

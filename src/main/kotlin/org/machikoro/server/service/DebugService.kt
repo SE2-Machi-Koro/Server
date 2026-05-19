@@ -89,6 +89,26 @@ class DebugService(
         return added
     }
 
+    /**
+     * Removes all dummy players from the lobby and broadcasts LOBBY_LEFT for each.
+     */
+    fun resetLobby(lobbyCode: String): Int {
+        val removed = lobbyService.resetLobby(lobbyCode)
+        removed.forEach { player ->
+            messagingTemplate.convertAndSend(
+                "/topic/public",
+                WebSocketMessage(
+                    type = MessageType.LOBBY_LEFT,
+                    sender = "SERVER",
+                    content = "Player left lobby",
+                    gameId = player.gameId,
+                    payload = mapOf("playerId" to player.playerId)
+                )
+            )
+        }
+        return removed.size
+    }
+
     fun purgeGames(): Int = lobbyService.purgeAllGames()
 
     // Creates the user if absent, then issues a fresh session token
