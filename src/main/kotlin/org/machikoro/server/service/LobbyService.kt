@@ -148,6 +148,37 @@ open class LobbyService(
     }
 
     /**
+     * Represents the result of a player leaving a lobby.
+     *
+     * @property playerId The DB player ID of the player who left.
+     * @property gameDeleted True if the lobby was deleted because it is now empty.
+     */
+    data class LeaveLobbyResult(val playerId: Int, val gameDeleted: Boolean)
+
+    /**
+     * Removes [userId] from the lobby [gameId] and deletes the game if no players remain.
+     *
+     * Returns null if the user was not a player in the given game.
+     * Returns [LeaveLobbyResult] with [LeaveLobbyResult.gameDeleted] = true when the last
+     * player left and the game row has been deleted.
+     */
+    fun leaveLobby(gameId: Int, userId: Int): LeaveLobbyResult? = runInTransaction {
+        val player = playerDao.findByGameIdAndUserId(gameId, userId)
+            ?: return@runInTransaction null
+
+        playerDao.deleteByPlayerId(player.id)
+
+        val remaining = playerDao.countByGameId(gameId)
+        if (remaining == 0) {
+            gameDao.delete(gameId)
+            lobbyLocks.remove(gameId)
+            LeaveLobbyResult(playerId = player.id, gameDeleted = true)
+        } else {
+            LeaveLobbyResult(playerId = player.id, gameDeleted = false)
+        }
+    }
+
+    /**
      * Starts the game identified by [gameId].
      *
      * When [requestingUserId] is provided, the caller must be the lobby host —
