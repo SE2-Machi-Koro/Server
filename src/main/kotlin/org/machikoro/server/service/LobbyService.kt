@@ -50,6 +50,8 @@ open class LobbyService(
     companion object {
         // Machi Koro base game requires at least 2 players.
         const val MIN_PLAYERS = 2
+        // Must match DebugService.PLAYER_USERNAMES / FILL_USERNAMES prefix
+        const val DEBUG_USER_PREFIX = "debug_player"
     }
 
     /**
@@ -171,11 +173,15 @@ open class LobbyService(
     data class LeaveLobbyResult(val playerId: Int, val gameDeleted: Boolean)
 
     /**
-     * Removes [userId] from the lobby [gameId] and deletes the game if no players remain.
+     * Removes [userId] from the lobby [gameId] and deletes the game if no real players remain.
+     *
+     * "Real" means non-debug: any player whose username starts with [DEBUG_USER_PREFIX] is
+     * treated as a dummy and does not count toward keeping the lobby alive. This lets a real
+     * player leave a lobby that still has dummy fill-players and still have the game cleaned up.
      *
      * Returns null if the user was not a player in the given game.
-     * Returns [LeaveLobbyResult] with [LeaveLobbyResult.gameDeleted] = true when the last
-     * player left and the game row has been deleted.
+     * Returns [LeaveLobbyResult] with [LeaveLobbyResult.gameDeleted] = true when no real
+     * players remain and the game row (plus any leftover dummies) has been deleted.
      */
     fun leaveLobby(gameId: Int, userId: Int): LeaveLobbyResult? = runInTransaction {
         val player = playerDao.findByGameIdAndUserId(gameId, userId)
@@ -183,8 +189,12 @@ open class LobbyService(
 
         playerDao.deleteByPlayerId(player.id)
 
-        val remaining = playerDao.countByGameId(gameId)
-        if (remaining == 0) {
+        val realPlayersRemain = playerDao.getLobbyRoster(gameId)
+            .any { !it.username.startsWith(DEBUG_USER_PREFIX) }
+
+        if (!realPlayersRemain) {
+            // Clean up leftover dummy players before dropping the game row (FK constraint)
+            playerDao.deleteByGameId(gameId)
             gameDao.delete(gameId)
             lobbyLocks.remove(gameId)
             LeaveLobbyResult(playerId = player.id, gameDeleted = true)
