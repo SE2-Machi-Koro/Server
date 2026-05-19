@@ -148,6 +148,21 @@ open class LobbyService(
     }
 
     /**
+     * Deletes every game and its players from the database.
+     * Debug-only — do not expose in production.
+     * Returns the number of games deleted.
+     */
+    fun purgeAllGames(): Int = runInTransaction {
+        val games = gameDao.findAll()
+        games.forEach { game ->
+            playerDao.deleteByGameId(game.id)
+            gameDao.delete(game.id)
+        }
+        lobbyLocks.clear()
+        games.size
+    }
+
+    /**
      * Represents the result of a player leaving a lobby.
      *
      * @property playerId The DB player ID of the player who left.

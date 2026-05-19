@@ -89,6 +89,8 @@ class DebugService(
         return added
     }
 
+    fun purgeGames(): Int = lobbyService.purgeAllGames()
+
     // Creates the user if absent, then issues a fresh session token
     private fun ensureUser(username: String): LoginResponse {
         val existing = userDao.findByUsername(username)

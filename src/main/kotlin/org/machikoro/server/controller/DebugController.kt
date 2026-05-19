@@ -9,6 +9,7 @@ import org.machikoro.server.service.DebugService
 import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.http.ResponseEntity
+import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
@@ -31,6 +32,19 @@ class DebugController(private val debugService: DebugService) {
             ResponseEntity.ok(result)
         } catch (e: Exception) {
             logger.error("Debug seed failed: {}", e.message)
+            ResponseEntity.internalServerError().build()
+        }
+    }
+
+    @DeleteMapping("/purge")
+    @Operation(summary = "Delete all games and players from the database")
+    fun purge(): ResponseEntity<Map<String, Int>> {
+        return try {
+            val deleted = debugService.purgeGames()
+            logger.info("Debug purge deleted {} games", deleted)
+            ResponseEntity.ok(mapOf("deletedGames" to deleted))
+        } catch (e: Exception) {
+            logger.error("Debug purge failed: {}", e.message)
             ResponseEntity.internalServerError().build()
         }
     }
