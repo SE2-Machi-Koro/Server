@@ -109,7 +109,12 @@ class DebugService(
         return removed.size
     }
 
-    fun purgeGames(): Int = lobbyService.purgeAllGames()
+    fun purgeGames(): Int {
+        val deleted = lobbyService.purgeAllGames()
+        // Delete debug users so they get fresh IDs (and names reset to debug_player1 etc.) next fill
+        userDao.deleteByUsernamePrefix(LobbyService.DEBUG_USER_PREFIX)
+        return deleted
+    }
 
     // Creates the user if absent, then issues a fresh session token
     private fun ensureUser(username: String): LoginResponse {
