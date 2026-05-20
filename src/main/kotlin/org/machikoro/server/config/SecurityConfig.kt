@@ -1,5 +1,6 @@
 package org.machikoro.server.config
 
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
@@ -10,7 +11,10 @@ import org.springframework.security.web.SecurityFilterChain
 
 @Configuration
 @EnableWebSecurity
-class SecurityConfig {
+class SecurityConfig(
+    // Mirror the same default as DebugController so security rules match controller availability
+    @Value("\${debug.enabled:false}") private val debugEnabled: Boolean
+) {
 
     /**
      * Configure security filter chain.
@@ -21,16 +25,16 @@ class SecurityConfig {
      * and for the public auth endpoints since clients (e.g. the Android app) post JSON
      * without a session-bound CSRF token.
      * CSRF remains enabled for all other endpoints including API routes.
+     * Debug endpoints are only opened when debug.enabled=true (set via DEBUG_ENABLED env var).
      */
     @Bean
     fun securityFilterChain(http: HttpSecurity): SecurityFilterChain {
         http
             .csrf { csrf ->
-                csrf.ignoringRequestMatchers(
-                    "/ws", "/ws/**", "/ws-sockjs", "/ws-sockjs/**",
-                    "/auth/**",
-                    "/debug/**",
-                )
+                // Only exempt /debug/** from CSRF when debug endpoints are active
+                val csrfExempt = mutableListOf("/ws", "/ws/**", "/ws-sockjs", "/ws-sockjs/**", "/auth/**")
+                if (debugEnabled) csrfExempt.add("/debug/**")
+                csrf.ignoringRequestMatchers(*csrfExempt.toTypedArray())
             }
             .authorizeHttpRequests { auth ->
                 auth.requestMatchers("/", "/index.html", "/css/**", "/js/**", "/webjars/**").permitAll()
@@ -46,8 +50,8 @@ class SecurityConfig {
                     "/springwolf/**"
                 ).permitAll()
                 auth.requestMatchers("/auth/**").permitAll()
-                // Debug endpoint is open so frontend can call it without a session
-                auth.requestMatchers("/debug/**").permitAll()
+                // Only open /debug/** when debug endpoints are enabled
+                if (debugEnabled) auth.requestMatchers("/debug/**").permitAll()
                 auth.requestMatchers("/api/**").authenticated()
                 auth.anyRequest().authenticated()
             }
