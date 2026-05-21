@@ -127,4 +127,50 @@ class DebugControllerTest {
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.statusCode)
         assertNull(response.body)
     }
+
+    // === DELETE /debug/purge ===
+
+    @Test
+    fun `purge returns 200 OK with deleted game count`() {
+        whenever(debugService.purgeGames()).thenReturn(5)
+
+        val response = controller.purge()
+
+        assertEquals(HttpStatus.OK, response.statusCode)
+        assertEquals(mapOf("deletedGames" to 5), response.body)
+    }
+
+    @Test
+    fun `purge returns 500 when service throws`() {
+        whenever(debugService.purgeGames()).thenThrow(RuntimeException("DB error"))
+
+        val response = controller.purge()
+
+        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.statusCode)
+        assertNull(response.body)
+    }
+
+    // === POST /debug/reset-lobby ===
+
+    @Test
+    fun `resetLobby returns 200 OK with removed player count`() {
+        val request = FillLobbyRequest(lobbyCode = "ABC123")
+        whenever(debugService.resetLobby("ABC123")).thenReturn(2)
+
+        val response = controller.resetLobby(request)
+
+        assertEquals(HttpStatus.OK, response.statusCode)
+        assertEquals(mapOf("removedPlayers" to 2), response.body)
+    }
+
+    @Test
+    fun `resetLobby returns 500 when service throws`() {
+        val request = FillLobbyRequest(lobbyCode = "NOPE")
+        whenever(debugService.resetLobby("NOPE")).thenThrow(GameNotFoundException("not found"))
+
+        val response = controller.resetLobby(request)
+
+        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.statusCode)
+        assertNull(response.body)
+    }
 }

@@ -142,4 +142,12 @@ class UserDao {
         val deletedRows = Users.deleteWhere { Users.id eq id }
         if (deletedRows == 0) throw UserNotFoundException("User $id not found")
     }
+
+    // Deletes all users whose username starts with [prefix] — debug cleanup only
+    fun deleteByUsernamePrefix(prefix: String): Int = transaction {
+        findAll()
+            .filter { it.username.startsWith(prefix) }
+            .onEach { Users.deleteWhere { Users.id eq it.id } }
+            .size
+    }
 }

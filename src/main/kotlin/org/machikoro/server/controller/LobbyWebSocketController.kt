@@ -35,11 +35,13 @@ class LobbyWebSocketController(
      * username spoofing.
      */
     @MessageMapping("/lobby.create")
-    @AsyncListener(operation = AsyncOperation(
-        channelName = "/lobby.create",
-        description = "Creates a new lobby for the authenticated user and delivers LOBBY_CREATED only to the creator.",
-        payloadType = WebSocketMessage::class,
-    ))
+    @AsyncListener(
+        operation = AsyncOperation(
+            channelName = "/lobby.create",
+            description = "Creates a new lobby for the authenticated user and delivers LOBBY_CREATED only to the creator.",
+            payloadType = WebSocketMessage::class,
+        )
+    )
     @Suppress("UNUSED_PARAMETER") // Spring requires a @Payload parameter to deserialize the STOMP frame body
     fun createLobby(
         @Payload message: WebSocketMessage,
@@ -90,11 +92,13 @@ class LobbyWebSocketController(
      * the WebSocket payload is ignored to prevent username spoofing.
      */
     @MessageMapping("/lobby.join")
-    @AsyncListener(operation = AsyncOperation(
-        channelName = "/lobby.join",
-        description = "Joins an existing lobby by lobby code and broadcasts LOBBY_JOINED to /topic/game/{gameId}.",
-        payloadType = WebSocketMessage::class,
-    ))
+    @AsyncListener(
+        operation = AsyncOperation(
+            channelName = "/lobby.join",
+            description = "Joins an existing lobby by lobby code and broadcasts LOBBY_JOINED to /topic/game/{gameId}.",
+            payloadType = WebSocketMessage::class,
+        )
+    )
     fun joinLobby(
         @Payload message: WebSocketMessage,
         headerAccessor: SimpMessageHeaderAccessor,
@@ -172,6 +176,70 @@ class LobbyWebSocketController(
                     "coins" to player.coins
                 )
             )
+        )
+    }
+
+    /**
+     * Handles a player leaving a lobby via WebSocket.
+     *
+     * Client sends a message to /app/lobby.leave with the gameId in the payload.
+     * The player is removed from the lobby roster. If the lobby becomes empty, the
+     * game record is deleted. Otherwise LOBBY_LEFT is broadcast to the remaining
+     * members so they can update the player list.
+     */
+    @MessageMapping("/lobby.leave")
+    @Suppress("UNUSED_PARAMETER")
+    fun leaveLobby(
+        @Payload message: WebSocketMessage,
+        headerAccessor: SimpMessageHeaderAccessor,
+    ) {
+        val principal = headerAccessor.userPrincipal()
+            ?: throw CustomWebSocketException(
+                errorCode = "UNAUTHENTICATED",
+                message = "Authenticated principal not found",
+            )
+
+        val payload = message.payload as? Map<*, *>
+            ?: throw CustomWebSocketException(
+                errorCode = "INVALID_PAYLOAD",
+                message = "lobby.leave payload must contain a gameId",
+            )
+
+        val gameId = (payload["gameId"] as? Number)?.toInt()
+            ?: throw CustomWebSocketException(
+                errorCode = "MISSING_GAME_ID",
+                message = "gameId is missing or not a number",
+            )
+
+        logger.info("User '{}' leaving lobby {}", principal.username, gameId)
+
+        val result = lobbyService.leaveLobby(gameId, principal.userId)
+        if (result == null) {
+            logger.warn("leaveLobby: user '{}' is not in game {}", principal.username, gameId)
+            return
+        }
+
+        if (!result.gameDeleted) {
+            // Notify remaining players so they can remove the leaver from the UI
+            messagingTemplate.convertAndSend(
+                "/topic/game/$gameId",
+                WebSocketMessage(
+                    type = MessageType.LOBBY_LEFT,
+                    sender = "SERVER",
+                    content = "Player left lobby",
+                    gameId = gameId,
+                    payload = mapOf(
+                        "playerId" to result.playerId,
+                        "userId" to principal.userId,
+                        "username" to principal.username,
+                    )
+                )
+            )
+        }
+        // If game was deleted there are no remaining subscribers to notify
+        logger.info(
+            "User '{}' left lobby {} — gameDeleted={}",
+            principal.username, gameId, result.gameDeleted
         )
     }
 }

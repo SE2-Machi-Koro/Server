@@ -25,6 +25,7 @@ class DebugService(
     companion object {
         // Fixed credentials so callers always know which users own the debug game
         private val PLAYER_USERNAMES = listOf("debug_player1", "debug_player2", "debug_player3", "debug_player4")
+
         // Dummy players used to fill an existing lobby (skips debug_player1 who is the seed host)
         private val FILL_USERNAMES = listOf("debug_player2", "debug_player3", "debug_player4")
         private const val DEBUG_PASSWORD = "debug_password"
@@ -59,9 +60,9 @@ class DebugService(
             val creds = ensureUser(username)
             try {
                 val player = lobbyService.addUserToLobby(game.id, creds.userId)
-                // Broadcast so the real client's handleLobbyJoined picks it up
+                // Broadcast to per-lobby topic, matching the real join path
                 messagingTemplate.convertAndSend(
-                    "/topic/public",
+                    "/topic/game/${player.gameId}",
                     WebSocketMessage(
                         type = MessageType.LOBBY_JOINED,
                         sender = "SERVER",
@@ -87,6 +88,33 @@ class DebugService(
             }
         }
         return added
+    }
+
+    /**
+     * Removes all dummy players from the lobby and broadcasts LOBBY_LEFT for each.
+     */
+    fun resetLobby(lobbyCode: String): Int {
+        val removed = lobbyService.resetLobby(lobbyCode)
+        removed.forEach { player ->
+            messagingTemplate.convertAndSend(
+                "/topic/game/${player.gameId}",
+                WebSocketMessage(
+                    type = MessageType.LOBBY_LEFT,
+                    sender = "SERVER",
+                    content = "Player left lobby",
+                    gameId = player.gameId,
+                    payload = mapOf("playerId" to player.playerId)
+                )
+            )
+        }
+        return removed.size
+    }
+
+    fun purgeGames(): Int {
+        val deleted = lobbyService.purgeAllGames()
+        // Delete debug users so they get fresh IDs (and names reset to debug_player1 etc.) next fill
+        userDao.deleteByUsernamePrefix(LobbyService.DEBUG_USER_PREFIX)
+        return deleted
     }
 
     // Creates the user if absent, then issues a fresh session token

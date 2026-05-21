@@ -50,6 +50,8 @@ open class LobbyService(
     companion object {
         // Machi Koro base game requires at least 2 players.
         const val MIN_PLAYERS = 2
+        // Must match DebugService.PLAYER_USERNAMES / FILL_USERNAMES prefix
+        const val DEBUG_USER_PREFIX = "debug_player"
     }
 
     /**
@@ -148,6 +150,72 @@ open class LobbyService(
     }
 
     /**
+     * Deletes every game and its players from the database.
+     * Debug-only — do not expose in production.
+     * Returns the number of games deleted.
+     */
+    fun purgeAllGames(): Int = runInTransaction {
+        val games = gameDao.findAll()
+        games.forEach { game ->
+            playerDao.deleteByGameId(game.id)
+            gameDao.delete(game.id)
+        }
+        lobbyLocks.clear()
+        games.size
+    }
+
+    /**
+     * Represents the result of a player leaving a lobby.
+     *
+     * @property playerId The DB player ID of the player who left.
+     * @property gameDeleted True if the lobby was deleted because it is now empty.
+     */
+    data class LeaveLobbyResult(val playerId: Int, val gameDeleted: Boolean)
+
+    /**
+     * Removes [userId] from the lobby [gameId] and deletes the game if no real players remain.
+     *
+     * "Real" means non-debug: any player whose username starts with [DEBUG_USER_PREFIX] is
+     * treated as a dummy and does not count toward keeping the lobby alive. This lets a real
+     * player leave a lobby that still has dummy fill-players and still have the game cleaned up.
+     *
+     * Returns null if the user was not a player in the given game.
+     * Returns [LeaveLobbyResult] with [LeaveLobbyResult.gameDeleted] = true when no real
+     * players remain and the game row (plus any leftover dummies) has been deleted.
+     */
+    fun leaveLobby(gameId: Int, userId: Int): LeaveLobbyResult? = runInTransaction {
+        val player = playerDao.findByGameIdAndUserId(gameId, userId)
+            ?: return@runInTransaction null
+
+        playerDao.deleteByPlayerId(player.id)
+
+        val realPlayersRemain = playerDao.getLobbyRoster(gameId)
+            .any { !it.username.startsWith(DEBUG_USER_PREFIX) }
+
+        if (!realPlayersRemain) {
+            // Clean up leftover dummy players before dropping the game row (FK constraint)
+            playerDao.deleteByGameId(gameId)
+            gameDao.delete(gameId)
+            lobbyLocks.remove(gameId)
+            LeaveLobbyResult(playerId = player.id, gameDeleted = true)
+        } else {
+            LeaveLobbyResult(playerId = player.id, gameDeleted = false)
+        }
+    }
+
+    /**
+     * Removes all dummy players from the lobby and returns their roster entries.
+     */
+    fun resetLobby(lobbyCode: String): List<LobbyRosterPlayerDto> = runInTransaction {
+        val game = gameDao.findByLobbyCode(lobbyCode)
+            ?: throw GameNotFoundException("Lobby with code $lobbyCode not found")
+        val dummies = playerDao.getLobbyRoster(game.id)
+            .filter { it.username.startsWith(DEBUG_USER_PREFIX) }
+        dummies.forEach { playerDao.deleteByPlayerId(it.playerId) }
+        dummies
+    }
+
+    /**
      * Starts the game identified by [gameId].
      *
      * When [requestingUserId] is provided, the caller must be the lobby host —
@@ -194,6 +262,7 @@ open class LobbyService(
                 val marketplace = gameMarketplaceDao.findByGameIdAsMap(gameId)
                 val cardDefinitions = cardDao.findAll().map { it.toDefinitionDto() }
                 val landmarkDefinitions = landmarkDao.findAll().map { it.toDefinitionDto() }
+                val playerUsernames = playerDao.getLobbyRoster(gameId).associate { it.playerId to it.username }
 
                 GameStateDto(
                     game = updatedGame,
@@ -205,6 +274,7 @@ open class LobbyService(
                     landmarkDefinitions = landmarkDefinitions,
                     turnOrder = shuffled.map { it.userId },
                     activePlayerId = shuffled.firstOrNull()?.userId,
+                    playerUsernames = playerUsernames,
                 )
             }
         }

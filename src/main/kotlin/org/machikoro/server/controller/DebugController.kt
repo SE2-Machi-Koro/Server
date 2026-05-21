@@ -9,6 +9,7 @@ import org.machikoro.server.service.DebugService
 import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.http.ResponseEntity
+import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
@@ -35,6 +36,19 @@ class DebugController(private val debugService: DebugService) {
         }
     }
 
+    @DeleteMapping("/purge")
+    @Operation(summary = "Delete all games and players from the database")
+    fun purge(): ResponseEntity<Map<String, Int>> {
+        return try {
+            val deleted = debugService.purgeGames()
+            logger.info("Debug purge deleted {} games", deleted)
+            ResponseEntity.ok(mapOf("deletedGames" to deleted))
+        } catch (e: Exception) {
+            logger.error("Debug purge failed: {}", e.message)
+            ResponseEntity.internalServerError().build()
+        }
+    }
+
     @PostMapping("/fill-lobby")
     @Operation(summary = "Fill an existing lobby with dummy players (up to 3) and broadcast LOBBY_JOINED events")
     fun fillLobby(@RequestBody request: FillLobbyRequest): ResponseEntity<List<LoginResponse>> {
@@ -44,6 +58,19 @@ class DebugController(private val debugService: DebugService) {
             ResponseEntity.ok(added)
         } catch (e: Exception) {
             logger.error("Fill lobby failed for '{}': {}", request.lobbyCode, e.message)
+            ResponseEntity.internalServerError().build()
+        }
+    }
+
+    @PostMapping("/reset-lobby")
+    @Operation(summary = "Remove all dummy players from a lobby and broadcast LOBBY_LEFT events")
+    fun resetLobby(@RequestBody request: FillLobbyRequest): ResponseEntity<Map<String, Int>> {
+        return try {
+            val removed = debugService.resetLobby(request.lobbyCode)
+            logger.info("Reset lobby '{}': removed {} dummy players", request.lobbyCode, removed)
+            ResponseEntity.ok(mapOf("removedPlayers" to removed))
+        } catch (e: Exception) {
+            logger.error("Reset lobby failed for '{}': {}", request.lobbyCode, e.message)
             ResponseEntity.internalServerError().build()
         }
     }

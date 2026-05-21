@@ -190,4 +190,30 @@ class UserDaoTest : AbstractDBSetup() {
 
         assertTrue(result.isEmpty())
     }
+
+    @Test
+    fun `deleteByUsernamePrefix removes only matching users and returns count`() {
+        dao.create("debug_player1")
+        dao.create("debug_player2")
+        dao.create("alice")
+
+        val count = dao.deleteByUsernamePrefix("debug_player")
+
+        assertEquals(2, count)
+        assertNull(dao.findByUsername("debug_player1"))
+        assertNull(dao.findByUsername("debug_player2"))
+        assertNotNull(dao.findByUsername("alice"))
+    }
+
+    @Test
+    fun `deleteByUsernamePrefix returns 0 when no users match prefix`() {
+        dao.create("alice")
+        dao.create("bob")
+
+        val count = dao.deleteByUsernamePrefix("debug_")
+
+        assertEquals(0, count)
+        assertNotNull(dao.findByUsername("alice"))
+        assertNotNull(dao.findByUsername("bob"))
+    }
 }

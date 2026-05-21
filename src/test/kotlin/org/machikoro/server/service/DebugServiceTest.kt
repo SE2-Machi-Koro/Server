@@ -10,6 +10,7 @@ import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.domain.models.UserModel
 import org.machikoro.server.dto.GameStateDto
+import org.machikoro.server.dto.LobbyRosterPlayerDto
 import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.exception.LobbyFullException
@@ -161,7 +162,7 @@ class DebugServiceTest {
         assertEquals("debug_player2", result[0].username)
         assertEquals("debug_player4", result[2].username)
         verify(lobbyService, times(3)).addUserToLobby(eq(5), any())
-        verify(messagingTemplate, times(3)).convertAndSend(eq("/topic/public"), any<Any>())
+        verify(messagingTemplate, times(3)).convertAndSend(eq("/topic/game/5"), any<Any>())
     }
 
     @Test
@@ -179,7 +180,7 @@ class DebugServiceTest {
 
         assertEquals(1, result.size)
         assertEquals("debug_player2", result[0].username)
-        verify(messagingTemplate, times(1)).convertAndSend(eq("/topic/public"), any<Any>())
+        verify(messagingTemplate, times(1)).convertAndSend(eq("/topic/game/5"), any<Any>())
     }
 
     @Test
@@ -215,7 +216,7 @@ class DebugServiceTest {
         assertEquals("debug_player3", result[0].username)
         assertEquals("debug_player4", result[1].username)
         // Only 2 broadcasts — skipped dummy must not get one
-        verify(messagingTemplate, times(2)).convertAndSend(eq("/topic/public"), any<Any>())
+        verify(messagingTemplate, times(2)).convertAndSend(eq("/topic/game/5"), any<Any>())
     }
 
     @Test
@@ -228,5 +229,55 @@ class DebugServiceTest {
 
         verify(lobbyService, never()).addUserToLobby(any(), any())
         verify(messagingTemplate, never()).convertAndSend(any<String>(), any<Any>())
+    }
+
+    // === resetLobby() ===
+
+    @Test
+    fun `resetLobby broadcasts LOBBY_LEFT for each removed dummy and returns count`() {
+        val removed = listOf(
+            LobbyRosterPlayerDto(playerId = 2, userId = 2, username = "debug_player2", gameId = 5, turnOrder = 1, coins = 3),
+            LobbyRosterPlayerDto(playerId = 3, userId = 3, username = "debug_player3", gameId = 5, turnOrder = 2, coins = 3),
+        )
+        whenever(lobbyService.resetLobby("ABC123")).thenReturn(removed)
+
+        val count = service.resetLobby("ABC123")
+
+        assertEquals(2, count)
+        verify(messagingTemplate, times(2)).convertAndSend(eq("/topic/game/5"), any<Any>())
+    }
+
+    @Test
+    fun `resetLobby sends no broadcasts and returns 0 when no dummies were removed`() {
+        whenever(lobbyService.resetLobby("ABC123")).thenReturn(emptyList())
+
+        val count = service.resetLobby("ABC123")
+
+        assertEquals(0, count)
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<Any>())
+    }
+
+    @Test
+    fun `resetLobby propagates GameNotFoundException when lobby code not found`() {
+        whenever(lobbyService.resetLobby("NOPE")).thenThrow(GameNotFoundException("not found"))
+
+        assertThrows<GameNotFoundException> {
+            service.resetLobby("NOPE")
+        }
+
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<Any>())
+    }
+
+    // === purgeGames() ===
+
+    @Test
+    fun `purgeGames delegates to lobbyService and deletes debug users by prefix`() {
+        whenever(lobbyService.purgeAllGames()).thenReturn(3)
+
+        val count = service.purgeGames()
+
+        assertEquals(3, count)
+        verify(lobbyService).purgeAllGames()
+        verify(userDao).deleteByUsernamePrefix(LobbyService.DEBUG_USER_PREFIX)
     }
 }
