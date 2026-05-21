@@ -7,6 +7,7 @@ import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.ResolveEffectsRequest
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.service.GameStateGuard
+import org.machikoro.server.service.GameSyncService
 import org.machikoro.server.service.interfaces.EarningsService
 import org.slf4j.LoggerFactory
 import org.springframework.messaging.handler.annotation.MessageMapping
@@ -23,6 +24,7 @@ class EarningsController(
     private val earningsService: EarningsService,
     private val messagingTemplate: SimpMessagingTemplate,
     private val gameStateGuard: GameStateGuard,
+    private val gameSyncService: GameSyncService,
 ) {
     private val logger = LoggerFactory.getLogger(EarningsController::class.java)
 
@@ -42,13 +44,21 @@ class EarningsController(
         val gameTopic = "/topic/game/${request.gameId}"
         try {
             earningsService.resolveEffects(request.gameId)
+            val state = gameSyncService.buildSnapshot(request.gameId)
             logger.info("Resolved effects for game ${request.gameId}")
             messagingTemplate.convertAndSend(
                 gameTopic,
                 WebSocketMessage(
                     type = MessageType.GAME_ACTION,
                     sender = "server",
-                    payload = mapOf("event" to "EFFECTS_RESOLVED", "gameId" to request.gameId)
+                    payload = mapOf(
+                        "event" to "EFFECTS_RESOLVED",
+                        "gameId" to request.gameId,
+                        "turnPhase" to state.game.turnPhase.name,
+                        "activePlayerId" to state.activePlayerId,
+                        "state" to state,
+                    ),
+                    gameId = request.gameId,
                 )
             )
         } catch (e: Exception) {

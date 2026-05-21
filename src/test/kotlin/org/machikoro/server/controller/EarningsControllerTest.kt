@@ -3,12 +3,18 @@ package org.machikoro.server.controller
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.auth.UserPrincipal
+import org.machikoro.server.domain.enums.GameStatus
+import org.machikoro.server.domain.enums.TurnPhase
+import org.machikoro.server.domain.models.GameModel
+import org.machikoro.server.domain.models.PlayerModel
+import org.machikoro.server.dto.GameStateDto
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.ResolveEffectsRequest
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.service.GameStateGuard
+import org.machikoro.server.service.GameSyncService
 import org.machikoro.server.service.interfaces.EarningsService
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
@@ -27,16 +33,42 @@ class EarningsControllerTest {
     private val earningsService: EarningsService = mock()
     private val messagingTemplate: SimpMessagingTemplate = mock()
     private val gameStateGuard: GameStateGuard = mock()
-    private val controller = EarningsController(earningsService, messagingTemplate, gameStateGuard)
+    private val gameSyncService: GameSyncService = mock()
+    private val controller = EarningsController(earningsService, messagingTemplate, gameStateGuard, gameSyncService)
 
     private val alice = UserPrincipal(userId = 1, username = "alice")
 
     private fun authedAccessor(): SimpMessageHeaderAccessor =
         SimpMessageHeaderAccessor.create().apply { user = alice }
 
+    private fun gameStateDto(gameId: Int) = GameStateDto(
+        game = GameModel(
+            id = gameId,
+            status = GameStatus.IN_PROGRESS,
+            hostUserId = 1,
+            lobbyCode = "ABC123",
+            maxPlayers = 4,
+            currentTurnIndex = 0,
+            turnPhase = TurnPhase.BUY_OR_BUILD,
+            lastDiceRoll = 6,
+            hasPurchasedThisTurn = false,
+            roundNumber = 1,
+        ),
+        players = listOf(
+            PlayerModel(id = 1, gameId = gameId, userId = 1, turnOrder = 0, coins = 5, lastSeenAt = null),
+        ),
+        playerCards = emptyMap(),
+        playerLandmarks = emptyMap(),
+        marketplace = emptyMap(),
+        turnOrder = listOf(1),
+        activePlayerId = 1,
+    )
+
     @Test
     fun `resolveEffects calls service and broadcasts success`() {
         val request = ResolveEffectsRequest(gameId = 1)
+        val snapshot = gameStateDto(1)
+        whenever(gameSyncService.buildSnapshot(1)).thenReturn(snapshot)
 
         controller.resolveEffects(request, authedAccessor())
 
@@ -49,8 +81,13 @@ class EarningsControllerTest {
         val message = captor.firstValue
         assertEquals(MessageType.GAME_ACTION, message.type)
         assertEquals("server", message.sender)
-        assertEquals("EFFECTS_RESOLVED", (message.payload as Map<*, *>)["event"])
-        assertEquals(1, (message.payload as Map<*, *>)["gameId"])
+        assertEquals(1, message.gameId)
+        val payload = message.payload as Map<*, *>
+        assertEquals("EFFECTS_RESOLVED", payload["event"])
+        assertEquals(1, payload["gameId"])
+        assertEquals("BUY_OR_BUILD", payload["turnPhase"])
+        assertEquals(1, payload["activePlayerId"])
+        assertEquals(snapshot, payload["state"])
     }
 
     @Test
