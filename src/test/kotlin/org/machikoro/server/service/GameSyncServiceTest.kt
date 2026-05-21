@@ -26,6 +26,7 @@ import org.machikoro.server.domain.models.LandmarkModel
 import org.machikoro.server.domain.models.PlayerCardModel
 import org.machikoro.server.domain.models.PlayerLandmarkModel
 import org.machikoro.server.domain.models.PlayerModel
+import org.machikoro.server.dto.ClientScreen
 import org.machikoro.server.dto.LobbyRosterPlayerDto
 import org.machikoro.server.exception.GameNotFoundException
 import org.mockito.kotlin.any
@@ -81,6 +82,49 @@ class GameSyncServiceTest {
         assertNull(service.findActiveInProgressGameId(8))
 
         verify(playerDao).findActiveGameIdByUserId(8)
+    }
+
+    @Test
+    fun `resolveSessionState returns MAIN when user has no current membership`() {
+        whenever(playerDao.findCurrentMembershipByUserId(8)).thenReturn(null)
+
+        val state = service.resolveSessionState(8)
+
+        assertEquals(ClientScreen.MAIN, state.screen)
+        assertNull(state.gameId)
+        assertNull(state.playerId)
+    }
+
+    @Test
+    fun `resolveSessionState returns LOBBY for waiting lobby membership`() {
+        val player = PlayerModel(id = 15, gameId = 22, userId = 8, turnOrder = 0, coins = 3, lastSeenAt = null)
+        whenever(playerDao.findCurrentMembershipByUserId(8)).thenReturn(
+            PlayerDao.PlayerGameMembership(player = player, game = game(22, GameStatus.WAITING))
+        )
+
+        val state = service.resolveSessionState(8)
+
+        assertEquals(ClientScreen.LOBBY, state.screen)
+        assertEquals(22, state.gameId)
+        assertEquals(15, state.playerId)
+        assertEquals("ABC1234", state.lobbyCode)
+        assertEquals(GameStatus.WAITING, state.gameStatus)
+        assertEquals(TurnPhase.ROLL_DICE, state.turnPhase)
+    }
+
+    @Test
+    fun `resolveSessionState returns GAME for in-progress game membership`() {
+        val player = PlayerModel(id = 16, gameId = 23, userId = 9, turnOrder = 1, coins = 3, lastSeenAt = null)
+        whenever(playerDao.findCurrentMembershipByUserId(9)).thenReturn(
+            PlayerDao.PlayerGameMembership(player = player, game = game(23, GameStatus.IN_PROGRESS))
+        )
+
+        val state = service.resolveSessionState(9)
+
+        assertEquals(ClientScreen.GAME, state.screen)
+        assertEquals(23, state.gameId)
+        assertEquals(16, state.playerId)
+        assertEquals(GameStatus.IN_PROGRESS, state.gameStatus)
     }
 
     @Test

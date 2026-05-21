@@ -14,6 +14,7 @@ import org.machikoro.server.database.Games
 import org.machikoro.server.database.Players
 import org.machikoro.server.database.Users
 import org.machikoro.server.domain.enums.GameStatus
+import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.dto.LobbyRosterPlayerDto
 import org.machikoro.server.exception.PlayerNotFoundException
@@ -22,6 +23,11 @@ import org.springframework.stereotype.Repository
 @Repository
 class PlayerDao {
 
+    data class PlayerGameMembership(
+        val player: PlayerModel,
+        val game: GameModel,
+    )
+
     private fun ResultRow.toModel() = PlayerModel(
         id = this[Players.id].value,
         gameId = this[Players.gameId].value,
@@ -29,6 +35,19 @@ class PlayerDao {
         turnOrder = this[Players.turnOrder],
         coins = this[Players.coins],
         lastSeenAt = this[Players.lastSeenAt]
+    )
+
+    private fun ResultRow.toGameModel() = GameModel(
+        id = this[Games.id].value,
+        status = this[Games.status],
+        hostUserId = this[Games.hostUserId].value,
+        lobbyCode = this[Games.lobbyCode],
+        maxPlayers = this[Games.maxPlayers],
+        currentTurnIndex = this[Games.currentTurnIndex],
+        turnPhase = this[Games.turnPhase],
+        lastDiceRoll = this[Games.lastDiceRoll],
+        roundNumber = this[Games.roundNumber],
+        hasPurchasedThisTurn = this[Games.hasPurchasedThisTurn],
     )
 
     /**
@@ -104,6 +123,36 @@ class PlayerDao {
             .firstOrNull()
             ?.get(Players.gameId)
             ?.value
+    }
+
+    /**
+     * Returns the newest valid membership for a reconnect/login decision.
+     *
+     * IN_PROGRESS games take precedence over WAITING lobbies so a client that
+     * missed the start transition is sent to the game screen instead of back to
+     * lobby creation. FINISHED games are intentionally ignored because they are
+     * not a current navigation target after a fresh login.
+     */
+    fun findCurrentMembershipByUserId(userId: Int): PlayerGameMembership? = transaction {
+        fun newestMembershipByStatus(status: GameStatus): PlayerGameMembership? =
+            Players.join(
+                Games,
+                JoinType.INNER,
+                additionalConstraint = { Players.gameId eq Games.id }
+            )
+                .selectAll()
+                .where { (Players.userId eq userId) and (Games.status eq status) }
+                .orderBy(Games.id to SortOrder.DESC)
+                .firstOrNull()
+                ?.let { row ->
+                    PlayerGameMembership(
+                        player = row.toModel(),
+                        game = row.toGameModel(),
+                    )
+                }
+
+        newestMembershipByStatus(GameStatus.IN_PROGRESS)
+            ?: newestMembershipByStatus(GameStatus.WAITING)
     }
 
     /**
