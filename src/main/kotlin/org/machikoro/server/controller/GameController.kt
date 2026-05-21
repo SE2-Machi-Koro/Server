@@ -3,6 +3,7 @@ package org.machikoro.server.controller
 import org.machikoro.server.auth.requireUserPrincipal
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.domain.enums.TurnPhase
+import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.dto.EndTurnOutcome
 import org.machikoro.server.dto.AdvancePhaseRequest
 import org.machikoro.server.dto.EndTurnRequest
@@ -214,20 +215,19 @@ class GameController(
         payloadType = RollDiceRequest::class,
     ))
     fun rollDice(@Payload request: RollDiceRequest, headerAccessor: SimpMessageHeaderAccessor) {
-        requireActivePlayer(request.gameId, headerAccessor)
-        requireOwnerOfPlayer(request.gameId, request.playerId, headerAccessor)
+        val rollingPlayer = requireActivePlayer(request.gameId, headerAccessor)
         val gameTopic = "/topic/game/${request.gameId}"
-        logger.info("Roll dice request from player ${request.playerId} in game ${request.gameId}")
+        logger.info("Roll dice request from player ${rollingPlayer.id} in game ${request.gameId}")
         try {
-            val result = diceService.rollDice(request)
+            val result = diceService.rollDice(request, rollingPlayer.id)
             messagingTemplate.convertAndSend(
                 gameTopic,
                 WebSocketMessage(
                     type = MessageType.ROLL_DICE,
                     sender = "SERVER",
-                    content = "Player ${request.playerId} rolled: ${result.total}",
+                    content = "Player ${rollingPlayer.id} rolled: ${result.total}",
                     payload = mapOf(
-                        "playerId" to request.playerId,
+                        "playerId" to rollingPlayer.id,
                         "result" to result.dice,
                         "total" to result.total,
                         "completed" to result.completed,
@@ -311,8 +311,8 @@ class GameController(
      * `NOT_YOUR_TURN` / `NO_ACTIVE_PLAYER` / `GAME_FINISHED` per the helper
      * and guard contracts.
      */
-    private fun requireActivePlayer(gameId: Int, headerAccessor: SimpMessageHeaderAccessor) {
-        gameStateGuard.ensureSenderIsActivePlayer(gameId, headerAccessor.requireUserPrincipal())
+    private fun requireActivePlayer(gameId: Int, headerAccessor: SimpMessageHeaderAccessor): PlayerModel {
+        return gameStateGuard.ensureSenderIsActivePlayer(gameId, headerAccessor.requireUserPrincipal())
     }
 
     private fun requireOwnerOfPlayer(gameId: Int, playerId: Int, headerAccessor: SimpMessageHeaderAccessor) {

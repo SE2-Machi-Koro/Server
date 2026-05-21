@@ -10,6 +10,7 @@ import org.machikoro.server.domain.enums.LandmarkType
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerLandmarkModel
+import org.machikoro.server.dto.RollDicePayload
 import org.machikoro.server.dto.RollDiceRequest
 import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.exception.GameNotFoundException
@@ -47,8 +48,8 @@ class DiceServiceTests {
     fun rollDiceShouldReturnSingleDieValueBetween1And6() {
         whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(defaultGame)
 
-        val request = RollDiceRequest(gameId = 1, playerId = 2)
-        val result = diceService.rollDice(request)
+        val request = RollDiceRequest(gameId = 1)
+        val result = diceService.rollDice(request, rollingPlayerId = 2)
 
         assertEquals(1, result.dice.size)
         assert(result.total in 1..6)
@@ -63,7 +64,7 @@ class DiceServiceTests {
         val request = RollDiceRequest(gameId = 1, playerId = 2)
 
         assertThrows(GameNotFoundException::class.java) {
-            diceService.rollDice(request)
+            diceService.rollDice(request, rollingPlayerId = 2)
         }
         verify(gameDao, never()).updateAfterRoll(any(), any(), any())
     }
@@ -76,7 +77,7 @@ class DiceServiceTests {
         val request = RollDiceRequest(gameId = 1, playerId = 2)
 
         val ex = assertThrows(CustomWebSocketException::class.java) {
-            diceService.rollDice(request)
+            diceService.rollDice(request, rollingPlayerId = 2)
         }
         assertEquals("GAME_FINISHED", ex.errorCode)
         verify(gameDao, never()).updateAfterRoll(any(), any(), any())
@@ -90,7 +91,7 @@ class DiceServiceTests {
         val request = RollDiceRequest(gameId = 1, playerId = 2)
 
         val ex = assertThrows(CustomWebSocketException::class.java) {
-            diceService.rollDice(request)
+            diceService.rollDice(request, rollingPlayerId = 2)
         }
         assertEquals("ROLL_ALREADY_COMPLETED", ex.errorCode)
     }
@@ -102,12 +103,12 @@ class DiceServiceTests {
             .thenReturn(defaultGame.copy(turnPhase = TurnPhase.RESOLVE_EFFECTS, lastDiceRoll = 4))
 
         val request = RollDiceRequest(gameId = 1, playerId = 2)
-        val first = diceService.rollDice(request)
+        val first = diceService.rollDice(request, rollingPlayerId = 2)
 
         assertEquals(true, first.completed)
         assertEquals(TurnPhase.RESOLVE_EFFECTS, first.turnPhase)
         val ex = assertThrows(CustomWebSocketException::class.java) {
-            diceService.rollDice(request)
+            diceService.rollDice(request, rollingPlayerId = 2)
         }
         assertEquals("ROLL_ALREADY_COMPLETED", ex.errorCode)
     }
@@ -125,11 +126,11 @@ class DiceServiceTests {
         val request = RollDiceRequest(gameId = 1, playerId = 2)
         val executor = Executors.newFixedThreadPool(2)
         try {
-            val first = executor.submit(Callable { diceService.rollDice(request) })
+            val first = executor.submit(Callable { diceService.rollDice(request, rollingPlayerId = 2) })
             firstEntered.await(1, TimeUnit.SECONDS)
             val second = executor.submit(Callable {
                 assertThrows(CustomWebSocketException::class.java) {
-                    diceService.rollDice(request)
+                    diceService.rollDice(request, rollingPlayerId = 2)
                 }.errorCode
             })
             releaseFirst.countDown()
@@ -150,7 +151,7 @@ class DiceServiceTests {
         val request = RollDiceRequest(gameId = 1, playerId = 2, rollTwoDice = true)
 
         assertThrows(CustomWebSocketException::class.java) {
-            diceService.rollDice(request)
+            diceService.rollDice(request, rollingPlayerId = 2)
         }
     }
 
@@ -161,7 +162,21 @@ class DiceServiceTests {
             .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.TRAIN_STATION, isBuilt = true))
 
         val request = RollDiceRequest(gameId = 1, playerId = 2, rollTwoDice = true)
-        val result = diceService.rollDice(request)
+        val result = diceService.rollDice(request, rollingPlayerId = 2)
+
+        assertEquals(2, result.dice.size)
+        assert(result.total in 2..12)
+        assertEquals(result.dice.sum(), result.total)
+    }
+
+    @Test
+    fun rollTwoDiceShouldUseNestedLegacyDiceCountWhenTrainStationOwned() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(defaultGame)
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.TRAIN_STATION))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.TRAIN_STATION, isBuilt = true))
+
+        val request = RollDiceRequest(gameId = 1, payload = RollDicePayload(gameId = 1, diceCount = 2))
+        val result = diceService.rollDice(request, rollingPlayerId = 2)
 
         assertEquals(2, result.dice.size)
         assert(result.total in 2..12)
@@ -174,7 +189,7 @@ class DiceServiceTests {
         whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(defaultGame)
 
         val request = RollDiceRequest(gameId = 1, playerId = 2)
-        val result = diceService.rollDice(request)
+        val result = diceService.rollDice(request, rollingPlayerId = 2)
 
         verify(gameDao).updateAfterRoll(1, result.total, TurnPhase.RESOLVE_EFFECTS)
         assertEquals(true, result.completed)
@@ -186,7 +201,7 @@ class DiceServiceTests {
         whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(defaultGame)
 
         val request = RollDiceRequest(gameId = 1, playerId = 2)
-        val result = diceService.rollDice(request)
+        val result = diceService.rollDice(request, rollingPlayerId = 2)
 
         verify(gameDao).updateAfterRoll(any(), any(), org.mockito.kotlin.eq(TurnPhase.RESOLVE_EFFECTS))
     }
@@ -199,7 +214,7 @@ class DiceServiceTests {
         val request = RollDiceRequest(gameId = 1, playerId = 2)
 
         assertThrows(CustomWebSocketException::class.java) {
-            diceService.rollDice(request)
+            diceService.rollDice(request, rollingPlayerId = 2)
         }
         verify(gameDao, never()).updateAfterRoll(any(), any(), any())
     }
