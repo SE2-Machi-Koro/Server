@@ -8,9 +8,12 @@ import org.machikoro.server.dto.LoginResponse
 import org.machikoro.server.dto.LogoutRequest
 import org.machikoro.server.dto.RegisterRequest
 import org.machikoro.server.dto.RegisterResponse
+import org.machikoro.server.dto.ClientScreen
+import org.machikoro.server.dto.SessionStateDto
 import org.machikoro.server.exception.DuplicateUserException
 import org.machikoro.server.exception.InvalidCredentialsException
 import org.machikoro.server.service.AuthService
+import org.machikoro.server.service.GameSyncService
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -19,7 +22,8 @@ import org.springframework.http.HttpStatus
 class AuthControllerTests {
 
     private val authService = mock<AuthService>()
-    private val controller = AuthController(authService)
+    private val gameSyncService = mock<GameSyncService>()
+    private val controller = AuthController(authService, gameSyncService)
 
     @Test
     fun `register returns ok with response body when service succeeds`() {
@@ -60,13 +64,17 @@ class AuthControllerTests {
     @Test
     fun `login returns ok with response body when service succeeds`() {
         val request = LoginRequest(username = "alice", password = "hunter2")
-        val expected = LoginResponse(sessionToken = "token-uuid", username = "alice", userId = 42) // NEU
-        whenever(authService.login("alice", "hunter2")).thenReturn(expected)
+        val loginResponse = LoginResponse(sessionToken = "token-uuid", username = "alice", userId = 42)
+        val sessionState = SessionStateDto(screen = ClientScreen.MAIN)
+        val expected = loginResponse.copy(sessionState = sessionState)
+        whenever(authService.login("alice", "hunter2")).thenReturn(loginResponse)
+        whenever(gameSyncService.resolveSessionState(42)).thenReturn(sessionState)
 
         val response = controller.login(request)
 
         assertEquals(HttpStatus.OK, response.statusCode)
         assertEquals(expected, response.body)
+        verify(gameSyncService).resolveSessionState(42)
     }
 
     @Test

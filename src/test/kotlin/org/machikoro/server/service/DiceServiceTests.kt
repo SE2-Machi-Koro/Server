@@ -18,6 +18,10 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Callable
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 class DiceServiceTests {
 
@@ -85,8 +89,55 @@ class DiceServiceTests {
 
         val request = RollDiceRequest(gameId = 1, playerId = 2)
 
-        assertThrows(CustomWebSocketException::class.java) {
+        val ex = assertThrows(CustomWebSocketException::class.java) {
             diceService.rollDice(request)
+        }
+        assertEquals("ROLL_ALREADY_COMPLETED", ex.errorCode)
+    }
+
+    @Test
+    fun rollDiceShouldRejectDuplicateAfterCompletedRoll() {
+        whenever(gameStateGuard.ensureGameIsRunning(1))
+            .thenReturn(defaultGame)
+            .thenReturn(defaultGame.copy(turnPhase = TurnPhase.RESOLVE_EFFECTS, lastDiceRoll = 4))
+
+        val request = RollDiceRequest(gameId = 1, playerId = 2)
+        val first = diceService.rollDice(request)
+
+        assertEquals(true, first.completed)
+        assertEquals(TurnPhase.RESOLVE_EFFECTS, first.turnPhase)
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            diceService.rollDice(request)
+        }
+        assertEquals("ROLL_ALREADY_COMPLETED", ex.errorCode)
+    }
+
+    @Test
+    fun rollDiceShouldSerializeConcurrentRequestsForSameGame() {
+        val firstEntered = CountDownLatch(1)
+        val releaseFirst = CountDownLatch(1)
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenAnswer {
+            firstEntered.countDown()
+            releaseFirst.await(1, TimeUnit.SECONDS)
+            defaultGame
+        }.thenReturn(defaultGame.copy(turnPhase = TurnPhase.RESOLVE_EFFECTS, lastDiceRoll = 5))
+
+        val request = RollDiceRequest(gameId = 1, playerId = 2)
+        val executor = Executors.newFixedThreadPool(2)
+        try {
+            val first = executor.submit(Callable { diceService.rollDice(request) })
+            firstEntered.await(1, TimeUnit.SECONDS)
+            val second = executor.submit(Callable {
+                assertThrows(CustomWebSocketException::class.java) {
+                    diceService.rollDice(request)
+                }.errorCode
+            })
+            releaseFirst.countDown()
+
+            assertEquals(true, first.get(1, TimeUnit.SECONDS).completed)
+            assertEquals("ROLL_ALREADY_COMPLETED", second.get(1, TimeUnit.SECONDS))
+        } finally {
+            executor.shutdownNow()
         }
     }
 
@@ -126,6 +177,8 @@ class DiceServiceTests {
         val result = diceService.rollDice(request)
 
         verify(gameDao).updateAfterRoll(1, result.total, TurnPhase.RESOLVE_EFFECTS)
+        assertEquals(true, result.completed)
+        assertEquals(TurnPhase.RESOLVE_EFFECTS, result.turnPhase)
     }
 
     @Test

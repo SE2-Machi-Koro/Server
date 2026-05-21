@@ -208,6 +208,46 @@ class PlayerDaoTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `findCurrentMembershipByUserId prefers newest in-progress game over waiting lobby`() {
+        val waitingGameId = gameDao.create(userId)
+        val activeGameId = gameDao.create(userId)
+        val waitingPlayer = playerDao.addPlayer(waitingGameId, userId)
+        val activePlayer = playerDao.addPlayer(activeGameId, userId)
+        gameDao.updateStatus(activeGameId, GameStatus.IN_PROGRESS)
+
+        val membership = playerDao.findCurrentMembershipByUserId(userId)
+
+        assertNotNull(membership)
+        assertEquals(activeGameId, membership!!.game.id)
+        assertEquals(activePlayer.id, membership.player.id)
+        assertNotEquals(waitingPlayer.id, membership.player.id)
+    }
+
+    @Test
+    fun `findCurrentMembershipByUserId returns waiting lobby when no in-progress game exists`() {
+        val olderWaitingGameId = gameDao.create(userId)
+        val newerWaitingGameId = gameDao.create(userId)
+        playerDao.addPlayer(olderWaitingGameId, userId)
+        val expectedPlayer = playerDao.addPlayer(newerWaitingGameId, userId)
+
+        val membership = playerDao.findCurrentMembershipByUserId(userId)
+
+        assertNotNull(membership)
+        assertEquals(newerWaitingGameId, membership!!.game.id)
+        assertEquals(expectedPlayer.id, membership.player.id)
+        assertEquals(GameStatus.WAITING, membership.game.status)
+    }
+
+    @Test
+    fun `findCurrentMembershipByUserId ignores finished games`() {
+        val finishedGameId = gameDao.create(userId)
+        playerDao.addPlayer(finishedGameId, userId)
+        gameDao.updateStatus(finishedGameId, GameStatus.FINISHED)
+
+        assertNull(playerDao.findCurrentMembershipByUserId(userId))
+    }
+
+    @Test
     fun `updateLastSeen stores a timestamp for player`() {
         val player = playerDao.addPlayer(gameId, userId)
         val before = System.currentTimeMillis()

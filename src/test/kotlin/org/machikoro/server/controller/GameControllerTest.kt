@@ -357,7 +357,11 @@ class GameControllerTest {
         val payload = message.payload as Map<String, Any?>
         assertEquals(playerId, payload["playerId"])
         assertEquals(listOf(3, 4), payload["result"])
+        assertEquals(7, payload["total"])
+        assertEquals(true, payload["completed"])
+        assertEquals("RESOLVE_EFFECTS", payload["turnPhase"])
         assert(payload["timestamp"] is Long)
+        verify(gameStateGuard).ensureSenderOwnsPlayer(gameId, playerId, alice)
     }
 
     @Test
@@ -374,6 +378,7 @@ class GameControllerTest {
         val message = captor.firstValue
         assertEquals(MessageType.ERROR, message.type)
         assertEquals(mapOf("event" to "ROLL_FAILED", "message" to "dice exploded"), message.payload)
+        verify(gameStateGuard).ensureSenderOwnsPlayer(gameId, playerId, alice)
     }
 
     @Test
