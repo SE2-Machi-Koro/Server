@@ -162,7 +162,7 @@ class DebugServiceTest {
         assertEquals("debug_player2", result[0].username)
         assertEquals("debug_player4", result[2].username)
         verify(lobbyService, times(3)).addUserToLobby(eq(5), any())
-        verify(messagingTemplate, times(3)).convertAndSend(eq("/topic/public"), any<Any>())
+        verify(messagingTemplate, times(3)).convertAndSend(eq("/topic/game/5"), any<Any>())
     }
 
     @Test
@@ -180,7 +180,7 @@ class DebugServiceTest {
 
         assertEquals(1, result.size)
         assertEquals("debug_player2", result[0].username)
-        verify(messagingTemplate, times(1)).convertAndSend(eq("/topic/public"), any<Any>())
+        verify(messagingTemplate, times(1)).convertAndSend(eq("/topic/game/5"), any<Any>())
     }
 
     @Test
@@ -216,7 +216,7 @@ class DebugServiceTest {
         assertEquals("debug_player3", result[0].username)
         assertEquals("debug_player4", result[1].username)
         // Only 2 broadcasts — skipped dummy must not get one
-        verify(messagingTemplate, times(2)).convertAndSend(eq("/topic/public"), any<Any>())
+        verify(messagingTemplate, times(2)).convertAndSend(eq("/topic/game/5"), any<Any>())
     }
 
     @Test
@@ -244,7 +244,7 @@ class DebugServiceTest {
         val count = service.resetLobby("ABC123")
 
         assertEquals(2, count)
-        verify(messagingTemplate, times(2)).convertAndSend(eq("/topic/public"), any<Any>())
+        verify(messagingTemplate, times(2)).convertAndSend(eq("/topic/game/5"), any<Any>())
     }
 
     @Test

@@ -60,9 +60,9 @@ class DebugService(
             val creds = ensureUser(username)
             try {
                 val player = lobbyService.addUserToLobby(game.id, creds.userId)
-                // Broadcast so the real client's handleLobbyJoined picks it up
+                // Broadcast to per-lobby topic, matching the real join path
                 messagingTemplate.convertAndSend(
-                    "/topic/public",
+                    "/topic/game/${player.gameId}",
                     WebSocketMessage(
                         type = MessageType.LOBBY_JOINED,
                         sender = "SERVER",
@@ -97,7 +97,7 @@ class DebugService(
         val removed = lobbyService.resetLobby(lobbyCode)
         removed.forEach { player ->
             messagingTemplate.convertAndSend(
-                "/topic/public",
+                "/topic/game/${player.gameId}",
                 WebSocketMessage(
                     type = MessageType.LOBBY_LEFT,
                     sender = "SERVER",
