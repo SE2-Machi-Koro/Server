@@ -215,6 +215,7 @@ class GameController(
     ))
     fun rollDice(@Payload request: RollDiceRequest, headerAccessor: SimpMessageHeaderAccessor) {
         requireActivePlayer(request.gameId, headerAccessor)
+        requireOwnerOfPlayer(request.gameId, request.playerId, headerAccessor)
         val gameTopic = "/topic/game/${request.gameId}"
         logger.info("Roll dice request from player ${request.playerId} in game ${request.gameId}")
         try {
@@ -228,7 +229,10 @@ class GameController(
                     payload = mapOf(
                         "playerId" to request.playerId,
                         "result" to result.dice,
-                        "timestamp" to System.currentTimeMillis()
+                        "total" to result.total,
+                        "completed" to result.completed,
+                        "turnPhase" to result.turnPhase.name,
+                        "timestamp" to System.currentTimeMillis(),
                     )
                 )
             )

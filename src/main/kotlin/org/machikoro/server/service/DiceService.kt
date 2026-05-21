@@ -8,6 +8,7 @@ import org.machikoro.server.dto.RollDiceRequest
 import org.machikoro.server.dto.RollDiceResponse
 import org.machikoro.server.exception.CustomWebSocketException
 import org.springframework.stereotype.Service
+import java.util.concurrent.ConcurrentHashMap
 
 @Service
 class DiceService(
@@ -15,11 +16,13 @@ class DiceService(
     private val playerLandmarkDao: PlayerLandmarkDao,
     private val gameStateGuard: GameStateGuard,
 ) {
-    fun rollDice(request: RollDiceRequest): RollDiceResponse {
+    private val rollLocks = ConcurrentHashMap<Int, Any>()
+
+    fun rollDice(request: RollDiceRequest): RollDiceResponse = synchronized(rollLocks.computeIfAbsent(request.gameId) { Any() }) {
         val game = gameStateGuard.ensureGameIsRunning(request.gameId)
 
         if (game.turnPhase != TurnPhase.ROLL_DICE) {
-            throw CustomWebSocketException("WRONG_PHASE", "It's not the roll dice phase")
+            throw CustomWebSocketException("ROLL_ALREADY_COMPLETED", "Dice have already been rolled for this turn")
         }
 
         if (request.rollTwoDice) {
