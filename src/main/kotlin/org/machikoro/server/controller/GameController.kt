@@ -1,8 +1,6 @@
 package org.machikoro.server.controller
 
 import org.machikoro.server.auth.requireUserPrincipal
-import org.machikoro.server.dao.PlayerDao
-import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.dto.EndTurnOutcome
 import org.machikoro.server.dto.AdvancePhaseRequest
 import org.machikoro.server.dto.EndTurnRequest
@@ -38,7 +36,6 @@ class GameController(
     private val lobbyService: LobbyService,
     private val connectionTracker: WebSocketConnectionTracker,
     private val gameStateGuard: GameStateGuard,
-    private val playerDao: PlayerDao,
     private val gameSyncService: GameSyncService,
 ) {
     private val logger = LoggerFactory.getLogger(GameController::class.java)
@@ -104,17 +101,17 @@ class GameController(
                 )
             )
 
-            // Immediately broadcast a GAME_ACTION so clients that only parse
-            // activePlayerId from GAME_ACTION frames know whose turn it is
-            // without waiting for the first advancePhase or endTurn call.
+            // Immediately broadcast a GAME_ACTION so clients that parse turn
+            // metadata from GAME_ACTION frames know whose turn it is without
+            // waiting for the first advancePhase or endTurn call.
             messagingTemplate.convertAndSend(
                 gameTopic,
                 WebSocketMessage(
                     type = MessageType.GAME_ACTION,
                     sender = "server",
-                    payload = mapOf(
-                        "turnPhase" to gameState.game.turnPhase.name,
-                        "activePlayerId" to gameState.activePlayerId,
+                    payload = buildGameActionPayload(
+                        state = gameState,
+                        event = "GAME_STARTED",
                     ),
                 )
             )
@@ -147,7 +144,7 @@ class GameController(
         requireActivePlayer(request.gameId, headerAccessor)
         val newPhase = gamePhaseService.advancePhase(request.gameId)
         logger.info("Advanced phase for game ${request.gameId} to $newPhase")
-        broadcastPhase(request.gameId, newPhase)
+        broadcastPhase(request.gameId, "PHASE_ADVANCED")
     }
 
     /**
@@ -190,7 +187,7 @@ class GameController(
         when (val result = gamePhaseService.endTurn(request.gameId)) {
             is EndTurnOutcome.Continue -> {
                 logger.info("Ended turn for game ${request.gameId}, new phase ${result.nextPhase}")
-                broadcastPhase(request.gameId, result.nextPhase)
+                broadcastPhase(request.gameId, "TURN_ENDED")
             }
             is EndTurnOutcome.Won -> {
                 logger.info("Game ${request.gameId} finished, winner=${result.winnerId}")
@@ -228,8 +225,10 @@ class GameController(
                     payload = mapOf(
                         "playerId" to request.playerId,
                         "result" to result.dice,
-                        "timestamp" to System.currentTimeMillis()
-                    )
+                        "timestamp" to System.currentTimeMillis(),
+                        "state" to gameSyncService.buildSnapshot(request.gameId),
+                    ),
+                    gameId = request.gameId,
                 )
             )
         } catch (e: Exception) {
@@ -250,30 +249,27 @@ class GameController(
      * subscribers of the game topic. The [activePlayerId] identifies the user
      * whose turn it is so clients can compare it against their own user ID.
      */
-    private fun broadcastPhase(gameId: Int, newPhase: TurnPhase) {
-        val game = gameStateGuard.ensureGameIsRunning(gameId)
-        val players = playerDao.getPlayers(gameId)
-        val activePlayerId = players.getOrNull(game.currentTurnIndex)?.userId
-
+    private fun broadcastPhase(gameId: Int, event: String) {
+        val state = gameSyncService.buildSnapshot(gameId)
         messagingTemplate.convertAndSend(
             "/topic/game/$gameId",
             WebSocketMessage(
                 type = MessageType.GAME_ACTION,
                 sender = "server",
-                payload = mapOf(
-                    "turnPhase" to newPhase.name,
-                    "activePlayerId" to activePlayerId,
+                payload = buildGameActionPayload(
+                    state = state,
+                    event = event,
                 ),
+                gameId = gameId,
             ),
         )
     }
 
     private fun broadcastPurchase(gameId: Int, result: PurchaseResult) {
-        val payload = linkedMapOf<String, Any?>(
-            "event" to "PURCHASE_COMPLETED",
-            "turnPhase" to result.turnPhase.name,
+        val payload = buildGameActionPayload(
+            state = gameSyncService.buildSnapshot(gameId),
+            event = "PURCHASE_COMPLETED",
             "purchaseType" to result.purchaseType.name,
-            "state" to gameSyncService.buildSnapshot(gameId),
         )
         result.cardType?.let { payload["cardType"] = it.name }
         result.landmarkType?.let { payload["landmarkType"] = it.name }
@@ -283,11 +279,13 @@ class GameController(
                 type = MessageType.GAME_ACTION,
                 sender = "server",
                 payload = payload,
+                gameId = gameId,
             ),
         )
     }
 
     private fun broadcastWin(gameId: Int, winnerId: Int, roundsPlayed: Int) {
+        val state = gameSyncService.buildSnapshot(gameId)
         messagingTemplate.convertAndSend(
             "/topic/game/$gameId",
             WebSocketMessage(
@@ -296,10 +294,26 @@ class GameController(
                 payload = mapOf(
                     "winnerId" to winnerId,
                     "roundsPlayed" to roundsPlayed,
+                    "state" to state,
                 ),
+                gameId = gameId,
             ),
         )
     }
+
+    private fun buildGameActionPayload(
+        state: GameStateDto,
+        event: String,
+        vararg entries: Pair<String, Any?>,
+    ): LinkedHashMap<String, Any?> =
+        linkedMapOf<String, Any?>(
+            "event" to event,
+            "turnPhase" to state.game.turnPhase.name,
+            "activePlayerId" to state.activePlayerId,
+            "state" to state,
+        ).apply {
+            entries.forEach { (key, value) -> this[key] = value }
+        }
 
     /**
      * Resolve the authenticated user from the STOMP session and assert they
