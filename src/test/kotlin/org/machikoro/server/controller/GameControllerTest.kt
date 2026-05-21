@@ -369,6 +369,9 @@ class GameControllerTest {
 
         @Suppress("UNCHECKED_CAST")
         val payload = message.payload as Map<String, Any?>
+        assertEquals("DICE_ROLLED", payload["event"])
+        assertEquals("ROLL_DICE", payload["turnPhase"])
+        assertEquals(1, payload["activePlayerId"])
         assertEquals(playerId, payload["playerId"])
         assertEquals(listOf(3, 4), payload["result"])
         assert(payload["timestamp"] is Long)

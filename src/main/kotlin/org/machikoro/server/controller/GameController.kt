@@ -216,6 +216,7 @@ class GameController(
         logger.info("Roll dice request from player ${request.playerId} in game ${request.gameId}")
         try {
             val result = diceService.rollDice(request)
+            val state = gameSyncService.buildSnapshot(request.gameId)
             messagingTemplate.convertAndSend(
                 gameTopic,
                 WebSocketMessage(
@@ -223,10 +224,13 @@ class GameController(
                     sender = "SERVER",
                     content = "Player ${request.playerId} rolled: ${result.total}",
                     payload = mapOf(
+                        "event" to "DICE_ROLLED",
+                        "turnPhase" to state.game.turnPhase.name,
+                        "activePlayerId" to state.activePlayerId,
                         "playerId" to request.playerId,
                         "result" to result.dice,
                         "timestamp" to System.currentTimeMillis(),
-                        "state" to gameSyncService.buildSnapshot(request.gameId),
+                        "state" to state,
                     ),
                     gameId = request.gameId,
                 )
@@ -323,9 +327,5 @@ class GameController(
      */
     private fun requireActivePlayer(gameId: Int, headerAccessor: SimpMessageHeaderAccessor) {
         gameStateGuard.ensureSenderIsActivePlayer(gameId, headerAccessor.requireUserPrincipal())
-    }
-
-    private fun requireOwnerOfPlayer(gameId: Int, playerId: Int, headerAccessor: SimpMessageHeaderAccessor) {
-        gameStateGuard.ensureSenderOwnsPlayer(gameId, playerId, headerAccessor.requireUserPrincipal())
     }
 }
