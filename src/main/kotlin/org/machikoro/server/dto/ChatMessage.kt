@@ -9,6 +9,7 @@ enum class MessageType {
     LEAVE,
     LOBBY_CREATED,
     LOBBY_JOINED,
+    HOST_LEFT,
     LOBBY_ROSTER,
     GAME_START,
     GAME_STARTED,
