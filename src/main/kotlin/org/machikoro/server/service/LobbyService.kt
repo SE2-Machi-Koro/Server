@@ -206,7 +206,7 @@ open class LobbyService(
             return@runInTransaction LobbyLeavingOutcome.LobbyDeleted(gameId)
         }
 
-        LobbyLeavingOutcome.LobbyRemains(gameId, userId)
+        LobbyLeavingOutcome.LobbyRemains(userId)
     }
 
 

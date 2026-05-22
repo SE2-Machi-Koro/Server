@@ -404,7 +404,6 @@ class LobbyServiceTest {
 
         assertEquals(
             LobbyLeavingOutcome.LobbyRemains(
-                gameId,
                 userId
             ),
             result
