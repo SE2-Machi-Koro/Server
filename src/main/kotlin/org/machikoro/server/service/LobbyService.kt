@@ -180,7 +180,7 @@ open class LobbyService(
      * @param userId the user leaving the lobby
      *
      * @return [LobbyLeavingOutcome.LobbyDeleted] if the lobby was deleted,
-     * [LobbyLeavingOutcome.HostPresent] if the host is still present and the
+     * [LobbyLeavingOutcome.LobbyRemains] if the host is still present and the
      * lobby remains active.
      *
      * @throws PlayerNotFoundException if the user is not part of the lobby
