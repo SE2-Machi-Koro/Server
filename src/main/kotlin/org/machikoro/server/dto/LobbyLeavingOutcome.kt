@@ -10,8 +10,6 @@ sealed interface LobbyLeavingOutcome {
 
     @Schema(description = "Normal player left the game, lobby remains for other players")
     data class LobbyRemains(
-        @field:Schema(description = "ID of the game to notify player leaving", example = "2")
-        val gameId: Int,
         @field:Schema(description = "ID of the user leaving", example = "12")
         val userId: Int
     ) : LobbyLeavingOutcome
