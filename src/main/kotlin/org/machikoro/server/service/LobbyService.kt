@@ -209,18 +209,28 @@ open class LobbyService(
         LobbyLeavingOutcome.LobbyRemains(gameId, userId)
     }
 
-        val realPlayersRemain = playerDao.getLobbyRoster(gameId)
-            .any { !it.username.startsWith(DEBUG_USER_PREFIX) }
 
-        if (!realPlayersRemain) {
-            // Clean up leftover dummy players before dropping the game row (FK constraint)
-            playerDao.deleteByGameId(gameId)
-            gameDao.delete(gameId)
-            lobbyLocks.remove(gameId)
-            LeaveLobbyResult(playerId = player.id, gameDeleted = true)
-        } else {
-            LeaveLobbyResult(playerId = player.id, gameDeleted = false)
-        }
+    /**
+     * Returns `true` if no real players remain in the lobby.
+     *
+     * A real player is any player whose username does not start with
+     * [DEBUG_USER_PREFIX]. Debug users are treated as dummy players.
+     */
+    private fun noRealPlayersRemain(gameId: Int): Boolean {
+        return playerDao.getLobbyRoster(gameId)
+            .none { !it.username.startsWith(DEBUG_USER_PREFIX) }
+    }
+
+    /**
+     * Deletes the lobby and all associated players for the given [gameId].
+     *
+     * This removes all players, deletes the game row, and clears any
+     * in-memory synchronization state for the lobby.
+     */
+    private fun cleanUpLobby(gameId: Int) {
+        playerDao.deleteByGameId(gameId)
+        gameDao.delete(gameId)
+        lobbyLocks.remove(gameId)
     }
 
     /**
