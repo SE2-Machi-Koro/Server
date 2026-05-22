@@ -12,6 +12,7 @@ import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.dto.GameStateDto
+import org.machikoro.server.dto.LobbyLeavingOutcome
 import org.machikoro.server.dto.LobbyRosterPlayerDto
 import org.machikoro.server.dto.toDefinitionDto
 import org.machikoro.server.exception.GameFinishedException
@@ -20,6 +21,7 @@ import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.exception.LobbyFullException
 import org.machikoro.server.exception.NotEnoughPlayersException
 import org.machikoro.server.exception.NotHostException
+import org.machikoro.server.exception.PlayerNotFoundException
 import org.springframework.stereotype.Service
 import java.util.concurrent.ConcurrentHashMap
 
@@ -165,29 +167,47 @@ open class LobbyService(
     }
 
     /**
-     * Represents the result of a player leaving a lobby.
+     * Removes the given [userId] from the lobby of [gameId].
      *
-     * @property playerId The DB player ID of the player who left.
-     * @property gameDeleted True if the lobby was deleted because it is now empty.
+     * If the leaving player is the host, the lobby is deleted immediately.
+     *
+     * After a non-host player leaves, the lobby is automatically deleted when
+     * no real players remain. A real player is any player whose username does
+     * not start with [DEBUG_USER_PREFIX]. Debug users are treated as dummy
+     * fill-players and do not keep a lobby alive.
+     *
+     * @param gameId the game/lobby identifier
+     * @param userId the user leaving the lobby
+     *
+     * @return [LobbyLeavingOutcome.LobbyDeleted] if the lobby was deleted,
+     * [LobbyLeavingOutcome.HostPresent] if the host is still present and the
+     * lobby remains active.
+     *
+     * @throws PlayerNotFoundException if the user is not part of the lobby
+     * @throws GameNotFoundException if the game does not exist
      */
-    data class LeaveLobbyResult(val playerId: Int, val gameDeleted: Boolean)
-
-    /**
-     * Removes [userId] from the lobby [gameId] and deletes the game if no real players remain.
-     *
-     * "Real" means non-debug: any player whose username starts with [DEBUG_USER_PREFIX] is
-     * treated as a dummy and does not count toward keeping the lobby alive. This lets a real
-     * player leave a lobby that still has dummy fill-players and still have the game cleaned up.
-     *
-     * Returns null if the user was not a player in the given game.
-     * Returns [LeaveLobbyResult] with [LeaveLobbyResult.gameDeleted] = true when no real
-     * players remain and the game row (plus any leftover dummies) has been deleted.
-     */
-    fun leaveLobby(gameId: Int, userId: Int): LeaveLobbyResult? = runInTransaction {
+    fun leaveLobby(gameId: Int, userId: Int): LobbyLeavingOutcome = runInTransaction {
         val player = playerDao.findByGameIdAndUserId(gameId, userId)
-            ?: return@runInTransaction null
+            ?: throw PlayerNotFoundException("Player $userId not found in game $gameId")
 
-        playerDao.deleteByPlayerId(player.id)
+        val game = gameDao.findById(gameId)
+            ?: throw GameNotFoundException("Game $gameId not found")
+
+        val shouldDeleteLobby =
+            player.userId == game.hostUserId
+
+        if (!shouldDeleteLobby) {
+            playerDao.deleteByPlayerId(player.id)
+        }
+
+        if (shouldDeleteLobby || noRealPlayersRemain(gameId)) {
+            cleanUpLobby(gameId)
+
+            return@runInTransaction LobbyLeavingOutcome.LobbyDeleted(gameId)
+        }
+
+        LobbyLeavingOutcome.LobbyRemains(gameId, userId)
+    }
 
         val realPlayersRemain = playerDao.getLobbyRoster(gameId)
             .any { !it.username.startsWith(DEBUG_USER_PREFIX) }
