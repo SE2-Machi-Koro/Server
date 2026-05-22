@@ -390,7 +390,7 @@ class LobbyWebSocketControllerTest {
     fun `leaveLobby broadcasts LOBBY_LEFT to game topic when lobby persists`() {
         whenever(lobbyService.leaveLobby(1, 10))
             .thenReturn(
-                LobbyLeavingOutcome.LobbyRemains(1, 10)
+                LobbyLeavingOutcome.LobbyRemains( 10)
             )
 
         val accessor = authenticatedAccessor(
