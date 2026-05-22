@@ -2,6 +2,7 @@ package org.machikoro.server.controller
 
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.validation.Valid
 import org.machikoro.server.dto.LoginRequest
 import org.machikoro.server.dto.LogoutRequest
 import org.machikoro.server.dto.RegisterRequest
@@ -27,7 +28,7 @@ class AuthController(
 
     @PostMapping("/register")
     @Operation(summary = "Register a new user with username and password")
-    fun register(@RequestBody request: RegisterRequest): ResponseEntity<Any> {
+    fun register(@Valid @RequestBody request: RegisterRequest): ResponseEntity<Any> {
         return try {
             val response = authService.register(request.username, request.password)
             logger.info("Registered user '{}'", response.username)
@@ -40,7 +41,7 @@ class AuthController(
 
     @PostMapping("/login")
     @Operation(summary = "Authenticate and receive a session token")
-    fun login(@RequestBody request: LoginRequest): ResponseEntity<Any> {
+    fun login(@Valid @RequestBody request: LoginRequest): ResponseEntity<Any> {
         return try {
             val response = authService.login(request.username, request.password)
             val sessionState = gameSyncService.resolveSessionState(response.userId)
@@ -57,7 +58,7 @@ class AuthController(
 
     @PostMapping("/logout")
     @Operation(summary = "Invalidate the given session token")
-    fun logout(@RequestBody request: LogoutRequest): ResponseEntity<Any> {
+    fun logout(@Valid @RequestBody request: LogoutRequest): ResponseEntity<Any> {
         return try {
             authService.logout(request.sessionToken)
             ResponseEntity.ok().build()
