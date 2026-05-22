@@ -17,7 +17,6 @@ enum class MessageType {
     GAME_ACTION,
     GAME_END,
     LOBBY_LEFT,
-    PLAYER_LEFT_FINISHED_GAME,
     ERROR,
     ROLL_DICE,
 }
