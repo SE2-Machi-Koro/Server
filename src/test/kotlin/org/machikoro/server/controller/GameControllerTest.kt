@@ -349,11 +349,12 @@ class GameControllerTest {
     @Test
     fun `rollDice broadcasts result with playerId, result and timestamp to correct game topic`() {
         val gameId = 1
-        val playerId = 2
-        val request = RollDiceRequest(gameId = gameId, playerId = playerId)
+        val activePlayer = PlayerModel(id = 9, gameId = gameId, userId = alice.userId, turnOrder = 0, coins = 3, lastSeenAt = null)
+        val request = RollDiceRequest(gameId = gameId, playerId = 999)
         val response = RollDiceResponse(dice = listOf(3, 4), total = 7)
-        val snapshot = gameStateDto(gameId)
-        whenever(diceService.rollDice(request)).thenReturn(response)
+        val snapshot = gameStateDto(gameId, turnPhase = TurnPhase.RESOLVE_EFFECTS)
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice)).thenReturn(activePlayer)
+        whenever(diceService.rollDice(request, activePlayer.id)).thenReturn(response)
         whenever(gameSyncService.buildSnapshot(gameId)).thenReturn(snapshot)
 
         controller.rollDice(request, authedAccessor())
@@ -365,26 +366,31 @@ class GameControllerTest {
         val message = captor.firstValue
         assertEquals(MessageType.ROLL_DICE, message.type)
         assertEquals("SERVER", message.sender)
-        assertEquals("Player $playerId rolled: 7", message.content)
+        assertEquals("Player ${activePlayer.id} rolled: 7", message.content)
 
         @Suppress("UNCHECKED_CAST")
         val payload = message.payload as Map<String, Any?>
         assertEquals("DICE_ROLLED", payload["event"])
-        assertEquals("ROLL_DICE", payload["turnPhase"])
+        assertEquals("RESOLVE_EFFECTS", payload["turnPhase"])
         assertEquals(1, payload["activePlayerId"])
-        assertEquals(playerId, payload["playerId"])
+        assertEquals(activePlayer.id, payload["playerId"])
         assertEquals(listOf(3, 4), payload["result"])
+        assertEquals(7, payload["total"])
+        assertEquals(true, payload["completed"])
         assert(payload["timestamp"] is Long)
         assertEquals(snapshot, payload["state"])
         assertEquals(gameId, message.gameId)
+        verify(diceService).rollDice(request, activePlayer.id)
+        verify(gameStateGuard, never()).ensureSenderOwnsPlayer(any(), any(), any())
     }
 
     @Test
     fun `rollDice broadcasts error to game topic on failure`() {
         val gameId = 1
-        val playerId = 2
-        val request = RollDiceRequest(gameId = gameId, playerId = playerId)
-        whenever(diceService.rollDice(request)).thenThrow(RuntimeException("dice exploded"))
+        val activePlayer = PlayerModel(id = 9, gameId = gameId, userId = alice.userId, turnOrder = 0, coins = 3, lastSeenAt = null)
+        val request = RollDiceRequest(gameId = gameId, playerId = null)
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice)).thenReturn(activePlayer)
+        whenever(diceService.rollDice(request, activePlayer.id)).thenThrow(RuntimeException("dice exploded"))
 
         controller.rollDice(request, authedAccessor())
 
@@ -393,6 +399,8 @@ class GameControllerTest {
         val message = captor.firstValue
         assertEquals(MessageType.ERROR, message.type)
         assertEquals(mapOf("event" to "ROLL_FAILED", "message" to "dice exploded"), message.payload)
+        verify(diceService).rollDice(request, activePlayer.id)
+        verify(gameStateGuard, never()).ensureSenderOwnsPlayer(any(), any(), any())
     }
 
     @Test
@@ -407,7 +415,7 @@ class GameControllerTest {
             controller.rollDice(request, authedAccessor())
         }
         assertEquals("NOT_YOUR_TURN", ex.errorCode)
-        verify(diceService, never()).rollDice(any())
+        verify(diceService, never()).rollDice(any(), any())
         verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }
 
@@ -444,7 +452,7 @@ class GameControllerTest {
     @Test
     fun `rollDice throws UNAUTHENTICATED when accessor has no principal`() {
         assertUnauthenticated { controller.rollDice(RollDiceRequest(gameId = 42, playerId = 1), it) }
-        verify(diceService, never()).rollDice(any())
+        verify(diceService, never()).rollDice(any(), any())
     }
 
 }

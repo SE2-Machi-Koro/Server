@@ -147,14 +147,15 @@ class GameStateGuardTest {
     @Test
     fun `ensureSenderIsActivePlayer succeeds when caller is the active player`() {
         val gameId = 1
+        val activePlayer = player(id = 10, userId = 7)
         whenever(gameDao.findById(gameId))
             .thenReturn(game(gameId, GameStatus.IN_PROGRESS, currentTurnIndex = 0))
         whenever(playerDao.getPlayers(gameId)).thenReturn(
-            listOf(player(id = 10, userId = 7), player(id = 11, userId = 8, turnOrder = 1)),
+            listOf(activePlayer, player(id = 11, userId = 8, turnOrder = 1)),
         )
         val user = UserPrincipal(userId = 7, username = "alice")
 
-        guard.ensureSenderIsActivePlayer(gameId, user)
+        assertSame(activePlayer, guard.ensureSenderIsActivePlayer(gameId, user))
     }
 
     @Test

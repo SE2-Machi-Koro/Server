@@ -9,6 +9,8 @@ import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.dto.GameStateDto
+import org.machikoro.server.dto.ClientScreen
+import org.machikoro.server.dto.SessionStateDto
 import org.machikoro.server.dto.toDefinitionDto
 import org.machikoro.server.exception.GameNotFoundException
 import org.springframework.stereotype.Service
@@ -26,6 +28,26 @@ class GameSyncService(
 
     fun findActiveInProgressGameId(userId: Int): Int? =
         playerDao.findActiveGameIdByUserId(userId)
+
+    fun resolveSessionState(userId: Int): SessionStateDto {
+        val membership = playerDao.findCurrentMembershipByUserId(userId)
+            ?: return SessionStateDto(screen = ClientScreen.MAIN)
+
+        val screen = when (membership.game.status) {
+            GameStatus.WAITING -> ClientScreen.LOBBY
+            GameStatus.IN_PROGRESS -> ClientScreen.GAME
+            GameStatus.FINISHED -> ClientScreen.MAIN
+        }
+
+        return SessionStateDto(
+            screen = screen,
+            gameId = membership.game.id,
+            playerId = membership.player.id,
+            lobbyCode = membership.game.lobbyCode,
+            gameStatus = membership.game.status,
+            turnPhase = membership.game.turnPhase,
+        )
+    }
 
     fun buildSnapshot(gameId: Int): GameStateDto {
         val game = gameDao.findById(gameId)
