@@ -8,6 +8,7 @@ import org.machikoro.server.dto.RollDiceRequest
 import org.machikoro.server.dto.RollDiceResponse
 import org.machikoro.server.exception.CustomWebSocketException
 import org.springframework.stereotype.Service
+import java.util.concurrent.ConcurrentHashMap
 
 @Service
 class DiceService(
@@ -15,16 +16,23 @@ class DiceService(
     private val playerLandmarkDao: PlayerLandmarkDao,
     private val gameStateGuard: GameStateGuard,
 ) {
-    fun rollDice(request: RollDiceRequest): RollDiceResponse {
+    private val rollLocks = ConcurrentHashMap<Int, Any>()
+
+    fun rollDice(request: RollDiceRequest, rollingPlayerId: Int): RollDiceResponse = synchronized(rollLocks.computeIfAbsent(request.gameId) { Any() }) {
         val game = gameStateGuard.ensureGameIsRunning(request.gameId)
 
         if (game.turnPhase != TurnPhase.ROLL_DICE) {
-            throw CustomWebSocketException("WRONG_PHASE", "It's not the roll dice phase")
+            throw CustomWebSocketException("ROLL_ALREADY_COMPLETED", "Dice have already been rolled for this turn")
         }
 
-        if (request.rollTwoDice) {
+        val rollTwoDice = request.rollTwoDice ||
+            request.diceCount == TWO_DICE_COUNT ||
+            request.payload?.rollTwoDice == true ||
+            request.payload?.diceCount == TWO_DICE_COUNT
+
+        if (rollTwoDice) {
             val hasTrainStation = playerLandmarkDao
-                .findByPlayerIdAndType(request.playerId, LandmarkType.TRAIN_STATION)
+                .findByPlayerIdAndType(rollingPlayerId, LandmarkType.TRAIN_STATION)
                 ?.isBuilt ?: false
 
             if (!hasTrainStation) {
@@ -32,7 +40,7 @@ class DiceService(
             }
         }
 
-        val dice = if (request.rollTwoDice) {
+        val dice = if (rollTwoDice) {
             listOf((1..6).random(), (1..6).random())
         } else {
             listOf((1..6).random())
@@ -42,5 +50,9 @@ class DiceService(
         gameDao.updateAfterRoll(request.gameId, total, TurnPhase.RESOLVE_EFFECTS)
 
         return RollDiceResponse(dice = dice, total = total)
+    }
+
+    private companion object {
+        const val TWO_DICE_COUNT = 2
     }
 }

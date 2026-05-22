@@ -5,6 +5,7 @@ import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.models.GameModel
+import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.exception.GameNotFoundException
 import org.springframework.stereotype.Service
@@ -62,7 +63,7 @@ class GameStateGuard(
      *  - `NO_ACTIVE_PLAYER`  — currentTurnIndex points outside the player list.
      *  - `NOT_YOUR_TURN`     — caller is authenticated but not the active player.
      */
-    fun ensureSenderIsActivePlayer(gameId: Int, user: UserPrincipal) {
+    fun ensureSenderIsActivePlayer(gameId: Int, user: UserPrincipal): PlayerModel {
         val game = ensureGameIsRunning(gameId)
         val active = playerDao.getPlayers(gameId).getOrNull(game.currentTurnIndex)
             ?: throw CustomWebSocketException(
@@ -75,6 +76,7 @@ class GameStateGuard(
                 message = "It is not your turn",
             )
         }
+        return active
     }
 
     /**
