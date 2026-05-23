@@ -28,7 +28,7 @@ class OpenApiConfig {
     
     ### Game Synchronization
     Subscribe to `/topic/game/{gameId}` for lobby and game-state broadcasts.
-    Subscribe to `/queue/lobby-user{sessionId}` for private lobby replies and `/queue/game-sync-user{sessionId}` for reconnect snapshots.
+    Subscribe to `/queue/lobby-user{sessionId}` for private lobby replies and `/user/queue/game-sync` for reconnect snapshots.
     `/topic/public` is reserved for global chat only.
     
     | Client destination | Payload | Server publishes |
@@ -41,7 +41,7 @@ class OpenApiConfig {
     | `/app/game.advancePhase` | `AdvancePhaseRequest` | `GAME_ACTION` to `/topic/game/{gameId}` |
     | `/app/game.purchase` | `PurchaseRequest` | `GAME_ACTION` to `/topic/game/{gameId}` |
     | `/app/game.endTurn` | `EndTurnRequest` | `GAME_ACTION` or `GAME_END` to `/topic/game/{gameId}` |
-    | `/app/game.sync` | `SyncGameRequest` | `SYNC` to `/queue/game-sync-user{sessionId}` |
+    | `/app/game.sync` | `SyncGameRequest` | `SYNC` to resolved `/queue/game-sync-user{sessionId}` |
     
     See `docs/websocket-game-protocol.md` for payload examples and reconnect flow.
     """

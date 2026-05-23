@@ -447,4 +447,4 @@ DevTools console that no *"Failed to find a valid digest in the 'integrity' attr
 error is logged.
 
 ---
-*Last Updated: May 15, 2026*
+*Last Updated: 23.05.2026*

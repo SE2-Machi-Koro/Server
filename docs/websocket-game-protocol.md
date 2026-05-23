@@ -29,10 +29,10 @@ Clients should subscribe before sending lobby or game commands so they do not mi
 | --- | --- | --- |
 | `/topic/game/{gameId}` | All players in one lobby or game | Lobby membership changes, game start, dice, phase, purchase, effects, game end, and broadcast errors |
 | `/queue/lobby-user{sessionId}` | Single WebSocket session | Lobby creation result, lobby roster after join, and lobby-specific request errors |
-| `/queue/game-sync-user{sessionId}` | Single WebSocket session | Full `SYNC` snapshot for reconnect and explicit state refresh |
+| `/user/queue/game-sync` | Single WebSocket session | Full `SYNC` snapshot for reconnect and explicit state refresh |
 | `/topic/public` | Global chat only | Chat and connection announcements from `/app/chat.*` |
 
-`{sessionId}` is the STOMP session id assigned by Spring. Browser clients usually receive it from the STOMP session object after connection. The server currently sends private lobby and sync replies to the resolved broker destinations `/queue/lobby-user{sessionId}` and `/queue/game-sync-user{sessionId}`.
+`{sessionId}` is the STOMP session id assigned by Spring. Browser clients usually receive it from the STOMP session object after connection. The server sends private lobby replies to `/queue/lobby-user{sessionId}` and sends reconnect sync replies to the resolved broker destination `/queue/game-sync-user{sessionId}`, which clients consume by subscribing to `/user/queue/game-sync`.
 
 Game clients must not use `/topic/public` for game state. All game-state broadcasts are scoped to `/topic/game/{gameId}` or a private queue.
 
@@ -101,7 +101,7 @@ A reconnecting player must establish a new STOMP connection with the same authen
 
 ```text
 /topic/game/{gameId}
-/queue/game-sync-user{newSessionId}
+/user/queue/game-sync
 ```
 
 Then the client sends:
