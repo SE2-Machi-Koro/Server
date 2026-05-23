@@ -3,6 +3,7 @@ package org.machikoro.server.controller
 import io.github.springwolf.core.asyncapi.annotations.AsyncListener
 import io.github.springwolf.core.asyncapi.annotations.AsyncOperation
 import org.machikoro.server.auth.userPrincipal
+import org.machikoro.server.dto.LobbyLeavingOutcome
 import org.machikoro.server.dto.LobbyRosterDto
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.WebSocketMessage
@@ -182,10 +183,22 @@ class LobbyWebSocketController(
     /**
      * Handles a player leaving a lobby via WebSocket.
      *
-     * Client sends a message to /app/lobby.leave with the gameId in the payload.
-     * The player is removed from the lobby roster. If the lobby becomes empty, the
-     * game record is deleted. Otherwise LOBBY_LEFT is broadcast to the remaining
-     * members so they can update the player list.
+     * Client sends a message to `/app/lobby.leave` with the `gameId`
+     * in the payload.
+     *
+     * The authenticated player is removed from the lobby. If the lobby
+     * still contains real players, a `LOBBY_LEFT` event is broadcast to
+     * `/topic/game/{gameId}` so remaining members can update screen.
+     *
+     * If no real players remain (debug/dummy players do not count), the
+     * lobby is deleted and a `HOST_LEFT` event is broadcast so clients
+     * can close the lobby UI.
+     *
+     * Authentication is derived from the WebSocket principal; the sender
+     * field in [WebSocketMessage] is ignored to prevent spoofing.
+     *
+     * @throws CustomWebSocketException when authentication is missing,
+     * the payload is invalid, or `gameId` is absent.
      */
     @MessageMapping("/lobby.leave")
     @Suppress("UNUSED_PARAMETER")
@@ -214,32 +227,42 @@ class LobbyWebSocketController(
         logger.info("User '{}' leaving lobby {}", principal.username, gameId)
 
         val result = lobbyService.leaveLobby(gameId, principal.userId)
-        if (result == null) {
-            logger.warn("leaveLobby: user '{}' is not in game {}", principal.username, gameId)
-            return
-        }
 
-        if (!result.gameDeleted) {
-            // Notify remaining players so they can remove the leaver from the UI
-            messagingTemplate.convertAndSend(
-                "/topic/game/$gameId",
-                WebSocketMessage(
-                    type = MessageType.LOBBY_LEFT,
-                    sender = "SERVER",
-                    content = "Player left lobby",
-                    gameId = gameId,
-                    payload = mapOf(
-                        "playerId" to result.playerId,
-                        "userId" to principal.userId,
-                        "username" to principal.username,
+        when(result) {
+            is LobbyLeavingOutcome.LobbyRemains -> {
+                logger.info(
+                    "Player ${principal.userId} left game"
+                )
+                messagingTemplate.convertAndSend(
+                    "/topic/game/$gameId",
+                    WebSocketMessage(
+                        type = MessageType.LOBBY_LEFT,
+                        sender = "SERVER",
+                        content = "Player left lobby",
+                        gameId = gameId,
+                        payload = mapOf(
+                            "userId" to principal.userId,
+                        )
                     )
                 )
-            )
+            }
+            is LobbyLeavingOutcome.LobbyDeleted -> {
+                logger.info(
+                    "Host ${principal.userId} left game, gameDeleted= $gameId"
+                )
+                messagingTemplate.convertAndSend(
+                    "/topic/game/$gameId",
+                    WebSocketMessage(
+                        type = MessageType.HOST_LEFT,
+                        sender = "SERVER",
+                        content = "Host left lobby",
+                        gameId = gameId,
+                        payload = mapOf(
+                            "userId" to principal.userId
+                        )
+                    )
+                )
+            }
         }
-        // If game was deleted there are no remaining subscribers to notify
-        logger.info(
-            "User '{}' left lobby {} — gameDeleted={}",
-            principal.username, gameId, result.gameDeleted
-        )
     }
 }
