@@ -11,6 +11,7 @@ import org.machikoro.server.dto.PurchaseRequest
 import org.machikoro.server.dto.RollDiceRequest
 import org.machikoro.server.dto.StartGameRequest
 import org.machikoro.server.dto.WebSocketMessage
+import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.service.DiceService
 import org.machikoro.server.service.GamePhaseService
 import org.machikoro.server.service.GameSyncService
@@ -162,14 +163,19 @@ class GameController(
     ))
     fun purchase(@Payload request: PurchaseRequest, headerAccessor: SimpMessageHeaderAccessor) {
         requireActivePlayer(request.gameId, headerAccessor)
-        val result = purchaseService.purchase(
-            gameId = request.gameId,
-            purchaseType = request.purchaseType,
-            cardType = request.cardType,
-            landmarkType = request.landmarkType,
-        )
-        logger.info("Processed {} purchase for game {}", result.purchaseType, request.gameId)
-        broadcastPurchase(request.gameId, result)
+        try {
+            val result = purchaseService.purchase(
+                gameId = request.gameId,
+                purchaseType = request.purchaseType,
+                cardType = request.cardType,
+                landmarkType = request.landmarkType,
+            )
+            logger.info("Processed {} purchase for game {}", result.purchaseType, request.gameId)
+            broadcastPurchase(request.gameId, result)
+        } catch (e: CustomWebSocketException) {
+            logger.warn("Purchase rejected for game {} [{}]: {}", request.gameId, e.errorCode, e.message)
+            broadcastPurchaseFailure(request, e)
+        }
     }
 
     /**
@@ -304,6 +310,30 @@ class GameController(
                 sender = "server",
                 payload = payload,
                 gameId = gameId,
+            ),
+        )
+    }
+
+    private fun broadcastPurchaseFailure(request: PurchaseRequest, exception: CustomWebSocketException) {
+        val payload = linkedMapOf<String, Any?>(
+            "event" to "PURCHASE_FAILED",
+            "code" to exception.errorCode,
+            "message" to exception.message,
+            "purchaseType" to request.purchaseType.name,
+        )
+        request.cardType?.let { payload["cardType"] = it.name }
+        request.landmarkType?.let { payload["landmarkType"] = it.name }
+
+        // Purchase failures use the game-topic WebSocketMessage envelope so
+        // clients can leave pending purchase state without parsing raw STOMP
+        // user-queue error payloads.
+        messagingTemplate.convertAndSend(
+            "/topic/game/${request.gameId}",
+            WebSocketMessage(
+                type = MessageType.ERROR,
+                sender = "server",
+                payload = payload,
+                gameId = request.gameId,
             ),
         )
     }

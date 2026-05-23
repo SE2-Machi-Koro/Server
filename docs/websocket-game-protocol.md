@@ -47,7 +47,7 @@ Game clients must not use `/topic/public` for game state. All game-state broadca
 | `/app/game.rollDice` | `RollDiceRequest` | `ROLL_DICE` and a `GAME_ACTION` snapshot to `/topic/game/{gameId}` |
 | `/app/game.resolveEffects` | `ResolveEffectsRequest` | `GAME_ACTION` income/effects result to `/topic/game/{gameId}` |
 | `/app/game.advancePhase` | `AdvancePhaseRequest` | `GAME_ACTION` phase snapshot to `/topic/game/{gameId}` |
-| `/app/game.purchase` | `PurchaseRequest` | `GAME_ACTION` purchase snapshot to `/topic/game/{gameId}` |
+| `/app/game.purchase` | `PurchaseRequest` | `GAME_ACTION` purchase snapshot or `ERROR` purchase failure to `/topic/game/{gameId}` |
 | `/app/game.endTurn` | `EndTurnRequest` | `GAME_ACTION` next-turn snapshot or `GAME_END` to `/topic/game/{gameId}` |
 | `/app/game.sync` | `SyncGameRequest` | `SYNC` to `/queue/game-sync-user{sessionId}` |
 | `/app/chat.send` | `WebSocketMessage` | Chat message to `/topic/public` |
