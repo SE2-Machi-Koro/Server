@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.auth.UserPrincipal
-import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.LandmarkType
@@ -52,12 +51,11 @@ class GameControllerTest {
     private val lobbyService = mock<LobbyService>()
     private val connectionTracker = mock<WebSocketConnectionTracker>()
     private val gameStateGuard = mock<GameStateGuard>()
-    private val playerDao = mock<PlayerDao>()
     private val gameSyncService = mock<GameSyncService>()
     private val controller = GameController(
         gamePhaseService, messagingTemplate,
         purchaseService, diceService, lobbyService, connectionTracker,
-        gameStateGuard, playerDao, gameSyncService,
+        gameStateGuard, gameSyncService,
     )
 
     private val alice = UserPrincipal(userId = 1, username = "alice")
@@ -69,16 +67,15 @@ class GameControllerTest {
         hasPurchasedThisTurn = false, roundNumber = 1,
     )
 
-    private val defaultPlayers = listOf(
-        PlayerModel(id = 1, gameId = 1, userId = 10, turnOrder = 0, coins = 3, lastSeenAt = null),
-        PlayerModel(id = 2, gameId = 1, userId = 20, turnOrder = 1, coins = 3, lastSeenAt = null),
-    )
-
     private fun authedAccessor(): SimpMessageHeaderAccessor =
         SimpMessageHeaderAccessor.create().apply { user = alice }
 
-    private fun gameStateDto(gameId: Int) = GameStateDto(
-        game = defaultGame.copy(id = gameId),
+    private fun gameStateDto(
+        gameId: Int,
+        turnPhase: TurnPhase = defaultGame.turnPhase,
+        activePlayerId: Int? = 1,
+    ) = GameStateDto(
+        game = defaultGame.copy(id = gameId, turnPhase = turnPhase),
         players = listOf(
             PlayerModel(id = 1, gameId = gameId, userId = 1, turnOrder = 0, coins = 3, lastSeenAt = null),
             PlayerModel(id = 2, gameId = gameId, userId = 2, turnOrder = 1, coins = 3, lastSeenAt = null),
@@ -87,7 +84,7 @@ class GameControllerTest {
         playerLandmarks = emptyMap(),
         marketplace = emptyMap(),
         turnOrder = listOf(1, 2),
-        activePlayerId = 1,
+        activePlayerId = activePlayerId,
     )
 
     private fun headerWithSession(sessionId: String): SimpMessageHeaderAccessor {
@@ -103,8 +100,9 @@ class GameControllerTest {
     fun `startGame broadcasts GAME_STARTED on success`() {
         val gameId = 10
         val sessionId = "session-host"
+        val snapshot = gameStateDto(gameId)
         whenever(connectionTracker.getUserId(sessionId)).thenReturn(1)
-        whenever(lobbyService.startGame(gameId, 1)).thenReturn(gameStateDto(gameId))
+        whenever(lobbyService.startGame(gameId, 1)).thenReturn(snapshot)
 
         controller.startGame(StartGameRequest(gameId), headerWithSession(sessionId))
 
@@ -121,8 +119,11 @@ class GameControllerTest {
         assertEquals(MessageType.GAME_ACTION, phaseMessage.type)
         @Suppress("UNCHECKED_CAST")
         val payload = phaseMessage.payload as Map<String, Any?>
+        assertEquals("GAME_STARTED", payload["event"])
         assertEquals("ROLL_DICE", payload["turnPhase"])
         assertEquals(1, payload["activePlayerId"])
+        assertEquals(snapshot, payload["state"])
+        assertEquals(gameId, phaseMessage.gameId)
     }
 
     @Test
@@ -166,9 +167,9 @@ class GameControllerTest {
     @Test
     fun `advancePhase delegates to service with the requested game id`() {
         val gameId = 42
+        val snapshot = gameStateDto(gameId, turnPhase = TurnPhase.RESOLVE_EFFECTS)
         whenever(gamePhaseService.advancePhase(gameId)).thenReturn(TurnPhase.RESOLVE_EFFECTS)
-        whenever(gameStateGuard.ensureGameIsRunning(gameId)).thenReturn(defaultGame.copy(id = gameId))
-        whenever(playerDao.getPlayers(gameId)).thenReturn(defaultPlayers)
+        whenever(gameSyncService.buildSnapshot(gameId)).thenReturn(snapshot)
 
         controller.advancePhase(AdvancePhaseRequest(gameId), authedAccessor())
 
@@ -179,9 +180,9 @@ class GameControllerTest {
     @Test
     fun `advancePhase broadcasts new phase and activePlayerId as GAME_ACTION`() {
         val gameId = 42
+        val snapshot = gameStateDto(gameId, turnPhase = TurnPhase.RESOLVE_EFFECTS)
         whenever(gamePhaseService.advancePhase(gameId)).thenReturn(TurnPhase.RESOLVE_EFFECTS)
-        whenever(gameStateGuard.ensureGameIsRunning(gameId)).thenReturn(defaultGame.copy(id = gameId))
-        whenever(playerDao.getPlayers(gameId)).thenReturn(defaultPlayers)
+        whenever(gameSyncService.buildSnapshot(gameId)).thenReturn(snapshot)
 
         controller.advancePhase(AdvancePhaseRequest(gameId), authedAccessor())
 
@@ -193,8 +194,10 @@ class GameControllerTest {
         assertEquals("server", message.sender)
         @Suppress("UNCHECKED_CAST")
         val payload = message.payload as Map<String, Any?>
+        assertEquals("PHASE_ADVANCED", payload["event"])
         assertEquals("RESOLVE_EFFECTS", payload["turnPhase"])
-        assertEquals(10, payload["activePlayerId"])
+        assertEquals(1, payload["activePlayerId"])
+        assertEquals(snapshot, payload["state"])
     }
 
     @Test
@@ -216,9 +219,9 @@ class GameControllerTest {
     @Test
     fun `endTurn delegates to service with the requested game id`() {
         val gameId = 42
+        val snapshot = gameStateDto(gameId, turnPhase = TurnPhase.ROLL_DICE)
         whenever(gamePhaseService.endTurn(gameId)).thenReturn(EndTurnOutcome.Continue(TurnPhase.ROLL_DICE))
-        whenever(gameStateGuard.ensureGameIsRunning(gameId)).thenReturn(defaultGame.copy(id = gameId))
-        whenever(playerDao.getPlayers(gameId)).thenReturn(defaultPlayers)
+        whenever(gameSyncService.buildSnapshot(gameId)).thenReturn(snapshot)
 
         controller.endTurn(EndTurnRequest(gameId), authedAccessor())
 
@@ -229,9 +232,9 @@ class GameControllerTest {
     @Test
     fun `endTurn broadcasts resulting phase and activePlayerId as GAME_ACTION`() {
         val gameId = 42
+        val snapshot = gameStateDto(gameId, turnPhase = TurnPhase.ROLL_DICE)
         whenever(gamePhaseService.endTurn(gameId)).thenReturn(EndTurnOutcome.Continue(TurnPhase.ROLL_DICE))
-        whenever(gameStateGuard.ensureGameIsRunning(gameId)).thenReturn(defaultGame.copy(id = gameId))
-        whenever(playerDao.getPlayers(gameId)).thenReturn(defaultPlayers)
+        whenever(gameSyncService.buildSnapshot(gameId)).thenReturn(snapshot)
 
         controller.endTurn(EndTurnRequest(gameId), authedAccessor())
 
@@ -242,8 +245,10 @@ class GameControllerTest {
         assertEquals(MessageType.GAME_ACTION, message.type)
         @Suppress("UNCHECKED_CAST")
         val payload = message.payload as Map<String, Any?>
+        assertEquals("TURN_ENDED", payload["event"])
         assertEquals("ROLL_DICE", payload["turnPhase"])
-        assertEquals(10, payload["activePlayerId"])
+        assertEquals(1, payload["activePlayerId"])
+        assertEquals(snapshot, payload["state"])
     }
 
     @Test
@@ -251,7 +256,9 @@ class GameControllerTest {
         val gameId = 42
         val winnerId = 1
         val roundsPlayed = 10
+        val snapshot = gameStateDto(gameId)
         whenever(gamePhaseService.endTurn(gameId)).thenReturn(EndTurnOutcome.Won(winnerId, roundsPlayed))
+        whenever(gameSyncService.buildSnapshot(gameId)).thenReturn(snapshot)
 
         controller.endTurn(EndTurnRequest(gameId), authedAccessor())
 
@@ -261,7 +268,12 @@ class GameControllerTest {
 
         val message = captor.firstValue
         assertEquals(MessageType.GAME_END, message.type)
-        assertEquals(mapOf("winnerId" to winnerId, "roundsPlayed" to roundsPlayed), message.payload)
+        assertEquals(gameId, message.gameId)
+        @Suppress("UNCHECKED_CAST")
+        val payload = message.payload as Map<String, Any?>
+        assertEquals(winnerId, payload["winnerId"])
+        assertEquals(roundsPlayed, payload["roundsPlayed"])
+        assertEquals(snapshot, payload["state"])
     }
 
     @Test
@@ -283,7 +295,7 @@ class GameControllerTest {
     @Test
     fun `purchase delegates to service with the requested payload`() {
         val gameId = 42
-        val snapshot = gameStateDto(gameId)
+        val snapshot = gameStateDto(gameId, turnPhase = TurnPhase.BUY_OR_BUILD)
         whenever(purchaseService.purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.BAKERY, null))
             .thenReturn(PurchaseResult(turnPhase = TurnPhase.BUY_OR_BUILD, purchaseType = PurchaseType.ESTABLISHMENT, cardType = CardType.BAKERY))
         whenever(gameSyncService.buildSnapshot(gameId)).thenReturn(snapshot)
@@ -297,7 +309,7 @@ class GameControllerTest {
     @Test
     fun `purchase broadcasts resulting purchase payload as GAME_ACTION on game topic`() {
         val gameId = 42
-        val snapshot = gameStateDto(gameId)
+        val snapshot = gameStateDto(gameId, turnPhase = TurnPhase.BUY_OR_BUILD)
         whenever(purchaseService.purchase(gameId, PurchaseType.LANDMARK, null, LandmarkType.TRAIN_STATION))
             .thenReturn(PurchaseResult(turnPhase = TurnPhase.BUY_OR_BUILD, purchaseType = PurchaseType.LANDMARK, landmarkType = LandmarkType.TRAIN_STATION))
         whenever(gameSyncService.buildSnapshot(gameId)).thenReturn(snapshot)
@@ -316,6 +328,7 @@ class GameControllerTest {
         assertEquals("LANDMARK", payload["purchaseType"])
         assertEquals("TRAIN_STATION", payload["landmarkType"])
         assertEquals(snapshot, payload["state"])
+        assertEquals(gameId, message.gameId)
     }
 
     @Test
@@ -340,14 +353,16 @@ class GameControllerTest {
         val activePlayer = PlayerModel(id = 9, gameId = gameId, userId = alice.userId, turnOrder = 0, coins = 3, lastSeenAt = null)
         val request = RollDiceRequest(gameId = gameId, playerId = 999)
         val response = RollDiceResponse(dice = listOf(3, 4), total = 7)
+        val snapshot = gameStateDto(gameId, turnPhase = TurnPhase.RESOLVE_EFFECTS)
         whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice)).thenReturn(activePlayer)
         whenever(diceService.rollDice(request, activePlayer.id)).thenReturn(response)
+        whenever(gameSyncService.buildSnapshot(gameId)).thenReturn(snapshot)
 
         controller.rollDice(request, authedAccessor())
 
         verify(gameStateGuard).ensureSenderIsActivePlayer(gameId, alice)
         val captor = argumentCaptor<WebSocketMessage>()
-        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+        verify(messagingTemplate, times(2)).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
 
         val message = captor.firstValue
         assertEquals(MessageType.ROLL_DICE, message.type)
@@ -356,12 +371,31 @@ class GameControllerTest {
 
         @Suppress("UNCHECKED_CAST")
         val payload = message.payload as Map<String, Any?>
+        assertEquals("DICE_ROLLED", payload["event"])
+        assertEquals("RESOLVE_EFFECTS", payload["turnPhase"])
+        assertEquals(1, payload["activePlayerId"])
         assertEquals(activePlayer.id, payload["playerId"])
         assertEquals(listOf(3, 4), payload["result"])
         assertEquals(7, payload["total"])
         assertEquals(true, payload["completed"])
-        assertEquals("RESOLVE_EFFECTS", payload["turnPhase"])
         assert(payload["timestamp"] is Long)
+        assertEquals(snapshot, payload["state"])
+        assertEquals(gameId, message.gameId)
+
+        val actionMessage = captor.secondValue
+        assertEquals(MessageType.GAME_ACTION, actionMessage.type)
+        assertEquals("server", actionMessage.sender)
+        assertEquals(gameId, actionMessage.gameId)
+        @Suppress("UNCHECKED_CAST")
+        val actionPayload = actionMessage.payload as Map<String, Any?>
+        assertEquals("DICE_ROLLED", actionPayload["event"])
+        assertEquals("RESOLVE_EFFECTS", actionPayload["turnPhase"])
+        assertEquals(1, actionPayload["activePlayerId"])
+        assertEquals(activePlayer.id, actionPayload["playerId"])
+        assertEquals(listOf(3, 4), actionPayload["result"])
+        assertEquals(7, actionPayload["total"])
+        assertEquals(true, actionPayload["completed"])
+        assertEquals(snapshot, actionPayload["state"])
         verify(diceService).rollDice(request, activePlayer.id)
         verify(gameStateGuard, never()).ensureSenderOwnsPlayer(any(), any(), any())
     }
