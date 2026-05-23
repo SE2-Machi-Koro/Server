@@ -94,6 +94,8 @@ class GameControllerTest {
         return accessor
     }
 
+    // ── startGame ─────────────────────────────────────────────────────────────
+
     @Test
     fun `startGame broadcasts GAME_STARTED on success`() {
         val gameId = 10
@@ -159,6 +161,8 @@ class GameControllerTest {
         @Suppress("UNCHECKED_CAST")
         assertEquals("START_FAILED", (message.payload as Map<String, Any>)["event"])
     }
+
+    // ── advancePhase ──────────────────────────────────────────────────────────
 
     @Test
     fun `advancePhase delegates to service with the requested game id`() {
@@ -314,6 +318,8 @@ class GameControllerTest {
         verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }
 
+    // ── purchase ──────────────────────────────────────────────────────────────
+
     @Test
     fun `purchase delegates to service with the requested payload`() {
         val gameId = 42
@@ -380,6 +386,8 @@ class GameControllerTest {
         verify(purchaseService, never()).purchase(any(), any(), any(), any())
         verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }
+
+    // ── rollDice ──────────────────────────────────────────────────────────────
 
     @Test
     fun `rollDice broadcasts result with playerId, result and timestamp to correct game topic`() {
@@ -483,6 +491,8 @@ class GameControllerTest {
         verify(diceService, never()).rollDice(any(), any())
         verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }
+
+    // ── UNAUTHENTICATED at the controller boundary ────────────────────────────
 
     private fun assertUnauthenticated(call: (SimpMessageHeaderAccessor) -> Unit) {
         val unauthed = SimpMessageHeaderAccessor.create()
