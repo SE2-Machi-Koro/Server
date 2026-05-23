@@ -53,6 +53,10 @@ import java.util.concurrent.TimeUnit
 )
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class GameWebSocketBroadcastIntegrationTest {
+    private companion object {
+        private const val MESSAGE_TIMEOUT_SECONDS = 20L
+        private const val BROKER_SUBSCRIPTION_WAIT_MILLIS = 1_000L
+    }
 
     @LocalServerPort
     private var port: Int = 0
@@ -296,7 +300,7 @@ class GameWebSocketBroadcastIntegrationTest {
     }
 
     private fun takeMessage(queue: BlockingQueue<JsonNode>, type: MessageType): JsonNode {
-        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(MESSAGE_TIMEOUT_SECONDS)
         val seen = mutableListOf<String>()
         while (System.nanoTime() < deadline) {
             val remaining = deadline - System.nanoTime()
@@ -322,7 +326,10 @@ class GameWebSocketBroadcastIntegrationTest {
         }
 
     private fun waitForBrokerSubscription() {
-        TimeUnit.MILLISECONDS.sleep(250)
+        // The simple broker registers STOMP subscriptions asynchronously; CI
+        // runners can otherwise publish the first game broadcast before both
+        // test sessions are fully attached to the topic.
+        TimeUnit.MILLISECONDS.sleep(BROKER_SUBSCRIPTION_WAIT_MILLIS)
     }
 
     private data class LoginResult(
