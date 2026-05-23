@@ -44,6 +44,10 @@ class GameController(
 ) {
     private val logger = LoggerFactory.getLogger(GameController::class.java)
 
+    companion object {
+        private const val UNKNOWN_ERROR = "Unknown error"
+    }
+
     /**
      * Handle the START_GAME signal from the lobby host.
      *
@@ -127,7 +131,7 @@ class GameController(
                 WebSocketMessage(
                     type = MessageType.ERROR,
                     sender = "server",
-                    payload = mapOf("event" to "START_FAILED", "message" to (e.message ?: "Unknown error")),
+                    payload = mapOf("event" to "START_FAILED", "message" to (e.message ?: UNKNOWN_ERROR)),
                 )
             )
         }
@@ -192,7 +196,7 @@ class GameController(
                 WebSocketMessage(
                     type = MessageType.ERROR,
                     sender = "server",
-                    payload = mapOf("event" to "ENTER_SCREEN_FAILED", "message" to (e.message ?: "Unknown error")),
+                    payload = mapOf("event" to "ENTER_SCREEN_FAILED", "message" to (e.message ?: UNKNOWN_ERROR)),
                     gameId = gameId,
                 )
             )
@@ -331,7 +335,7 @@ class GameController(
                 WebSocketMessage(
                     type = MessageType.ERROR,
                     sender = "SERVER",
-                    payload = mapOf("event" to "ROLL_FAILED", "message" to (e.message ?: "Unknown error"))
+                    payload = mapOf("event" to "ROLL_FAILED", "message" to (e.message ?: UNKNOWN_ERROR))
                 )
             )
         }
