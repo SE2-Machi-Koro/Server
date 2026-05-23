@@ -9,6 +9,7 @@ enum class MessageType {
     LEAVE,
     LOBBY_CREATED,
     LOBBY_JOINED,
+    HOST_LEFT,
     LOBBY_ROSTER,
     GAME_START,
     GAME_STARTED,
@@ -16,7 +17,6 @@ enum class MessageType {
     GAME_ACTION,
     GAME_END,
     LOBBY_LEFT,
-    PLAYER_LEFT_FINISHED_GAME,
     ERROR,
     ROLL_DICE,
 }
