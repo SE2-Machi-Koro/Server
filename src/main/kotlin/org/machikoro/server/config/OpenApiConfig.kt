@@ -23,15 +23,27 @@ class OpenApiConfig {
     REST and WebSocket API for the Machi Koro board game.
     
     ## WebSocket Connection
-    Connect via STOMP at ws://localhost:8080/ws.
+    Connect via STOMP at `ws://localhost:8080/ws` or use SockJS at `/ws-sockjs`.
+    Authenticated clients must send `Authorization: Bearer <sessionToken>` on the STOMP `CONNECT` frame.
     
-    ### Endpoints
-    | Destination | Payload | Broadcasts to |
+    ### Game Synchronization
+    Subscribe to `/topic/game/{gameId}` for lobby and game-state broadcasts.
+    Subscribe to `/queue/lobby-user{sessionId}` for private lobby replies and `/user/queue/game-sync` for reconnect snapshots.
+    `/topic/public` is reserved for global chat only.
+    
+    | Client destination | Payload | Server publishes |
     |---|---|---|
-    | /app/game.resolveEffects | ResolveEffectsRequest | /topic/public |
-    | /app/game.endTurn | EndTurnRequest | /topic/public |
-    | /app/chat.send | WebSocketMessage | /topic/public |
-    | /app/chat.addUser | WebSocketMessage | /topic/public |
+    | `/app/lobby.create` | `WebSocketMessage` | `LOBBY_CREATED` to `/queue/lobby-user{sessionId}` |
+    | `/app/lobby.join` | `WebSocketMessage` with `payload.lobbyCode` | `LOBBY_ROSTER` to `/queue/lobby-user{sessionId}`, `LOBBY_JOINED` to `/topic/game/{gameId}` |
+    | `/app/game.start` | `StartGameRequest` | `GAME_STARTED`, `GAME_ACTION` to `/topic/game/{gameId}` |
+    | `/app/game.rollDice` | `RollDiceRequest` | `ROLL_DICE`, `GAME_ACTION` to `/topic/game/{gameId}` |
+    | `/app/game.resolveEffects` | `ResolveEffectsRequest` | `GAME_ACTION` to `/topic/game/{gameId}` |
+    | `/app/game.advancePhase` | `AdvancePhaseRequest` | `GAME_ACTION` to `/topic/game/{gameId}` |
+    | `/app/game.purchase` | `PurchaseRequest` | `GAME_ACTION` to `/topic/game/{gameId}` |
+    | `/app/game.endTurn` | `EndTurnRequest` | `GAME_ACTION` or `GAME_END` to `/topic/game/{gameId}` |
+    | `/app/game.sync` | `SyncGameRequest` | `SYNC` to resolved `/queue/game-sync-user{sessionId}` |
+    
+    See `docs/websocket-game-protocol.md` for payload examples and reconnect flow.
     """
                         .trimIndent()
                 )
