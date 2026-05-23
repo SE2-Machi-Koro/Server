@@ -292,6 +292,7 @@ For detailed API documentation, the server exposes both standard REST and asynch
 - **Swagger UI (REST):** Accessible at `http://localhost:8080/swagger-ui.html`. Powered by Springdoc OpenAPI, this interface provides interactive documentation for our standard REST endpoints.
 - **Springwolf UI (AsyncAPI/WebSockets):** Accessible at `http://localhost:8080/springwolf/asyncapi-ui.html`. Powered by Springwolf, this provides interactive documentation and an event publisher for our STOMP over WebSocket channels, which are the backbone of our real-time game communications.
 - **WebSocket Endpoint:** `ws://localhost:8080/ws`
+- **WebSocket Game Protocol:** Client subscriptions, send destinations, message envelopes, and reconnect synchronization are documented in [docs/websocket-game-protocol.md](docs/websocket-game-protocol.md).
 - **Backend Restart Recovery:** The manual restart procedure and `/app/game.sync` verification checklist are documented in [docs/backend-restart-recovery.md](docs/backend-restart-recovery.md).
 
 Run the backend restart recovery smoke test with:
@@ -446,4 +447,4 @@ DevTools console that no *"Failed to find a valid digest in the 'integrity' attr
 error is logged.
 
 ---
-*Last Updated: May 15, 2026*
+*Last Updated: 23.05.2026*
