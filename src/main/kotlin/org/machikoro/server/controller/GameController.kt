@@ -114,6 +114,7 @@ class GameController(
                         state = gameState,
                         event = "GAME_STARTED",
                     ),
+                    gameId = request.gameId,
                 )
             )
         } catch (e: Exception) {
@@ -234,6 +235,22 @@ class GameController(
                         "completed" to result.completed,
                         "timestamp" to System.currentTimeMillis(),
                         "state" to state,
+                    ),
+                    gameId = request.gameId,
+                )
+            )
+            messagingTemplate.convertAndSend(
+                gameTopic,
+                WebSocketMessage(
+                    type = MessageType.GAME_ACTION,
+                    sender = "server",
+                    payload = buildGameActionPayload(
+                        state = state,
+                        event = "DICE_ROLLED",
+                        "playerId" to rollingPlayer.id,
+                        "result" to result.dice,
+                        "total" to result.total,
+                        "completed" to result.completed,
                     ),
                     gameId = request.gameId,
                 )

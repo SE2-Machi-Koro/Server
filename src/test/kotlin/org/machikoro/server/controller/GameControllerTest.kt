@@ -123,6 +123,7 @@ class GameControllerTest {
         assertEquals("ROLL_DICE", payload["turnPhase"])
         assertEquals(1, payload["activePlayerId"])
         assertEquals(snapshot, payload["state"])
+        assertEquals(gameId, phaseMessage.gameId)
     }
 
     @Test
@@ -361,7 +362,7 @@ class GameControllerTest {
 
         verify(gameStateGuard).ensureSenderIsActivePlayer(gameId, alice)
         val captor = argumentCaptor<WebSocketMessage>()
-        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+        verify(messagingTemplate, times(2)).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
 
         val message = captor.firstValue
         assertEquals(MessageType.ROLL_DICE, message.type)
@@ -380,6 +381,21 @@ class GameControllerTest {
         assert(payload["timestamp"] is Long)
         assertEquals(snapshot, payload["state"])
         assertEquals(gameId, message.gameId)
+
+        val actionMessage = captor.secondValue
+        assertEquals(MessageType.GAME_ACTION, actionMessage.type)
+        assertEquals("server", actionMessage.sender)
+        assertEquals(gameId, actionMessage.gameId)
+        @Suppress("UNCHECKED_CAST")
+        val actionPayload = actionMessage.payload as Map<String, Any?>
+        assertEquals("DICE_ROLLED", actionPayload["event"])
+        assertEquals("RESOLVE_EFFECTS", actionPayload["turnPhase"])
+        assertEquals(1, actionPayload["activePlayerId"])
+        assertEquals(activePlayer.id, actionPayload["playerId"])
+        assertEquals(listOf(3, 4), actionPayload["result"])
+        assertEquals(7, actionPayload["total"])
+        assertEquals(true, actionPayload["completed"])
+        assertEquals(snapshot, actionPayload["state"])
         verify(diceService).rollDice(request, activePlayer.id)
         verify(gameStateGuard, never()).ensureSenderOwnsPlayer(any(), any(), any())
     }
