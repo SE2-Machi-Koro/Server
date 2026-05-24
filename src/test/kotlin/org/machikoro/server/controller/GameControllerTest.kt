@@ -214,6 +214,20 @@ class GameControllerTest {
         verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }
 
+    @Test
+    fun `advancePhase propagates GAME_NOT_STARTED and does not call service`() {
+        val gameId = 42
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice))
+            .thenThrow(CustomWebSocketException("GAME_NOT_STARTED", "Game $gameId has not started yet"))
+
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.advancePhase(AdvancePhaseRequest(gameId), authedAccessor())
+        }
+        assertEquals("GAME_NOT_STARTED", ex.errorCode)
+        verify(gamePhaseService, never()).advancePhase(any())
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+    }
+
     // ── endTurn ───────────────────────────────────────────────────────────────
 
     @Test
@@ -290,6 +304,20 @@ class GameControllerTest {
         verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }
 
+    @Test
+    fun `endTurn propagates GAME_NOT_STARTED and does not call service`() {
+        val gameId = 42
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice))
+            .thenThrow(CustomWebSocketException("GAME_NOT_STARTED", "Game $gameId has not started yet"))
+
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.endTurn(EndTurnRequest(gameId), authedAccessor())
+        }
+        assertEquals("GAME_NOT_STARTED", ex.errorCode)
+        verify(gamePhaseService, never()).endTurn(any())
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+    }
+
     // ── purchase ──────────────────────────────────────────────────────────────
 
     @Test
@@ -341,6 +369,20 @@ class GameControllerTest {
             controller.purchase(PurchaseRequest(gameId, PurchaseType.ESTABLISHMENT, cardType = CardType.BAKERY), authedAccessor())
         }
         assertEquals("NOT_YOUR_TURN", ex.errorCode)
+        verify(purchaseService, never()).purchase(any(), any(), any(), any())
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+    }
+
+    @Test
+    fun `purchase propagates GAME_NOT_STARTED and does not call service`() {
+        val gameId = 42
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice))
+            .thenThrow(CustomWebSocketException("GAME_NOT_STARTED", "Game $gameId has not started yet"))
+
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.purchase(PurchaseRequest(gameId, PurchaseType.ESTABLISHMENT, cardType = CardType.BAKERY), authedAccessor())
+        }
+        assertEquals("GAME_NOT_STARTED", ex.errorCode)
         verify(purchaseService, never()).purchase(any(), any(), any(), any())
         verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }
@@ -431,6 +473,21 @@ class GameControllerTest {
             controller.rollDice(request, authedAccessor())
         }
         assertEquals("NOT_YOUR_TURN", ex.errorCode)
+        verify(diceService, never()).rollDice(any(), any())
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+    }
+
+    @Test
+    fun `rollDice propagates GAME_NOT_STARTED and does not call service or broadcast`() {
+        val gameId = 1
+        val request = RollDiceRequest(gameId = gameId, playerId = null)
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice))
+            .thenThrow(CustomWebSocketException("GAME_NOT_STARTED", "Game $gameId has not started yet"))
+
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.rollDice(request, authedAccessor())
+        }
+        assertEquals("GAME_NOT_STARTED", ex.errorCode)
         verify(diceService, never()).rollDice(any(), any())
         verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }

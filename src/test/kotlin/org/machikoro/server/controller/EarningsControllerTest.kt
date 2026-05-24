@@ -122,6 +122,20 @@ class EarningsControllerTest {
     }
 
     @Test
+    fun `resolveEffects propagates GAME_NOT_STARTED and does not call service or broadcast`() {
+        val request = ResolveEffectsRequest(gameId = 1)
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(1, alice))
+            .thenThrow(CustomWebSocketException("GAME_NOT_STARTED", "Game 1 has not started yet"))
+
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.resolveEffects(request, authedAccessor())
+        }
+        assertEquals("GAME_NOT_STARTED", ex.errorCode)
+        verify(earningsService, never()).resolveEffects(any())
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+    }
+
+    @Test
     fun `resolveEffects throws UNAUTHENTICATED when accessor has no principal`() {
         val request = ResolveEffectsRequest(gameId = 1)
         val unauthed = SimpMessageHeaderAccessor.create()
