@@ -272,10 +272,11 @@ class LobbyServiceTest {
             PlayerCardModel(playerId = 2, cardType = CardType.BAKERY, quantity = 1),
         )
 
-        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING))
+        whenever(gameDao.findById(gameId))
+            .thenReturn(game(gameId, GameStatus.WAITING))
+            .thenReturn(updatedGame)
         whenever(playerDao.getPlayers(gameId)).thenReturn(players)
         whenever(initializationService.initializeGame(gameId)).thenReturn(players)
-        whenever(gameDao.findById(gameId)).thenReturn(updatedGame)
         whenever(playerCardDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(1 to p1Cards, 2 to p2Cards))
         whenever(playerLandmarkDao.findByPlayerId(1)).thenReturn(emptyList())
         whenever(playerLandmarkDao.findByPlayerId(2)).thenReturn(emptyList())
@@ -289,6 +290,31 @@ class LobbyServiceTest {
         assertEquals(2, result.playerCards[1]?.size)
         assertEquals(2, result.playerCards[2]?.size)
         assertEquals(setOf(CardType.WHEAT_FIELD, CardType.BAKERY), result.playerCards[1]?.map { it.cardType }?.toSet())
+    }
+
+    @Test
+    fun `startGame throws GameStartedException when game is already IN_PROGRESS`() {
+        val gameId = 1
+        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.IN_PROGRESS))
+
+        assertThrows<GameStartedException> {
+            lobbyService.startGame(gameId)
+        }
+
+        // Initialization must never run — state must not be mutated
+        verify(initializationService, never()).initializeGame(any())
+    }
+
+    @Test
+    fun `startGame throws GameFinishedException when game is already FINISHED`() {
+        val gameId = 1
+        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.FINISHED))
+
+        assertThrows<GameFinishedException> {
+            lobbyService.startGame(gameId)
+        }
+
+        verify(initializationService, never()).initializeGame(any())
     }
 
     @Test
@@ -630,7 +656,9 @@ class LobbyServiceTest {
         val gameId = 1
         val players = listOf(player(1), player(2))
         val updatedGame = game(gameId, GameStatus.IN_PROGRESS)
-        whenever(gameDao.findById(gameId)).thenReturn(updatedGame)
+        whenever(gameDao.findById(gameId))
+            .thenReturn(game(gameId, GameStatus.WAITING))
+            .thenReturn(updatedGame)
         whenever(playerDao.getPlayers(gameId)).thenReturn(players)
         whenever(initializationService.initializeGame(gameId)).thenReturn(players)
         whenever(playerCardDao.findByPlayerIds(any())).thenReturn(emptyMap())
