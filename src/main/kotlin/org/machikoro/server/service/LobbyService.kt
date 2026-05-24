@@ -258,6 +258,8 @@ open class LobbyService(
      * 4. Returns a full [GameStateDto] snapshot including players, cards, landmarks, and marketplace.
      *
      * @throws GameNotFoundException       if no game with [gameId] exists.
+     * @throws GameStartedException        if the game is already IN_PROGRESS.
+     * @throws GameFinishedException       if the game has already FINISHED.
      * @throws NotHostException            if [requestingUserId] is provided but is not the host.
      * @throws NotEnoughPlayersException   if fewer than [MIN_PLAYERS] players have joined.
      */
@@ -266,6 +268,14 @@ open class LobbyService(
             runInTransaction {
                 val game = gameDao.findById(gameId)
                     ?: throw GameNotFoundException("Game $gameId not found")
+
+                // Reject duplicate or late start requests before touching any state
+                if (game.status == GameStatus.IN_PROGRESS) {
+                    throw GameStartedException("Game $gameId has already started")
+                }
+                if (game.status == GameStatus.FINISHED) {
+                    throw GameFinishedException("Game $gameId has already ended")
+                }
 
                 if (requestingUserId != null && game.hostUserId != requestingUserId) {
                     throw NotHostException("User $requestingUserId is not the host of game $gameId")

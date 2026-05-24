@@ -22,6 +22,8 @@ import org.machikoro.server.dto.RollDiceResponse
 import org.machikoro.server.dto.StartGameRequest
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.CustomWebSocketException
+import org.machikoro.server.exception.GameFinishedException
+import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.exception.NotHostException
 import org.machikoro.server.service.DiceService
 import org.machikoro.server.service.GamePhaseService
@@ -162,6 +164,46 @@ class GameControllerTest {
         assertEquals("START_FAILED", (message.payload as Map<String, Any>)["event"])
     }
 
+    @Test
+    fun `startGame broadcasts ERROR frame when game is already IN_PROGRESS`() {
+        val gameId = 10
+        val sessionId = "session-host"
+        whenever(connectionTracker.getUserId(sessionId)).thenReturn(1)
+        whenever(lobbyService.startGame(gameId, 1))
+            .thenThrow(GameStartedException("Game $gameId has already started"))
+
+        controller.startGame(StartGameRequest(gameId), headerWithSession(sessionId))
+
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+
+        val message = captor.firstValue
+        assertEquals(MessageType.ERROR, message.type)
+        @Suppress("UNCHECKED_CAST")
+        assertEquals("START_FAILED", (message.payload as Map<String, Any>)["event"])
+        verify(lobbyService).startGame(gameId, 1)
+    }
+
+    @Test
+    fun `startGame broadcasts ERROR frame when game is already FINISHED`() {
+        val gameId = 10
+        val sessionId = "session-host"
+        whenever(connectionTracker.getUserId(sessionId)).thenReturn(1)
+        whenever(lobbyService.startGame(gameId, 1))
+            .thenThrow(GameFinishedException("Game $gameId has already ended"))
+
+        controller.startGame(StartGameRequest(gameId), headerWithSession(sessionId))
+
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+
+        val message = captor.firstValue
+        assertEquals(MessageType.ERROR, message.type)
+        @Suppress("UNCHECKED_CAST")
+        assertEquals("START_FAILED", (message.payload as Map<String, Any>)["event"])
+        verify(lobbyService).startGame(gameId, 1)
+    }
+
     // ── advancePhase ──────────────────────────────────────────────────────────
 
     @Test
@@ -210,6 +252,20 @@ class GameControllerTest {
             controller.advancePhase(AdvancePhaseRequest(gameId), authedAccessor())
         }
         assertEquals("NOT_YOUR_TURN", ex.errorCode)
+        verify(gamePhaseService, never()).advancePhase(any())
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+    }
+
+    @Test
+    fun `advancePhase propagates GAME_NOT_STARTED and does not call service`() {
+        val gameId = 42
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice))
+            .thenThrow(CustomWebSocketException("GAME_NOT_STARTED", "Game $gameId has not started yet"))
+
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.advancePhase(AdvancePhaseRequest(gameId), authedAccessor())
+        }
+        assertEquals("GAME_NOT_STARTED", ex.errorCode)
         verify(gamePhaseService, never()).advancePhase(any())
         verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }
@@ -286,6 +342,20 @@ class GameControllerTest {
             controller.endTurn(EndTurnRequest(gameId), authedAccessor())
         }
         assertEquals("NOT_YOUR_TURN", ex.errorCode)
+        verify(gamePhaseService, never()).endTurn(any())
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+    }
+
+    @Test
+    fun `endTurn propagates GAME_NOT_STARTED and does not call service`() {
+        val gameId = 42
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice))
+            .thenThrow(CustomWebSocketException("GAME_NOT_STARTED", "Game $gameId has not started yet"))
+
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.endTurn(EndTurnRequest(gameId), authedAccessor())
+        }
+        assertEquals("GAME_NOT_STARTED", ex.errorCode)
         verify(gamePhaseService, never()).endTurn(any())
         verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }
@@ -370,6 +440,20 @@ class GameControllerTest {
             controller.purchase(PurchaseRequest(gameId, PurchaseType.ESTABLISHMENT, cardType = CardType.BAKERY), authedAccessor())
         }
         assertEquals("NOT_YOUR_TURN", ex.errorCode)
+        verify(purchaseService, never()).purchase(any(), any(), any(), any())
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+    }
+
+    @Test
+    fun `purchase propagates GAME_NOT_STARTED and does not call service`() {
+        val gameId = 42
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice))
+            .thenThrow(CustomWebSocketException("GAME_NOT_STARTED", "Game $gameId has not started yet"))
+
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.purchase(PurchaseRequest(gameId, PurchaseType.ESTABLISHMENT, cardType = CardType.BAKERY), authedAccessor())
+        }
+        assertEquals("GAME_NOT_STARTED", ex.errorCode)
         verify(purchaseService, never()).purchase(any(), any(), any(), any())
         verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }
@@ -460,6 +544,21 @@ class GameControllerTest {
             controller.rollDice(request, authedAccessor())
         }
         assertEquals("NOT_YOUR_TURN", ex.errorCode)
+        verify(diceService, never()).rollDice(any(), any())
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+    }
+
+    @Test
+    fun `rollDice propagates GAME_NOT_STARTED and does not call service or broadcast`() {
+        val gameId = 1
+        val request = RollDiceRequest(gameId = gameId, playerId = null)
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice))
+            .thenThrow(CustomWebSocketException("GAME_NOT_STARTED", "Game $gameId has not started yet"))
+
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.rollDice(request, authedAccessor())
+        }
+        assertEquals("GAME_NOT_STARTED", ex.errorCode)
         verify(diceService, never()).rollDice(any(), any())
         verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }

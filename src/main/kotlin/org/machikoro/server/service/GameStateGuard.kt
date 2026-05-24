@@ -17,23 +17,30 @@ class GameStateGuard(
 ) {
 
     /**
-     * Loads the given game and ensures it is still active. Returns the loaded
+     * Loads the given game and ensures it is IN_PROGRESS. Returns the loaded
      * [GameModel] so callers can avoid a second DAO round-trip.
      *
-     * Throws [CustomWebSocketException] with errorCode `GAME_FINISHED` if the
-     * game has already ended, or [GameNotFoundException] if the id is unknown.
+     * Throws [CustomWebSocketException] with:
+     *  - `GAME_FINISHED`     — game has already ended.
+     *  - `GAME_NOT_STARTED`  — game is still in the lobby (WAITING).
+     * Throws [GameNotFoundException] if the id is unknown.
      * Intended to be called at the top of any gameplay action.
      */
     fun ensureGameIsRunning(gameId: Int): GameModel {
         val game = gameDao.findById(gameId)
             ?: throw GameNotFoundException("Game $gameId not found")
-        if (game.status == GameStatus.FINISHED) {
-            throw CustomWebSocketException(
+        // Only IN_PROGRESS games may receive gameplay actions
+        when (game.status) {
+            GameStatus.FINISHED -> throw CustomWebSocketException(
                 errorCode = "GAME_FINISHED",
                 message = "Game $gameId has already ended",
             )
+            GameStatus.WAITING -> throw CustomWebSocketException(
+                errorCode = "GAME_NOT_STARTED",
+                message = "Game $gameId has not started yet",
+            )
+            GameStatus.IN_PROGRESS -> return game
         }
-        return game
     }
 
     fun ensureGameIsFinished(gameId: Int) {
@@ -60,6 +67,7 @@ class GameStateGuard(
      *
      * Throws [CustomWebSocketException] with one of:
      *  - `GAME_FINISHED`     — game has already ended (via [ensureGameIsRunning]).
+     *  - `GAME_NOT_STARTED`  — game is still in the lobby (via [ensureGameIsRunning]).
      *  - `NO_ACTIVE_PLAYER`  — currentTurnIndex points outside the player list.
      *  - `NOT_YOUR_TURN`     — caller is authenticated but not the active player.
      */
