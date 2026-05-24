@@ -19,7 +19,7 @@ class AuthService(
     private val logger = LoggerFactory.getLogger(AuthService::class.java)
 
     /**
-     * Validates input, hashes the password via BCrypt, and persists a new user.
+     * Hashes the password via BCrypt and persists a new user.
      * The findByUsername + create pair runs in one transaction so a duplicate
      * inserted between the two calls will roll back rather than leak through.
      *
@@ -30,14 +30,6 @@ class AuthService(
     @Transactional
     fun register(username: String, rawPassword: String): RegisterResponse {
         val cleanUsername = username.trim().lowercase()
-
-        require(cleanUsername.isNotBlank()) { "Username must not be blank" }
-        require(cleanUsername.length <= 50) { "Username must be at most 50 characters" }
-        require(rawPassword.isNotBlank()) { "Password must not be blank" }
-        // BCrypt silently truncates inputs longer than 72 bytes; reject up front
-        // so clients see a clear error rather than a confusing "your password
-        // worked but only the first 72 bytes" surprise later.
-        require(rawPassword.length <= 72) { "Password must be at most 72 characters" }
 
         if (userDao.findByUsername(cleanUsername) != null) {
             throw DuplicateUserException("Username '$cleanUsername' is already taken")
@@ -56,9 +48,6 @@ class AuthService(
      */
     @Transactional
     fun login(username: String, rawPassword: String): LoginResponse {
-        require(username.isNotBlank()) { "Username must not be blank" }
-        require(rawPassword.isNotBlank()) { "Password must not be blank" }
-
         val cleanUsername = username.trim().lowercase()
         val user = userDao.findByUsername(cleanUsername)
 
@@ -88,7 +77,6 @@ class AuthService(
      */
     @Transactional
     fun logout(sessionToken: String) {
-        require(sessionToken.isNotBlank()) { "Session token must not be blank" }
         val user = userDao.findBySessionToken(sessionToken) ?: return
         userDao.updateSessionToken(user.id, null)
         logger.info("Cleared session for user '{}'", user.username)
