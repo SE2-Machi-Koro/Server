@@ -22,6 +22,8 @@ import org.machikoro.server.dto.RollDiceResponse
 import org.machikoro.server.dto.StartGameRequest
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.CustomWebSocketException
+import org.machikoro.server.exception.GameFinishedException
+import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.exception.NotHostException
 import org.machikoro.server.service.DiceService
 import org.machikoro.server.service.GamePhaseService
@@ -160,6 +162,46 @@ class GameControllerTest {
         assertEquals(MessageType.ERROR, message.type)
         @Suppress("UNCHECKED_CAST")
         assertEquals("START_FAILED", (message.payload as Map<String, Any>)["event"])
+    }
+
+    @Test
+    fun `startGame broadcasts ERROR frame when game is already IN_PROGRESS`() {
+        val gameId = 10
+        val sessionId = "session-host"
+        whenever(connectionTracker.getUserId(sessionId)).thenReturn(1)
+        whenever(lobbyService.startGame(gameId, 1))
+            .thenThrow(GameStartedException("Game $gameId has already started"))
+
+        controller.startGame(StartGameRequest(gameId), headerWithSession(sessionId))
+
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+
+        val message = captor.firstValue
+        assertEquals(MessageType.ERROR, message.type)
+        @Suppress("UNCHECKED_CAST")
+        assertEquals("START_FAILED", (message.payload as Map<String, Any>)["event"])
+        verify(lobbyService).startGame(gameId, 1)
+    }
+
+    @Test
+    fun `startGame broadcasts ERROR frame when game is already FINISHED`() {
+        val gameId = 10
+        val sessionId = "session-host"
+        whenever(connectionTracker.getUserId(sessionId)).thenReturn(1)
+        whenever(lobbyService.startGame(gameId, 1))
+            .thenThrow(GameFinishedException("Game $gameId has already ended"))
+
+        controller.startGame(StartGameRequest(gameId), headerWithSession(sessionId))
+
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+
+        val message = captor.firstValue
+        assertEquals(MessageType.ERROR, message.type)
+        @Suppress("UNCHECKED_CAST")
+        assertEquals("START_FAILED", (message.payload as Map<String, Any>)["event"])
+        verify(lobbyService).startGame(gameId, 1)
     }
 
     // ── advancePhase ──────────────────────────────────────────────────────────
