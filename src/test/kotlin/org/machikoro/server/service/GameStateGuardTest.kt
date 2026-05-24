@@ -59,12 +59,14 @@ class GameStateGuardTest {
     }
 
     @Test
-    fun `ensureGameIsRunning returns the loaded game when status is WAITING`() {
+    fun `ensureGameIsRunning throws GAME_NOT_STARTED when status is WAITING`() {
         val gameId = 1
-        val loaded = game(gameId, GameStatus.WAITING)
-        whenever(gameDao.findById(gameId)).thenReturn(loaded)
+        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING))
 
-        assertSame(loaded, guard.ensureGameIsRunning(gameId))
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            guard.ensureGameIsRunning(gameId)
+        }
+        assertEquals("GAME_NOT_STARTED", ex.errorCode)
     }
 
     @Test
@@ -198,6 +200,18 @@ class GameStateGuardTest {
             guard.ensureSenderIsActivePlayer(gameId, user)
         }
         assertEquals("GAME_FINISHED", ex.errorCode)
+    }
+
+    @Test
+    fun `ensureSenderIsActivePlayer propagates GAME_NOT_STARTED when game is still waiting`() {
+        val gameId = 1
+        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING))
+        val user = UserPrincipal(userId = 7, username = "alice")
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            guard.ensureSenderIsActivePlayer(gameId, user)
+        }
+        assertEquals("GAME_NOT_STARTED", ex.errorCode)
     }
 
     // ── ensureSenderOwnsPlayer ────────────────────────────────────────────────
