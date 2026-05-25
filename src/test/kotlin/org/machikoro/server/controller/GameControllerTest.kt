@@ -13,6 +13,7 @@ import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.dto.AdvancePhaseRequest
 import org.machikoro.server.dto.EndTurnRequest
+import org.machikoro.server.dto.EnterGameScreenRequest
 import org.machikoro.server.dto.GameStateDto
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.PurchaseRequest
@@ -164,44 +165,79 @@ class GameControllerTest {
         assertEquals("START_FAILED", (message.payload as Map<String, Any>)["event"])
     }
 
-    @Test
-    fun `startGame broadcasts ERROR frame when game is already IN_PROGRESS`() {
-        val gameId = 10
-        val sessionId = "session-host"
-        whenever(connectionTracker.getUserId(sessionId)).thenReturn(1)
-        whenever(lobbyService.startGame(gameId, 1))
-            .thenThrow(GameStartedException("Game $gameId has already started"))
+    // ── enterGameScreen ───────────────────────────────────────────────────────
 
-        controller.startGame(StartGameRequest(gameId), headerWithSession(sessionId))
+    @Test
+    fun `enterGameScreen broadcasts GAME_STARTED when host enters WAITING game`() {
+        val gameId = 10
+        val snapshot = gameStateDto(gameId)
+        whenever(lobbyService.startGame(gameId, alice.userId)).thenReturn(snapshot)
+
+        controller.enterGameScreen(EnterGameScreenRequest(gameId), authedAccessor())
 
         val captor = argumentCaptor<WebSocketMessage>()
-        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+        verify(messagingTemplate, times(2)).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
 
-        val message = captor.firstValue
-        assertEquals(MessageType.ERROR, message.type)
+        val first = captor.firstValue
+        assertEquals(MessageType.GAME_STARTED, first.type)
+        assertEquals("server", first.sender)
+        assertEquals("Game $gameId has started", first.content)
+        assertEquals(gameId, first.gameId)
+
+        val second = captor.secondValue
+        assertEquals(MessageType.GAME_ACTION, second.type)
         @Suppress("UNCHECKED_CAST")
-        assertEquals("START_FAILED", (message.payload as Map<String, Any>)["event"])
-        verify(lobbyService).startGame(gameId, 1)
+        val payload = second.payload as Map<String, Any?>
+        assertEquals("GAME_STARTED", payload["event"])
+        assertEquals(snapshot, payload["state"])
     }
 
     @Test
-    fun `startGame broadcasts ERROR frame when game is already FINISHED`() {
+    fun `enterGameScreen is a no-op when game is already IN_PROGRESS`() {
         val gameId = 10
-        val sessionId = "session-host"
-        whenever(connectionTracker.getUserId(sessionId)).thenReturn(1)
-        whenever(lobbyService.startGame(gameId, 1))
-            .thenThrow(GameFinishedException("Game $gameId has already ended"))
+        whenever(lobbyService.startGame(gameId, alice.userId))
+            .thenThrow(GameStartedException("Game $gameId has already started"))
 
-        controller.startGame(StartGameRequest(gameId), headerWithSession(sessionId))
+        controller.enterGameScreen(EnterGameScreenRequest(gameId), authedAccessor())
+
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+    }
+
+    @Test
+    fun `enterGameScreen is a no-op when caller is not the host`() {
+        val gameId = 10
+        whenever(lobbyService.startGame(gameId, alice.userId))
+            .thenThrow(NotHostException("User ${alice.userId} is not the host of game $gameId"))
+
+        controller.enterGameScreen(EnterGameScreenRequest(gameId), authedAccessor())
+
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+    }
+
+    @Test
+    fun `enterGameScreen broadcasts ERROR when unexpected exception occurs`() {
+        val gameId = 10
+        whenever(lobbyService.startGame(gameId, alice.userId))
+            .thenThrow(RuntimeException("unexpected failure"))
+
+        controller.enterGameScreen(EnterGameScreenRequest(gameId), authedAccessor())
 
         val captor = argumentCaptor<WebSocketMessage>()
         verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
-
         val message = captor.firstValue
         assertEquals(MessageType.ERROR, message.type)
         @Suppress("UNCHECKED_CAST")
-        assertEquals("START_FAILED", (message.payload as Map<String, Any>)["event"])
-        verify(lobbyService).startGame(gameId, 1)
+        assertEquals("ENTER_SCREEN_FAILED", (message.payload as Map<String, Any>)["event"])
+    }
+
+    @Test
+    fun `enterGameScreen throws UNAUTHENTICATED when accessor has no principal`() {
+        val unauthed = SimpMessageHeaderAccessor.create()
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.enterGameScreen(EnterGameScreenRequest(10), unauthed)
+        }
+        assertEquals("UNAUTHENTICATED", ex.errorCode)
+        verify(lobbyService, never()).startGame(any(), any())
     }
 
     // ── advancePhase ──────────────────────────────────────────────────────────

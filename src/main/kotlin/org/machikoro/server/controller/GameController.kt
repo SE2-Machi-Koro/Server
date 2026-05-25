@@ -2,9 +2,10 @@ package org.machikoro.server.controller
 
 import org.machikoro.server.auth.requireUserPrincipal
 import org.machikoro.server.domain.models.PlayerModel
-import org.machikoro.server.dto.EndTurnOutcome
 import org.machikoro.server.dto.AdvancePhaseRequest
+import org.machikoro.server.dto.EndTurnOutcome
 import org.machikoro.server.dto.EndTurnRequest
+import org.machikoro.server.dto.EnterGameScreenRequest
 import org.machikoro.server.dto.GameStateDto
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.PurchaseRequest
@@ -12,6 +13,8 @@ import org.machikoro.server.dto.RollDiceRequest
 import org.machikoro.server.dto.StartGameRequest
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.CustomWebSocketException
+import org.machikoro.server.exception.GameStartedException
+import org.machikoro.server.exception.NotHostException
 import org.machikoro.server.service.DiceService
 import org.machikoro.server.service.GamePhaseService
 import org.machikoro.server.service.GameSyncService
@@ -41,6 +44,10 @@ class GameController(
     private val gameSyncService: GameSyncService,
 ) {
     private val logger = LoggerFactory.getLogger(GameController::class.java)
+
+    companion object {
+        private const val UNKNOWN_ERROR = "Unknown error"
+    }
 
     /**
      * Handle the START_GAME signal from the lobby host.
@@ -125,7 +132,73 @@ class GameController(
                 WebSocketMessage(
                     type = MessageType.ERROR,
                     sender = "server",
-                    payload = mapOf("event" to "START_FAILED", "message" to (e.message ?: "Unknown error")),
+                    payload = mapOf("event" to "START_FAILED", "message" to (e.message ?: UNKNOWN_ERROR)),
+                )
+            )
+        }
+    }
+
+    /**
+     * Called by any player when navigating to the game screen.
+     *
+     * If the caller is the host and the game is still WAITING, initialization is
+     * triggered automatically and GAME_STARTED is broadcast to all subscribers.
+     * If the game is already IN_PROGRESS the call is a no-op — [LobbyService.startGame]
+     * rejects duplicate starts, satisfying the one-time-only invariant.
+     * Non-host players entering before the host are also silently ignored.
+     *
+     * Message is sent to /app/game.enterScreen.
+     */
+    @MessageMapping("/game.enterScreen")
+    @AsyncListener(operation = AsyncOperation(
+        channelName = "/game.enterScreen",
+        description = "Signals navigation to the game screen. Auto-triggers initialization when the host enters a WAITING game.",
+        payloadType = EnterGameScreenRequest::class,
+    ))
+    fun enterGameScreen(@Payload request: EnterGameScreenRequest, headerAccessor: SimpMessageHeaderAccessor) {
+        val principal = headerAccessor.requireUserPrincipal()
+        val gameId = request.gameId
+        val gameTopic = "/topic/game/$gameId"
+
+        try {
+            val gameState = lobbyService.startGame(gameId, principal.userId)
+
+            logger.info("Game $gameId initialized on screen entry by userId=${principal.userId}")
+
+            messagingTemplate.convertAndSend(
+                gameTopic,
+                WebSocketMessage(
+                    type = MessageType.GAME_STARTED,
+                    sender = "server",
+                    content = "Game $gameId has started",
+                    payload = gameState,
+                    gameId = gameId,
+                )
+            )
+            messagingTemplate.convertAndSend(
+                gameTopic,
+                WebSocketMessage(
+                    type = MessageType.GAME_ACTION,
+                    sender = "server",
+                    payload = buildGameActionPayload(state = gameState, event = "GAME_STARTED"),
+                    gameId = gameId,
+                )
+            )
+        } catch (e: GameStartedException) {
+            // Already initialized — idempotent, only runs once per game
+            logger.debug("enterGameScreen: game $gameId already in progress, skipping initialization")
+        } catch (e: NotHostException) {
+            // Non-host entered screen — host will trigger initialization when they enter
+            logger.debug("enterGameScreen: userId=${principal.userId} is not host of game $gameId, skipping")
+        } catch (e: Exception) {
+            logger.error("enterGameScreen failed for gameId=$gameId, userId=${principal.userId}", e)
+            messagingTemplate.convertAndSend(
+                gameTopic,
+                WebSocketMessage(
+                    type = MessageType.ERROR,
+                    sender = "server",
+                    payload = mapOf("event" to "ENTER_SCREEN_FAILED", "message" to (e.message ?: UNKNOWN_ERROR)),
+                    gameId = gameId,
                 )
             )
         }
@@ -268,7 +341,7 @@ class GameController(
                 WebSocketMessage(
                     type = MessageType.ERROR,
                     sender = "SERVER",
-                    payload = mapOf("event" to "ROLL_FAILED", "message" to (e.message ?: "Unknown error"))
+                    payload = mapOf("event" to "ROLL_FAILED", "message" to (e.message ?: UNKNOWN_ERROR))
                 )
             )
         }

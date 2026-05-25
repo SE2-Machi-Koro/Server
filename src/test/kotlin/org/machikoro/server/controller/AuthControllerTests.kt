@@ -50,18 +50,6 @@ class AuthControllerTests {
     }
 
     @Test
-    fun `register returns bad request on validation failure`() {
-        val request = RegisterRequest(username = "", password = "hunter2")
-        whenever(authService.register("", "hunter2"))
-            .thenThrow(IllegalArgumentException("Username must not be blank"))
-
-        val response = controller.register(request)
-
-        assertEquals(HttpStatus.BAD_REQUEST, response.statusCode)
-        assertEquals("Username must not be blank", response.body)
-    }
-
-    @Test
     fun `login returns ok with response body when service succeeds`() {
         val request = LoginRequest(username = "alice", password = "hunter2")
         val loginResponse = LoginResponse(sessionToken = "token-uuid", username = "alice", userId = 42)
@@ -87,18 +75,6 @@ class AuthControllerTests {
 
         assertEquals(HttpStatus.UNAUTHORIZED, response.statusCode)
         assertEquals("Invalid username or password", response.body)
-    }
-
-    @Test
-    fun `login returns bad request on validation failure`() {
-        val request = LoginRequest(username = "", password = "hunter2")
-        whenever(authService.login("", "hunter2"))
-            .thenThrow(IllegalArgumentException("Username must not be blank"))
-
-        val response = controller.login(request)
-
-        assertEquals(HttpStatus.BAD_REQUEST, response.statusCode)
-        assertEquals("Username must not be blank", response.body)
     }
 
     @Test

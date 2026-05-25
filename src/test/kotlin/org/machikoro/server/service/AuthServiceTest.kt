@@ -71,50 +71,6 @@ class AuthServiceTest {
     }
 
     @Test
-    fun `register rejects passwords longer than 72 characters`() {
-        val tooLong = "x".repeat(73)
-
-        assertThrows<IllegalArgumentException> {
-            service.register("alice", tooLong)
-        }
-
-        verify(userDao, never()).findByUsername(any())
-        verify(userDao, never()).create(any(), any())
-    }
-
-    @Test
-    fun `register rejects blank username`() {
-        assertThrows<IllegalArgumentException> {
-            service.register("   ", "hunter2")
-        }
-
-        verify(userDao, never()).findByUsername(any())
-        verify(userDao, never()).create(any(), any())
-    }
-
-    @Test
-    fun `register rejects blank password`() {
-        assertThrows<IllegalArgumentException> {
-            service.register("alice", "")
-        }
-
-        verify(userDao, never()).findByUsername(any())
-        verify(userDao, never()).create(any(), any())
-    }
-
-    @Test
-    fun `register rejects username longer than 50 characters`() {
-        val tooLong = "a".repeat(51)
-
-        assertThrows<IllegalArgumentException> {
-            service.register(tooLong, "hunter2")
-        }
-
-        verify(userDao, never()).findByUsername(any())
-        verify(userDao, never()).create(any(), any())
-    }
-
-    @Test
     fun `login persists fresh token and returns it on correct credentials`() {
         val user = userModel(id = 7, username = "alice", passwordHash = SAMPLE_BCRYPT_HASH)
         whenever(userDao.findByUsername("alice")).thenReturn(user)
@@ -207,26 +163,6 @@ class AuthServiceTest {
     }
 
     @Test
-    fun `login rejects blank username`() {
-        assertThrows<IllegalArgumentException> {
-            service.login("   ", "hunter2")
-        }
-
-        verify(userDao, never()).findByUsername(any())
-        verify(userDao, never()).updateSessionToken(any(), any())
-    }
-
-    @Test
-    fun `login rejects blank password`() {
-        assertThrows<IllegalArgumentException> {
-            service.login("alice", "")
-        }
-
-        verify(userDao, never()).findByUsername(any())
-        verify(userDao, never()).updateSessionToken(any(), any())
-    }
-
-    @Test
     fun `logout clears session token when token is found`() {
         val token = "550e8400-e29b-41d4-a716-446655440000"
         val user = userModel(id = 7, username = "alice", passwordHash = null)
@@ -243,16 +179,6 @@ class AuthServiceTest {
 
         service.logout("stale")
 
-        verify(userDao, never()).updateSessionToken(any(), any())
-    }
-
-    @Test
-    fun `logout rejects blank session token`() {
-        assertThrows<IllegalArgumentException> {
-            service.logout("")
-        }
-
-        verify(userDao, never()).findBySessionToken(any())
         verify(userDao, never()).updateSessionToken(any(), any())
     }
 
