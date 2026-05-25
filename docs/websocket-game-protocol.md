@@ -81,6 +81,29 @@ Core game message types:
 
 Lobby-specific message types include `LOBBY_CREATED`, `LOBBY_JOINED`, `LOBBY_ROSTER`, `LOBBY_LEFT`, and `HOST_LEFT`.
 
+## Purchase Rejections
+
+When `/app/game.purchase` is rejected after authorization succeeds, the server broadcasts an `ERROR` message on `/topic/game/{gameId}`. Clients with a pending shop action must consume `payload.event = "PURCHASE_FAILED"` as a failed purchase and clear their pending state.
+
+For example, buying the same purple establishment twice produces:
+
+```json
+{
+  "type": "ERROR",
+  "sender": "server",
+  "payload": {
+    "event": "PURCHASE_FAILED",
+    "code": "DUPLICATE_PURPLE_ESTABLISHMENT",
+    "message": "Player already owns purple establishment STADIUM",
+    "purchaseType": "ESTABLISHMENT",
+    "cardType": "STADIUM"
+  },
+  "gameId": 42
+}
+```
+
+For rejected landmark purchases the payload uses `landmarkType` instead of `cardType`.
+
 ## Two-Player Synchronization Flow
 
 1. Player A and Player B connect to `/ws` or `/ws-sockjs` with `Authorization: Bearer <sessionToken>`.
