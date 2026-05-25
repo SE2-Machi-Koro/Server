@@ -18,6 +18,7 @@ import org.machikoro.server.dto.EndTurnOutcome
 import org.machikoro.server.dto.GameStateDto
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.PurchaseType
+import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.service.GamePhaseService
 import org.machikoro.server.service.GameStateGuard
@@ -28,6 +29,7 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.web.server.LocalServerPort
 import org.springframework.messaging.converter.MappingJackson2MessageConverter
+import org.springframework.messaging.simp.SimpMessagingTemplate
 import org.springframework.messaging.simp.stomp.StompFrameHandler
 import org.springframework.messaging.simp.stomp.StompHeaders
 import org.springframework.messaging.simp.stomp.StompSession
@@ -60,7 +62,8 @@ import java.util.concurrent.TimeUnit
 class GameWebSocketBroadcastIntegrationTest {
     private companion object {
         private const val MESSAGE_TIMEOUT_SECONDS = 20L
-        private const val BROKER_SUBSCRIPTION_WAIT_MILLIS = 1_000L
+        private const val BROKER_SUBSCRIPTION_TIMEOUT_SECONDS = 10L
+        private const val BROKER_SUBSCRIPTION_PROBE_WAIT_MILLIS = 250L
     }
 
     @LocalServerPort
@@ -68,6 +71,9 @@ class GameWebSocketBroadcastIntegrationTest {
 
     @Autowired
     private lateinit var mapper: ObjectMapper
+
+    @Autowired
+    private lateinit var messagingTemplate: SimpMessagingTemplate
 
     private val activeSessions = mutableListOf<StompSession>()
 
@@ -115,9 +121,10 @@ class GameWebSocketBroadcastIntegrationTest {
 
         val hostGameQueue = LinkedBlockingQueue<JsonNode>()
         val guestGameQueue = LinkedBlockingQueue<JsonNode>()
-        hostSession.subscribe("/topic/game/$gameId", queueHandler(hostGameQueue))
-        guestSession.subscribe("/topic/game/$gameId", queueHandler(guestGameQueue))
-        waitForBrokerSubscription()
+        val gameTopic = "/topic/game/$gameId"
+        hostSession.subscribe(gameTopic, queueHandler(hostGameQueue))
+        guestSession.subscribe(gameTopic, queueHandler(guestGameQueue))
+        waitForBrokerSubscriptions(gameTopic, hostGameQueue, guestGameQueue)
 
         sendJson(
             hostSession,
@@ -189,9 +196,10 @@ class GameWebSocketBroadcastIntegrationTest {
         val guestSession = connect(guest.sessionToken)
         val hostGameQueue = LinkedBlockingQueue<JsonNode>()
         val guestGameQueue = LinkedBlockingQueue<JsonNode>()
-        hostSession.subscribe("/topic/game/$gameId", queueHandler(hostGameQueue))
-        guestSession.subscribe("/topic/game/$gameId", queueHandler(guestGameQueue))
-        waitForBrokerSubscription()
+        val gameTopic = "/topic/game/$gameId"
+        hostSession.subscribe(gameTopic, queueHandler(hostGameQueue))
+        guestSession.subscribe(gameTopic, queueHandler(guestGameQueue))
+        waitForBrokerSubscriptions(gameTopic, hostGameQueue, guestGameQueue)
 
         sendJson(
             hostSession,
@@ -289,7 +297,9 @@ class GameWebSocketBroadcastIntegrationTest {
                 object : StompSessionHandlerAdapter() {},
             )
             .get(10, TimeUnit.SECONDS)
-            .also(activeSessions::add)
+            .also { session ->
+                activeSessions.add(session)
+            }
     }
 
     private fun stompClient(): WebSocketStompClient =
@@ -307,6 +317,51 @@ class GameWebSocketBroadcastIntegrationTest {
                 queue.offer(payload as JsonNode)
             }
         }
+
+    private fun waitForBrokerSubscriptions(destination: String, vararg queues: BlockingQueue<JsonNode>) {
+        val ready = BooleanArray(queues.size)
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(BROKER_SUBSCRIPTION_TIMEOUT_SECONDS)
+
+        while (System.nanoTime() < deadline) {
+            val probeId = UUID.randomUUID().toString()
+            messagingTemplate.convertAndSend(
+                destination,
+                WebSocketMessage(
+                    type = MessageType.CHAT,
+                    sender = "test",
+                    payload = mapOf("event" to "SUBSCRIPTION_READY", "probeId" to probeId),
+                ),
+            )
+
+            queues.forEachIndexed { index, queue ->
+                if (drainSubscriptionProbes(queue, probeId)) {
+                    ready[index] = true
+                }
+            }
+
+            if (ready.all { it }) {
+                return
+            }
+        }
+
+        error("Timed out waiting for broker subscriptions to $destination; ready=${ready.toList()}")
+    }
+
+    private fun drainSubscriptionProbes(queue: BlockingQueue<JsonNode>, probeId: String): Boolean {
+        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(BROKER_SUBSCRIPTION_PROBE_WAIT_MILLIS)
+        var receivedExpectedProbe = false
+        while (System.nanoTime() < deadline) {
+            val remaining = deadline - System.nanoTime()
+            val message = queue.poll(remaining, TimeUnit.NANOSECONDS) ?: return receivedExpectedProbe
+            if (
+                message.path("type").asText() == MessageType.CHAT.name &&
+                message.path("payload").path("probeId").asText() == probeId
+            ) {
+                receivedExpectedProbe = true
+            }
+        }
+        return receivedExpectedProbe
+    }
 
     private fun sendJson(session: StompSession, destination: String, value: Any) {
         val headers = StompHeaders().apply {
@@ -389,13 +444,6 @@ class GameWebSocketBroadcastIntegrationTest {
         } else {
             guestSession
         }
-
-    private fun waitForBrokerSubscription() {
-        // The simple broker registers STOMP subscriptions asynchronously; CI
-        // runners can otherwise publish the first game broadcast before both
-        // test sessions are fully attached to the topic.
-        TimeUnit.MILLISECONDS.sleep(BROKER_SUBSCRIPTION_WAIT_MILLIS)
-    }
 
     private data class LoginResult(
         val sessionToken: String,
