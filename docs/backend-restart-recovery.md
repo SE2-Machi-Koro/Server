@@ -32,7 +32,8 @@ This document outlines the procedure to verify that an in-progress Machi Koro ga
 
 6. **Reconnect Clients:**
    - After the backend is back online, refresh both clients (or trigger a WS reconnect).
-   - The reconnect flow invokes `/app/game.sync` and retrieves the `GameStateDto` snapshot.
+   - Subscribe each reconnecting client to `/topic/game/{gameId}`, `/user/queue/game-sync`, and `/user/queue/errors`.
+   - The reconnect flow invokes `/app/game.sync` and retrieves the private `SYNC` response containing the `GameStateDto` snapshot.
 
 7. **Verify Game State:**
    Ensure that the state is identical to pre-restart. The following fields must match exactly:
@@ -50,6 +51,7 @@ Automated coverage:
 - `scripts/backend-restart-recovery-smoke.sh` builds and starts the backend with Docker Compose, creates two authenticated STOMP clients, starts a game, buys an establishment, builds a landmark, restarts the `backend` container, reconnects with the same session token, and re-issues `/app/game.sync`.
 - `SpringContextRestartRecoveryIntegrationTest` creates an in-progress game in a Testcontainers-backed Postgres database, mutates persisted fields, forces a Spring application context restart, and then re-enters the `/app/game.sync` controller path.
 - The recovered `SYNC` payload verifies the same game id, `IN_PROGRESS` status, `BUY_OR_BUILD` phase, dice roll, round number, player coins, owned cards, built landmark, marketplace quantities, active player, and turn order.
+- The broader reviewer flow is documented in [backend-networking-demo-checklist.md](backend-networking-demo-checklist.md).
 
 Last local verification:
 

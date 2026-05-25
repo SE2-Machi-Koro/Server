@@ -294,6 +294,7 @@ For detailed API documentation, the server exposes both standard REST and asynch
 - **WebSocket Endpoint:** `ws://localhost:8080/ws`
 - **WebSocket Game Protocol:** Client subscriptions, send destinations, message envelopes, and reconnect synchronization are documented in [docs/websocket-game-protocol.md](docs/websocket-game-protocol.md).
 - **Backend Restart Recovery:** The manual restart procedure and `/app/game.sync` verification checklist are documented in [docs/backend-restart-recovery.md](docs/backend-restart-recovery.md).
+- **Backend Networking Demo Checklist:** Reviewer/demo validation for two-player sync, reconnect, restart recovery, health, and deployment is documented in [docs/backend-networking-demo-checklist.md](docs/backend-networking-demo-checklist.md).
 
 Run the backend restart recovery smoke test with:
 
@@ -315,9 +316,10 @@ GET http://localhost:8080/actuator/health
 
 ## Deployment
 
-The server is deployed to the AAU shared infrastructure (`se2-demo.aau.at`, group 6) via
-[doco-cd](https://github.com/kimdre/doco-cd), which reconciles the running stack from this
-repository's `compose.yaml` on every push to `main`.
+The server is deployed to the AAU shared infrastructure (`se2-demo.aau.at`, group 6) by the
+`deploy` job in [.github/workflows/docker-publish.yml](.github/workflows/docker-publish.yml).
+The workflow publishes the backend image to GHCR, then SSHes into the group 6 server and refreshes
+the `backend` service from `~/machi-koro-server-deploy`.
 
 ### Pipeline overview
 
@@ -328,8 +330,8 @@ flowchart LR
     Action --> Docker[Build Multi-Arch Docker Image]
     Docker --> GHCR[(GHCR Image Registry)]
     
-    GHCR --> DocoCD(doco-cd on AAU Server)
-    DocoCD -->|Pulls Image| Production[Docker Compose Stack]
+    GHCR --> SSHDeploy[GitHub Actions SSH deploy]
+    SSHDeploy -->|docker compose pull backend| Production[Docker Compose Stack on AAU]
     Production --> Backend[Machi Koro Backend]
     Production --> DB[(PostgreSQL)]
 ```
@@ -348,11 +350,14 @@ flowchart LR
    - `latest` (only on `main`)
    - `sha-<short-commit>` (every build, used for rollback)
    - `v*` (when a Git tag matching `v*` is pushed)
-5. doco-cd on the AAU server detects the change, pulls the new image (`pull_policy: always`),
-   and restarts the `backend` service defined in [compose.yaml](compose.yaml), when the
-   course deployment config contains a stack entry for this repository.
+5. The `deploy` job connects to the AAU server over SSH on port `53200`, enters
+   `~/machi-koro-server-deploy`, pulls the updated backend image, and restarts only the
+   `backend` service with `docker compose up -d --no-deps backend`.
 6. The Postgres service runs alongside the backend on the internal compose network and is
    **not exposed to the host** — only the backend is published on `PUBLIC_PORT` (`53210`).
+7. WebSocket clients connect through the same public backend port (`ws://se2-demo.aau.at:53210/ws`)
+   and subscribe to `/topic/game/{gameId}` for game-state broadcasts. `/topic/public` is reserved
+   for global chat only.
 
 ### Live endpoints
 
@@ -368,14 +373,13 @@ flowchart LR
 ssh grp-6@se2-demo.aau.at -p 53200
 ```
 
-The doco-cd working copy of this repo lives at:
+The active deployment directory used by the GitHub Actions SSH deploy job is:
 
 ```
-/var/lib/docker/volumes/doco-cd-setup_data/_data/github.com/SE2-Machi-Koro/Server/
+~/machi-koro-server-deploy
 ```
 
-This path is owned by Docker and may not be directly readable from the `grp-6` shell.
-If doco-cd has not created a group 6 stack yet, deploy from the group home directory:
+If the directory does not exist yet, initialize it from the group home directory:
 
 ```bash
 mkdir -p /home/grp-6/machi-koro-server-deploy
@@ -407,10 +411,9 @@ docker compose up -d
 docker compose ps
 ```
 
-This manual fallback does not auto-restart on every push to `main`. After a new image is
-published to GHCR, refresh the running stack from `/home/grp-6/machi-koro-server-deploy`
-with the same `docker compose pull && docker compose up -d` commands, or add a group 6
-stack entry to the course doco-cd config so reconciliation is automatic.
+The GitHub Actions deploy job refreshes the backend automatically on pushes to `main` when
+`DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, and the production `.env` are configured.
+For manual recovery, run the same compose commands from `/home/grp-6/machi-koro-server-deploy`.
 
 The deployment is healthy when `docker compose ps` shows both `machikoro-db` and
 `machikoro-server` as healthy and the external health check returns `status: UP`:
@@ -423,7 +426,7 @@ curl http://se2-demo.aau.at:53210/actuator/health
 
 To roll back to a previous image, edit the production `.env` on the server and set
 `IMAGE_TAG=sha-<short-commit>` (or any other tag published to GHCR), then trigger a
-manual `docker compose up -d` or a doco-cd reconcile. The `compose.yaml` resolves the image as
+manual `docker compose up -d --no-deps backend` or rerun the deploy workflow. The `compose.yaml` resolves the image as
 `ghcr.io/se2-machi-koro/server:${IMAGE_TAG:-latest}`.
 
 ## Frontend dependencies (Subresource Integrity)
