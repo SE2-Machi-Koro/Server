@@ -2,11 +2,13 @@ package org.machikoro.server.controller
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.machikoro.server.auth.UserPrincipal
 import org.machikoro.server.dao.UserDao
+import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.GameModel
@@ -15,10 +17,13 @@ import org.machikoro.server.domain.models.UserModel
 import org.machikoro.server.dto.EndTurnOutcome
 import org.machikoro.server.dto.GameStateDto
 import org.machikoro.server.dto.MessageType
+import org.machikoro.server.dto.PurchaseType
+import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.service.GamePhaseService
 import org.machikoro.server.service.GameStateGuard
 import org.machikoro.server.service.GameSyncService
 import org.machikoro.server.service.LobbyService
+import org.machikoro.server.service.PurchaseService
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.web.server.LocalServerPort
@@ -53,12 +58,18 @@ import java.util.concurrent.TimeUnit
 )
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class GameWebSocketBroadcastIntegrationTest {
+    private companion object {
+        private const val MESSAGE_TIMEOUT_SECONDS = 20L
+        private const val BROKER_SUBSCRIPTION_WAIT_MILLIS = 1_000L
+    }
 
     @LocalServerPort
     private var port: Int = 0
 
     @Autowired
     private lateinit var mapper: ObjectMapper
+
+    private val activeSessions = mutableListOf<StompSession>()
 
     @MockitoBean
     private lateinit var userDao: UserDao
@@ -74,6 +85,15 @@ class GameWebSocketBroadcastIntegrationTest {
 
     @MockitoBean
     private lateinit var gameSyncService: GameSyncService
+
+    @MockitoBean
+    private lateinit var purchaseService: PurchaseService
+
+    @AfterEach
+    fun disconnectSessions() {
+        activeSessions.filter { it.isConnected }.forEach(StompSession::disconnect)
+        activeSessions.clear()
+    }
 
     @Test
     fun `two active players receive the same scoped game broadcasts`() {
@@ -148,6 +168,44 @@ class GameWebSocketBroadcastIntegrationTest {
         val secondActiveSession = sessionFor(secondActiveUserId, host, hostSession, guestSession)
         sendJson(secondActiveSession, "/app/game.advancePhase", mapOf("gameId" to gameId))
         assertSameGameActionBroadcast(hostGameQueue, guestGameQueue, "PHASE_ADVANCED")
+    }
+
+    @Test
+    fun `purchase rejection is broadcast as client consumable game topic error`() {
+        val suffix = UUID.randomUUID().toString().replace("-", "").take(10)
+        val host = LoginResult(sessionToken = "host-token-$suffix", username = "ws_host_$suffix", userId = 101)
+        val guest = LoginResult(sessionToken = "guest-token-$suffix", username = "ws_guest_$suffix", userId = 202)
+        val gameId = 303
+        configureDomainStubs(host, guest, gameId, "ABC$suffix".take(8).uppercase())
+        whenever(purchaseService.purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.STADIUM, null))
+            .thenThrow(
+                CustomWebSocketException(
+                    "DUPLICATE_PURPLE_ESTABLISHMENT",
+                    "Player already owns purple establishment STADIUM",
+                )
+            )
+
+        val hostSession = connect(host.sessionToken)
+        val guestSession = connect(guest.sessionToken)
+        val hostGameQueue = LinkedBlockingQueue<JsonNode>()
+        val guestGameQueue = LinkedBlockingQueue<JsonNode>()
+        hostSession.subscribe("/topic/game/$gameId", queueHandler(hostGameQueue))
+        guestSession.subscribe("/topic/game/$gameId", queueHandler(guestGameQueue))
+        waitForBrokerSubscription()
+
+        sendJson(
+            hostSession,
+            "/app/game.purchase",
+            mapOf(
+                "gameId" to gameId,
+                "purchaseType" to PurchaseType.ESTABLISHMENT.name,
+                "cardType" to CardType.STADIUM.name,
+            ),
+        )
+
+        val (hostMessage, guestMessage) = assertSameGameBroadcast(hostGameQueue, guestGameQueue, MessageType.ERROR)
+        assertPurchaseFailurePayload(hostMessage)
+        assertPurchaseFailurePayload(guestMessage)
     }
 
     private fun configureDomainStubs(
@@ -231,6 +289,7 @@ class GameWebSocketBroadcastIntegrationTest {
                 object : StompSessionHandlerAdapter() {},
             )
             .get(10, TimeUnit.SECONDS)
+            .also(activeSessions::add)
     }
 
     private fun stompClient(): WebSocketStompClient =
@@ -295,8 +354,18 @@ class GameWebSocketBroadcastIntegrationTest {
         )
     }
 
+    private fun assertPurchaseFailurePayload(message: JsonNode) {
+        val payload = message["payload"]
+        assertEquals("server", message["sender"].asText())
+        assertEquals("PURCHASE_FAILED", payload["event"].asText())
+        assertEquals("DUPLICATE_PURPLE_ESTABLISHMENT", payload["code"].asText())
+        assertEquals("Player already owns purple establishment STADIUM", payload["message"].asText())
+        assertEquals("ESTABLISHMENT", payload["purchaseType"].asText())
+        assertEquals("STADIUM", payload["cardType"].asText())
+    }
+
     private fun takeMessage(queue: BlockingQueue<JsonNode>, type: MessageType): JsonNode {
-        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(MESSAGE_TIMEOUT_SECONDS)
         val seen = mutableListOf<String>()
         while (System.nanoTime() < deadline) {
             val remaining = deadline - System.nanoTime()
@@ -322,7 +391,10 @@ class GameWebSocketBroadcastIntegrationTest {
         }
 
     private fun waitForBrokerSubscription() {
-        TimeUnit.MILLISECONDS.sleep(250)
+        // The simple broker registers STOMP subscriptions asynchronously; CI
+        // runners can otherwise publish the first game broadcast before both
+        // test sessions are fully attached to the topic.
+        TimeUnit.MILLISECONDS.sleep(BROKER_SUBSCRIPTION_WAIT_MILLIS)
     }
 
     private data class LoginResult(

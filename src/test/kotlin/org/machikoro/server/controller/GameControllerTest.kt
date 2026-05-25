@@ -438,6 +438,35 @@ class GameControllerTest {
     }
 
     @Test
+    fun `purchase broadcasts handled service rejection as ERROR on game topic`() {
+        val gameId = 42
+        whenever(purchaseService.purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.STADIUM, null))
+            .thenThrow(
+                CustomWebSocketException(
+                    "DUPLICATE_PURPLE_ESTABLISHMENT",
+                    "Player already owns purple establishment STADIUM",
+                )
+            )
+
+        controller.purchase(PurchaseRequest(gameId, PurchaseType.ESTABLISHMENT, cardType = CardType.STADIUM), authedAccessor())
+
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+
+        val message = captor.firstValue
+        assertEquals(MessageType.ERROR, message.type)
+        assertEquals("server", message.sender)
+        assertEquals(gameId, message.gameId)
+        @Suppress("UNCHECKED_CAST")
+        val payload = message.payload as Map<String, Any?>
+        assertEquals("PURCHASE_FAILED", payload["event"])
+        assertEquals("DUPLICATE_PURPLE_ESTABLISHMENT", payload["code"])
+        assertEquals("Player already owns purple establishment STADIUM", payload["message"])
+        assertEquals("ESTABLISHMENT", payload["purchaseType"])
+        assertEquals("STADIUM", payload["cardType"])
+    }
+
+    @Test
     fun `purchase propagates NOT_YOUR_TURN and does not call service`() {
         val gameId = 42
         whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice))

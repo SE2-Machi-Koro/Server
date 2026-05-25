@@ -8,6 +8,7 @@ import org.machikoro.server.dao.LandmarkDao
 import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
+import org.machikoro.server.domain.enums.CardColor
 import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.LandmarkType
 import org.machikoro.server.domain.enums.TurnPhase
@@ -147,6 +148,14 @@ class PurchaseService(
             .firstOrNull { it.cardType == cardType }
             ?.quantity
             ?: 0
+
+        // Purple establishments are unique per player; other colors may stack.
+        if (card.color == CardColor.PURPLE && currentQuantity > 0) {
+            throw CustomWebSocketException(
+                "DUPLICATE_PURPLE_ESTABLISHMENT",
+                "Player already owns purple establishment $cardType"
+            )
+        }
 
         playerDao.updateCoins(
             activePlayer.id,

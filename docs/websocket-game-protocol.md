@@ -47,7 +47,7 @@ Game clients must not use `/topic/public` for game state. All game-state broadca
 | `/app/game.rollDice` | `RollDiceRequest` | `ROLL_DICE` and a `GAME_ACTION` snapshot to `/topic/game/{gameId}` |
 | `/app/game.resolveEffects` | `ResolveEffectsRequest` | `GAME_ACTION` income/effects result to `/topic/game/{gameId}` |
 | `/app/game.advancePhase` | `AdvancePhaseRequest` | `GAME_ACTION` phase snapshot to `/topic/game/{gameId}` |
-| `/app/game.purchase` | `PurchaseRequest` | `GAME_ACTION` purchase snapshot to `/topic/game/{gameId}` |
+| `/app/game.purchase` | `PurchaseRequest` | `GAME_ACTION` purchase snapshot or `ERROR` purchase failure to `/topic/game/{gameId}` |
 | `/app/game.endTurn` | `EndTurnRequest` | `GAME_ACTION` next-turn snapshot or `GAME_END` to `/topic/game/{gameId}` |
 | `/app/game.sync` | `SyncGameRequest` | `SYNC` to `/queue/game-sync-user{sessionId}` |
 | `/app/chat.send` | `WebSocketMessage` | Chat message to `/topic/public` |
@@ -80,6 +80,29 @@ Core game message types:
 | `ERROR` | The command failed. The payload includes an event or error code and a message when available. |
 
 Lobby-specific message types include `LOBBY_CREATED`, `LOBBY_JOINED`, `LOBBY_ROSTER`, `LOBBY_LEFT`, and `HOST_LEFT`.
+
+## Purchase Rejections
+
+When `/app/game.purchase` is rejected after authorization succeeds, the server broadcasts an `ERROR` message on `/topic/game/{gameId}`. Clients with a pending shop action must consume `payload.event = "PURCHASE_FAILED"` as a failed purchase and clear their pending state.
+
+For example, buying the same purple establishment twice produces:
+
+```json
+{
+  "type": "ERROR",
+  "sender": "server",
+  "payload": {
+    "event": "PURCHASE_FAILED",
+    "code": "DUPLICATE_PURPLE_ESTABLISHMENT",
+    "message": "Player already owns purple establishment STADIUM",
+    "purchaseType": "ESTABLISHMENT",
+    "cardType": "STADIUM"
+  },
+  "gameId": 42
+}
+```
+
+For rejected landmark purchases the payload uses `landmarkType` instead of `cardType`.
 
 ## Two-Player Synchronization Flow
 

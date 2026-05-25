@@ -137,6 +137,26 @@ class PurchaseServiceIntegrationTest : AbstractDBSetup() {
         assertEquals(5, supply.quantityAvailable)
     }
 
+    @Test
+    fun `duplicate non-purple establishment purchase increases owned quantity`() {
+        purchaseService.purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.BAKERY, null)
+
+        gameDao.advanceTurn(gameId, 1, 1)
+        gameDao.advanceTurn(gameId, 0, 2)
+        gameDao.updateTurnPhase(gameId, TurnPhase.BUY_OR_BUILD)
+
+        purchaseService.purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.BAKERY, null)
+
+        val player = playerDao.findById(activePlayerId)!!
+        val ownedCard = playerCardDao.findByPlayerId(activePlayerId)
+            .first { it.cardType == CardType.BAKERY }
+        val supply = gameMarketplaceDao.findByGameIdAndType(gameId, CardType.BAKERY)!!
+
+        assertEquals(8, player.coins)
+        assertEquals(2, ownedCard.quantity)
+        assertEquals(4, supply.quantityAvailable)
+    }
+
     // ── Happy-path: landmarks ─────────────────────────────────────────────────
 
     @Test
@@ -347,6 +367,43 @@ class PurchaseServiceIntegrationTest : AbstractDBSetup() {
 
         assertEquals("LANDMARK_ALREADY_BUILT", ex.errorCode)
         assertEquals(before, snapshot())
+    }
+
+    @Test
+    fun `buying duplicate purple establishment is rejected without mutating state`() {
+        playerDao.updateCoins(activePlayerId, 20)
+        purchaseService.purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.STADIUM, null)
+
+        gameDao.advanceTurn(gameId, 1, 1)
+        gameDao.advanceTurn(gameId, 0, 2)
+        gameDao.updateTurnPhase(gameId, TurnPhase.BUY_OR_BUILD)
+
+        val before = snapshot()
+
+        val ex = assertThrows<CustomWebSocketException> {
+            purchaseService.purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.STADIUM, null)
+        }
+
+        assertEquals("DUPLICATE_PURPLE_ESTABLISHMENT", ex.errorCode)
+        assertEquals(before, snapshot())
+    }
+
+    @Test
+    fun `buying different purple establishments is allowed`() {
+        playerDao.updateCoins(activePlayerId, 20)
+        purchaseService.purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.STADIUM, null)
+
+        gameDao.advanceTurn(gameId, 1, 1)
+        gameDao.advanceTurn(gameId, 0, 2)
+        gameDao.updateTurnPhase(gameId, TurnPhase.BUY_OR_BUILD)
+
+        purchaseService.purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.TV_STATION, null)
+
+        val ownedCards = playerCardDao.findByPlayerId(activePlayerId)
+
+        assertEquals(7, playerDao.findById(activePlayerId)!!.coins)
+        assertEquals(1, ownedCards.first { it.cardType == CardType.STADIUM }.quantity)
+        assertEquals(1, ownedCards.first { it.cardType == CardType.TV_STATION }.quantity)
     }
 
     // ── Guard: malformed requests ─────────────────────────────────────────────
