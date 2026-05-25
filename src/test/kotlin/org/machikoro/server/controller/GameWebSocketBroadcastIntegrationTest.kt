@@ -2,6 +2,7 @@ package org.machikoro.server.controller
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -68,6 +69,8 @@ class GameWebSocketBroadcastIntegrationTest {
     @Autowired
     private lateinit var mapper: ObjectMapper
 
+    private val activeSessions = mutableListOf<StompSession>()
+
     @MockitoBean
     private lateinit var userDao: UserDao
 
@@ -85,6 +88,12 @@ class GameWebSocketBroadcastIntegrationTest {
 
     @MockitoBean
     private lateinit var purchaseService: PurchaseService
+
+    @AfterEach
+    fun disconnectSessions() {
+        activeSessions.filter { it.isConnected }.forEach(StompSession::disconnect)
+        activeSessions.clear()
+    }
 
     @Test
     fun `two active players receive the same scoped game broadcasts`() {
@@ -280,6 +289,7 @@ class GameWebSocketBroadcastIntegrationTest {
                 object : StompSessionHandlerAdapter() {},
             )
             .get(10, TimeUnit.SECONDS)
+            .also(activeSessions::add)
     }
 
     private fun stompClient(): WebSocketStompClient =
