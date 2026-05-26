@@ -18,13 +18,16 @@ import org.machikoro.server.dto.EndTurnOutcome
 import org.machikoro.server.dto.GameStateDto
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.PurchaseType
+import org.machikoro.server.dto.RollDiceResponse
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.CustomWebSocketException
+import org.machikoro.server.service.DiceService
 import org.machikoro.server.service.GamePhaseService
 import org.machikoro.server.service.GameStateGuard
 import org.machikoro.server.service.GameSyncService
 import org.machikoro.server.service.LobbyService
 import org.machikoro.server.service.PurchaseService
+import org.machikoro.server.service.interfaces.EarningsService
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.web.server.LocalServerPort
@@ -95,6 +98,12 @@ class GameWebSocketBroadcastIntegrationTest {
     @MockitoBean
     private lateinit var purchaseService: PurchaseService
 
+    @MockitoBean
+    private lateinit var diceService: DiceService
+
+    @MockitoBean
+    private lateinit var earningsService: EarningsService
+
     @AfterEach
     fun disconnectSessions() {
         activeSessions.filter { it.isConnected }.forEach(StompSession::disconnect)
@@ -154,11 +163,12 @@ class GameWebSocketBroadcastIntegrationTest {
 
         val firstActiveUserId = startedPair.first["payload"]["activePlayerId"].asInt()
         val firstActiveSession = sessionFor(firstActiveUserId, host, hostSession, guestSession)
-        sendJson(firstActiveSession, "/app/game.advancePhase", mapOf("gameId" to gameId))
-        assertSameGameActionBroadcast(hostGameQueue, guestGameQueue, "PHASE_ADVANCED")
+        sendJson(firstActiveSession, "/app/game.rollDice", mapOf("gameId" to gameId))
+        assertSameGameBroadcast(hostGameQueue, guestGameQueue, MessageType.ROLL_DICE)
+        assertSameGameActionBroadcast(hostGameQueue, guestGameQueue, "DICE_ROLLED")
 
-        sendJson(firstActiveSession, "/app/game.advancePhase", mapOf("gameId" to gameId))
-        assertSameGameActionBroadcast(hostGameQueue, guestGameQueue, "PHASE_ADVANCED")
+        sendJson(firstActiveSession, "/app/game.resolveEffects", mapOf("gameId" to gameId))
+        assertSameGameActionBroadcast(hostGameQueue, guestGameQueue, "EFFECTS_RESOLVED")
 
         sendJson(firstActiveSession, "/app/game.endTurn", mapOf("gameId" to gameId))
         val turnEnded = assertSameGameActionBroadcast(hostGameQueue, guestGameQueue, "TURN_ENDED")
@@ -173,8 +183,9 @@ class GameWebSocketBroadcastIntegrationTest {
         )
 
         val secondActiveSession = sessionFor(secondActiveUserId, host, hostSession, guestSession)
-        sendJson(secondActiveSession, "/app/game.advancePhase", mapOf("gameId" to gameId))
-        assertSameGameActionBroadcast(hostGameQueue, guestGameQueue, "PHASE_ADVANCED")
+        sendJson(secondActiveSession, "/app/game.rollDice", mapOf("gameId" to gameId))
+        assertSameGameBroadcast(hostGameQueue, guestGameQueue, MessageType.ROLL_DICE)
+        assertSameGameActionBroadcast(hostGameQueue, guestGameQueue, "DICE_ROLLED")
     }
 
     @Test
@@ -267,8 +278,8 @@ class GameWebSocketBroadcastIntegrationTest {
         whenever(lobbyService.joinLobby(lobbyCode, guest.userId)).thenReturn(guestPlayer)
         whenever(lobbyService.getLobbyRoster(gameId)).thenReturn(emptyList())
         whenever(lobbyService.startGame(gameId, host.userId)).thenReturn(startedState)
-        whenever(gamePhaseService.advancePhase(gameId)).thenReturn(TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD)
         whenever(gamePhaseService.endTurn(gameId)).thenReturn(EndTurnOutcome.Continue(TurnPhase.ROLL_DICE))
+        whenever(diceService.rollDice(any(), any())).thenReturn(RollDiceResponse(dice = listOf(4), total = 4))
         whenever(gameSyncService.buildSnapshot(gameId)).thenReturn(
             resolveEffectsState,
             buyOrBuildState,

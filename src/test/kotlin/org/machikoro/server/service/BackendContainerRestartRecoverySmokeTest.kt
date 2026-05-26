@@ -187,9 +187,9 @@ class BackendContainerRestartRecoverySmokeTest {
         gameId: Int,
         queue: BlockingQueue<JsonNode>,
     ) {
-        sendJson(session, "/app/game.advancePhase", mapOf("gameId" to gameId))
-        takeGameAction(queue) { it.path("turnPhase").asText() == TurnPhase.RESOLVE_EFFECTS.name }
-        sendJson(session, "/app/game.advancePhase", mapOf("gameId" to gameId))
+        sendJson(session, "/app/game.rollDice", mapOf("gameId" to gameId))
+        takeGameAction(queue) { it.path("event").asText() == "DICE_ROLLED" }
+        sendJson(session, "/app/game.resolveEffects", mapOf("gameId" to gameId))
         takeGameAction(queue) { it.path("turnPhase").asText() == TurnPhase.BUY_OR_BUILD.name }
     }
 

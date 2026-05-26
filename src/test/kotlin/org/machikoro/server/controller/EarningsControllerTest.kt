@@ -108,6 +108,21 @@ class EarningsControllerTest {
     }
 
     @Test
+    fun `resolveEffects broadcasts domain rejection code for duplicate resolution`() {
+        val request = ResolveEffectsRequest(gameId = 1)
+        doThrow(CustomWebSocketException("EFFECTS_ALREADY_RESOLVED", "Effects have already been resolved for this turn"))
+            .whenever(earningsService).resolveEffects(1)
+
+        controller.resolveEffects(request, authedAccessor())
+
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/1"), captor.capture())
+        val payload = captor.firstValue.payload as Map<*, *>
+        assertEquals("EFFECTS_FAILED", payload["event"])
+        assertEquals("EFFECTS_ALREADY_RESOLVED", payload["code"])
+    }
+
+    @Test
     fun `resolveEffects propagates NOT_YOUR_TURN and does not call service or broadcast`() {
         val request = ResolveEffectsRequest(gameId = 1)
         whenever(gameStateGuard.ensureSenderIsActivePlayer(1, alice))

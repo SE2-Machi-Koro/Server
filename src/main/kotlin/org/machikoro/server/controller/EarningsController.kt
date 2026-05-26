@@ -6,6 +6,7 @@ import org.machikoro.server.auth.requireUserPrincipal
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.ResolveEffectsRequest
 import org.machikoro.server.dto.WebSocketMessage
+import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.service.GameStateGuard
 import org.machikoro.server.service.GameSyncService
 import org.machikoro.server.service.interfaces.EarningsService
@@ -57,6 +58,21 @@ class EarningsController(
                         "turnPhase" to state.game.turnPhase.name,
                         "activePlayerId" to state.activePlayerId,
                         "state" to state,
+                    ),
+                    gameId = request.gameId,
+                )
+            )
+        } catch (e: CustomWebSocketException) {
+            logger.warn("Resolve effects rejected for game {} [{}]: {}", request.gameId, e.errorCode, e.message)
+            messagingTemplate.convertAndSend(
+                gameTopic,
+                WebSocketMessage(
+                    type = MessageType.ERROR,
+                    sender = "server",
+                    payload = mapOf(
+                        "event" to "EFFECTS_FAILED",
+                        "code" to e.errorCode,
+                        "message" to e.message,
                     ),
                     gameId = request.gameId,
                 )

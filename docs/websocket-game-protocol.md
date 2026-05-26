@@ -30,6 +30,7 @@ Clients should subscribe before sending lobby or game commands so they do not mi
 | `/topic/game/{gameId}` | All players in one lobby or game | Lobby membership changes, game start, dice, phase, purchase, effects, game end, and broadcast errors |
 | `/queue/lobby-user{sessionId}` | Single WebSocket session | Lobby creation result, lobby roster after join, and lobby-specific request errors |
 | `/user/queue/game-sync` | Single WebSocket session | Full `SYNC` snapshot for reconnect and explicit state refresh |
+| `/user/queue/errors` | Single WebSocket session | Domain rejections routed privately to the requesting client, including forbidden direct phase advancement |
 | `/topic/public` | Global chat only | Chat and connection announcements from `/app/chat.*` |
 
 `{sessionId}` is the STOMP session id assigned by Spring. Browser clients usually receive it from the STOMP session object after connection. The server sends private lobby replies to `/queue/lobby-user{sessionId}` and sends reconnect sync replies to the resolved broker destination `/queue/game-sync-user{sessionId}`, which clients consume by subscribing to `/user/queue/game-sync`.
@@ -46,7 +47,7 @@ Game clients must not use `/topic/public` for game state. All game-state broadca
 | `/app/game.start` | `StartGameRequest` | `GAME_STARTED` and a `GAME_ACTION` snapshot to `/topic/game/{gameId}` |
 | `/app/game.rollDice` | `RollDiceRequest` | `ROLL_DICE` and a `GAME_ACTION` snapshot to `/topic/game/{gameId}` |
 | `/app/game.resolveEffects` | `ResolveEffectsRequest` | `GAME_ACTION` income/effects result to `/topic/game/{gameId}` |
-| `/app/game.advancePhase` | `AdvancePhaseRequest` | `GAME_ACTION` phase snapshot to `/topic/game/{gameId}` |
+| `/app/game.advancePhase` | `AdvancePhaseRequest` | Private error on `/user/queue/errors` (`DIRECT_PHASE_ADVANCE_FORBIDDEN`); never mutates game state |
 | `/app/game.purchase` | `PurchaseRequest` | `GAME_ACTION` purchase snapshot or `ERROR` purchase failure to `/topic/game/{gameId}` |
 | `/app/game.endTurn` | `EndTurnRequest` | `GAME_ACTION` next-turn snapshot or `GAME_END` to `/topic/game/{gameId}` |
 | `/app/game.sync` | `SyncGameRequest` | `SYNC` to `/queue/game-sync-user{sessionId}` |
@@ -81,6 +82,21 @@ Core game message types:
 
 Lobby-specific message types include `LOBBY_CREATED`, `LOBBY_JOINED`, `LOBBY_ROSTER`, `LOBBY_LEFT`, and `HOST_LEFT`.
 
+## Authoritative Turn Loop
+
+Clients request gameplay actions; they do not choose phases. For an in-progress turn, only the active player's legal request can produce the following transition:
+
+| Current phase | Accepted action | Resulting phase and state |
+| --- | --- | --- |
+| `ROLL_DICE` | `/app/game.rollDice` | Persists exactly one roll and enters `RESOLVE_EFFECTS` |
+| `RESOLVE_EFFECTS` | `/app/game.resolveEffects` | Applies the stored roll exactly once and enters `BUY_OR_BUILD` |
+| `BUY_OR_BUILD` | `/app/game.purchase` | Applies at most one affordable, available purchase; phase remains `BUY_OR_BUILD` |
+| `BUY_OR_BUILD` | `/app/game.endTurn` | Checks for a winner; otherwise changes active player and enters `ROLL_DICE` |
+
+Ending a turn without purchasing is the supported skip action. A continuing next turn clears `lastDiceRoll` and `hasPurchasedThisTurn`. Invalid, duplicated, out-of-order, unaffordable, unavailable, or non-active-player requests do not mutate the stored game state.
+
+Every successful action publishes a server snapshot. Clients must replace local phase, roll, coins, supply, ownership, and active-player state from that snapshot.
+
 ## Purchase Rejections
 
 When `/app/game.purchase` is rejected after authorization succeeds, the server broadcasts an `ERROR` message on `/topic/game/{gameId}`. Clients with a pending shop action must consume `payload.event = "PURCHASE_FAILED"` as a failed purchase and clear their pending state.
@@ -114,7 +130,7 @@ For rejected landmark purchases the payload uses `landmarkType` instead of `card
 6. Player B receives `LOBBY_ROSTER` privately. Both players receive `LOBBY_JOINED` on `/topic/game/{gameId}`.
 7. Player A sends `/app/game.start`.
 8. Both players receive `GAME_STARTED` and the initial `GAME_ACTION` snapshot on `/topic/game/{gameId}`.
-9. During the game, the active player sends dice, effects, phase, purchase, and end-turn commands. Both players consume the resulting `ROLL_DICE`, `GAME_ACTION`, or `GAME_END` messages from `/topic/game/{gameId}` and replace their local state with the included `state` snapshot.
+9. During the game, the active player sends `rollDice`, `resolveEffects`, an optional `purchase`, and `endTurn`. Both players consume the resulting `ROLL_DICE`, `GAME_ACTION`, or `GAME_END` messages from `/topic/game/{gameId}` and replace their local state with the included `state` snapshot.
 
 Clients should treat the server snapshot as authoritative. Local UI state may optimistically display pending actions, but it must reconcile to the latest broadcast payload.
 

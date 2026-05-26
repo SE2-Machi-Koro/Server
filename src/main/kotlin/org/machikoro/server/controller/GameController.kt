@@ -112,7 +112,7 @@ class GameController(
 
             // Immediately broadcast a GAME_ACTION so clients that parse turn
             // metadata from GAME_ACTION frames know whose turn it is without
-            // waiting for the first advancePhase or endTurn call.
+            // waiting for the first turn action.
             messagingTemplate.convertAndSend(
                 gameTopic,
                 WebSocketMessage(
@@ -205,22 +205,21 @@ class GameController(
     }
 
     /**
-     * Advances the current turn phase for a game and broadcasts the resulting
-     * phase to all subscribers of the game topic.
-     *
-     * Message is sent to /app/game.advancePhase and broadcast to /topic/game/{gameId}.
+     * Retained only to provide a stable error to older clients. Turn phases
+     * advance solely as results of rollDice, resolveEffects, and endTurn.
      */
     @MessageMapping("/game.advancePhase")
     @AsyncListener(operation = AsyncOperation(
         channelName = "/game.advancePhase",
-        description = "Advances the current turn phase. Must be sent by the active player.",
+        description = "Rejected compatibility endpoint. Use explicit gameplay actions to advance the turn.",
         payloadType = AdvancePhaseRequest::class,
     ))
     fun advancePhase(@Payload request: AdvancePhaseRequest, headerAccessor: SimpMessageHeaderAccessor) {
         requireActivePlayer(request.gameId, headerAccessor)
-        val newPhase = gamePhaseService.advancePhase(request.gameId)
-        logger.info("Advanced phase for game ${request.gameId} to $newPhase")
-        broadcastPhase(request.gameId, "PHASE_ADVANCED")
+        throw CustomWebSocketException(
+            "DIRECT_PHASE_ADVANCE_FORBIDDEN",
+            "Phase progression is controlled by rollDice, resolveEffects, and endTurn actions",
+        )
     }
 
     /**
@@ -332,6 +331,16 @@ class GameController(
                         "completed" to result.completed,
                     ),
                     gameId = request.gameId,
+                )
+            )
+        } catch (e: CustomWebSocketException) {
+            logger.warn("Roll dice rejected for game {} [{}]: {}", request.gameId, e.errorCode, e.message)
+            messagingTemplate.convertAndSend(
+                gameTopic,
+                WebSocketMessage(
+                    type = MessageType.ERROR,
+                    sender = "SERVER",
+                    payload = mapOf("event" to "ROLL_FAILED", "code" to e.errorCode, "message" to e.message)
                 )
             )
         } catch (e: Exception) {
