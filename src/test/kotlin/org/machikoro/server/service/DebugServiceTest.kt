@@ -72,6 +72,9 @@ class DebugServiceTest {
         activePlayerId = 1,
     )
 
+    private fun rosterPlayer(playerId: Int, userId: Int, username: String, gameId: Int) =
+        LobbyRosterPlayerDto(playerId = playerId, userId = userId, username = username, gameId = gameId, turnOrder = 0, coins = 3)
+
     // Stubs userDao so ensureUser will create a new user
     private fun stubNewUser(username: String, userId: Int) {
         whenever(userDao.findByUsername(username)).thenReturn(null)
@@ -155,6 +158,14 @@ class DebugServiceTest {
         stubNewUser("debug_player4", 4)
         whenever(passwordEncoder.encode(any())).thenReturn("hash")
         whenever(lobbyService.addUserToLobby(eq(5), any())).thenReturn(player(1, gameId = 5))
+        whenever(lobbyService.getLobbyRoster(5)).thenReturn(
+            listOf(
+                rosterPlayer(1, 1, "lea2", 5),
+                rosterPlayer(2, 2, "debug_player2", 5),
+                rosterPlayer(3, 3, "debug_player3", 5),
+                rosterPlayer(4, 4, "debug_player4", 5),
+            )
+        )
 
         val result = service.fillLobby("ABC123")
 
@@ -162,7 +173,8 @@ class DebugServiceTest {
         assertEquals("debug_player2", result[0].username)
         assertEquals("debug_player4", result[2].username)
         verify(lobbyService, times(3)).addUserToLobby(eq(5), any())
-        verify(messagingTemplate, times(3)).convertAndSend(eq("/topic/game/5"), any<Any>())
+        // 3x LOBBY_JOINED + 1x LOBBY_ROSTER = 4 total
+        verify(messagingTemplate, times(4)).convertAndSend(eq("/topic/game/5"), any<Any>())
     }
 
     @Test
@@ -175,12 +187,19 @@ class DebugServiceTest {
         // First dummy joins successfully, second fills the lobby
         whenever(lobbyService.addUserToLobby(eq(5), eq(2))).thenReturn(player(2, gameId = 5, userId = 2))
         whenever(lobbyService.addUserToLobby(eq(5), eq(3))).thenThrow(LobbyFullException("Lobby full"))
+        whenever(lobbyService.getLobbyRoster(5)).thenReturn(
+            listOf(
+                rosterPlayer(1, 1, "lea2", 5),
+                rosterPlayer(2, 2, "debug_player2", 5),
+            )
+        )
 
         val result = service.fillLobby("ABC123")
 
         assertEquals(1, result.size)
         assertEquals("debug_player2", result[0].username)
-        verify(messagingTemplate, times(1)).convertAndSend(eq("/topic/game/5"), any<Any>())
+        // 1x LOBBY_JOINED + 1x LOBBY_ROSTER = 2 total
+        verify(messagingTemplate, times(2)).convertAndSend(eq("/topic/game/5"), any<Any>())
     }
 
     @Test
@@ -209,14 +228,21 @@ class DebugServiceTest {
         whenever(lobbyService.addUserToLobby(eq(5), eq(2))).thenThrow(GameStartedException("Race condition"))
         whenever(lobbyService.addUserToLobby(eq(5), eq(3))).thenReturn(player(3, gameId = 5, userId = 3))
         whenever(lobbyService.addUserToLobby(eq(5), eq(4))).thenReturn(player(4, gameId = 5, userId = 4))
+        whenever(lobbyService.getLobbyRoster(5)).thenReturn(
+            listOf(
+                rosterPlayer(1, 1, "lea2", 5),
+                rosterPlayer(3, 3, "debug_player3", 5),
+                rosterPlayer(4, 4, "debug_player4", 5),
+            )
+        )
 
         val result = service.fillLobby("ABC123")
 
         assertEquals(2, result.size)
         assertEquals("debug_player3", result[0].username)
         assertEquals("debug_player4", result[1].username)
-        // Only 2 broadcasts — skipped dummy must not get one
-        verify(messagingTemplate, times(2)).convertAndSend(eq("/topic/game/5"), any<Any>())
+        // 2x LOBBY_JOINED + 1x LOBBY_ROSTER = 3 total
+        verify(messagingTemplate, times(3)).convertAndSend(eq("/topic/game/5"), any<Any>())
     }
 
     @Test
