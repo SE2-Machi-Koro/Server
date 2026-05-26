@@ -9,6 +9,7 @@ import org.machikoro.server.dao.UserDao
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.dto.EndTurnOutcome
+import org.machikoro.server.exception.CustomWebSocketException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -22,47 +23,35 @@ class GamePhaseService(
     private val gameMarketplaceDao: GameMarketplaceDao,
     private val gameStateGuard: GameStateGuard,
     private val winConditionService: WinConditionService,
+    private val gameTransactionRunner: GameTransactionRunner,
 ) {
-
-    /** Returns the next phase in the Machi Koro turn cycle. */
-    fun nextPhase(currentPhase: TurnPhase): TurnPhase = when (currentPhase) {
-        TurnPhase.ROLL_DICE -> TurnPhase.RESOLVE_EFFECTS
-        TurnPhase.RESOLVE_EFFECTS -> TurnPhase.BUY_OR_BUILD
-        TurnPhase.BUY_OR_BUILD -> TurnPhase.END_TURN
-        TurnPhase.END_TURN -> TurnPhase.ROLL_DICE
-    }
-
-    /** Returns the phase that begins every new turn. */
-    fun initialPhase(): TurnPhase = TurnPhase.ROLL_DICE
-
-    /** Advances a game to the next phase and persists it. */
-    fun advancePhase(gameId: Int): TurnPhase {
-        val game = gameStateGuard.ensureGameIsRunning(gameId)
-        val next = nextPhase(game.turnPhase)
-        gameDao.updateTurnPhase(gameId, next)
-        return next
-    }
 
     /**
      * Ends the active player's buy-or-build window, checks for a winner, and
      * either finishes the game or starts the next turn.
      */
-    @Transactional
-    fun endTurn(gameId: Int): EndTurnOutcome {
+    fun endTurn(gameId: Int): EndTurnOutcome = gameTransactionRunner.inTransaction {
         val game = gameStateGuard.ensureGameIsRunning(gameId)
-        check(game.turnPhase == TurnPhase.BUY_OR_BUILD) { "Game is not in BUY_OR_BUILD phase" }
+        if (game.turnPhase != TurnPhase.BUY_OR_BUILD) {
+            throw CustomWebSocketException(
+                "INVALID_TURN_PHASE",
+                "Turn can only be ended during BUY_OR_BUILD",
+            )
+        }
 
-        gameDao.updateTurnPhase(gameId, TurnPhase.END_TURN)
+        if (!gameDao.tryTransitionPhase(gameId, TurnPhase.BUY_OR_BUILD, TurnPhase.END_TURN)) {
+            throw CustomWebSocketException("TURN_ALREADY_ENDED", "This turn has already ended")
+        }
 
         winConditionService.detectWinner(gameId)?.let { winner ->
             userDao.incrementWins(winner.userId)
             playerDao.getPlayers(gameId).forEach { userDao.incrementGamesPlayed(it.userId) }
             gameDao.updateStatus(gameId, GameStatus.FINISHED)
-            return EndTurnOutcome.Won(winner.id, game.roundNumber)
+            return@inTransaction EndTurnOutcome.Won(winner.id, game.roundNumber)
         }
 
         val nextPhase = advanceTurn(gameId)
-        return EndTurnOutcome.Continue(nextPhase)
+        EndTurnOutcome.Continue(nextPhase)
     }
 
     /** Advances a game to the next player's turn and persists it. */

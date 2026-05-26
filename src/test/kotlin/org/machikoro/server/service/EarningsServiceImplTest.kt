@@ -21,6 +21,7 @@ import org.mockito.kotlin.whenever
 import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.EstablishmentType
 import org.machikoro.server.domain.enums.GameStatus
+import org.machikoro.server.exception.CustomWebSocketException
 
 class EarningsServiceImplTest {
 
@@ -28,7 +29,10 @@ class EarningsServiceImplTest {
     private lateinit var playerCardDao: PlayerCardDao
     private lateinit var cardDao: CardDao
     private lateinit var gameDao: GameDao
-    private lateinit var gamePhaseService: GamePhaseService
+    private lateinit var gameStateGuard: GameStateGuard
+    private val transactionRunner = object : GameTransactionRunner {
+        override fun <T> inTransaction(action: () -> T): T = action()
+    }
 
     private lateinit var service: EarningsServiceImpl
 
@@ -38,14 +42,15 @@ class EarningsServiceImplTest {
         playerCardDao = mock(PlayerCardDao::class.java)
         cardDao = mock(CardDao::class.java)
         gameDao = mock(GameDao::class.java)
-        gamePhaseService = mock(GamePhaseService::class.java)
+        gameStateGuard = mock(GameStateGuard::class.java)
 
         service = EarningsServiceImpl(
             playerDao,
             playerCardDao,
             cardDao,
             gameDao,
-            gamePhaseService,
+            gameStateGuard,
+            transactionRunner,
         )
     }
 
@@ -252,8 +257,10 @@ class EarningsServiceImplTest {
             lastDiceRoll = 1, roundNumber = 1, hasPurchasedThisTurn = false
         )
 
-        whenever(gameDao.findById(1))
+        whenever(gameStateGuard.ensureGameIsRunning(1))
             .thenReturn(game)
+        whenever(gameDao.tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD))
+            .thenReturn(true)
 
         whenever(playerDao.getPlayers(1))
             .thenReturn(listOf(player(1, 3)))
@@ -266,7 +273,7 @@ class EarningsServiceImplTest {
 
         service.resolveEffects(1)
 
-        verify(gamePhaseService).advancePhase(1)
+        verify(gameDao).tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD)
     }
 
     // Invalid phases should fail immediately
@@ -279,12 +286,13 @@ class EarningsServiceImplTest {
             lastDiceRoll = null, roundNumber = 1, hasPurchasedThisTurn = false
         )
 
-        whenever(gameDao.findById(1))
+        whenever(gameStateGuard.ensureGameIsRunning(1))
             .thenReturn(game)
 
-        assertThrows(IllegalStateException::class.java) {
+        val ex = assertThrows(CustomWebSocketException::class.java) {
             service.resolveEffects(1)
         }
+        assertEquals("DICE_ROLL_REQUIRED", ex.errorCode)
     }
 
     private fun player(id: Int, coins: Int): PlayerModel =

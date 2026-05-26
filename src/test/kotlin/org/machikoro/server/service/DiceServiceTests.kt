@@ -2,6 +2,7 @@ package org.machikoro.server.service
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.PlayerLandmarkDao
@@ -30,6 +31,11 @@ class DiceServiceTests {
     private val playerLandmarkDao = mock<PlayerLandmarkDao>()
     private val gameStateGuard = mock<GameStateGuard>()
     private val diceService = DiceService(gameDao, playerLandmarkDao, gameStateGuard)
+
+    @BeforeEach
+    fun permitFirstRecordedRoll() {
+        whenever(gameDao.tryRecordDiceRoll(any(), any())).thenReturn(true)
+    }
 
     private val defaultGame = GameModel(
         id = 1,
@@ -66,7 +72,7 @@ class DiceServiceTests {
         assertThrows(GameNotFoundException::class.java) {
             diceService.rollDice(request, rollingPlayerId = 2)
         }
-        verify(gameDao, never()).updateAfterRoll(any(), any(), any())
+        verify(gameDao, never()).tryRecordDiceRoll(any(), any())
     }
 
     @Test
@@ -80,7 +86,7 @@ class DiceServiceTests {
             diceService.rollDice(request, rollingPlayerId = 2)
         }
         assertEquals("GAME_FINISHED", ex.errorCode)
-        verify(gameDao, never()).updateAfterRoll(any(), any(), any())
+        verify(gameDao, never()).tryRecordDiceRoll(any(), any())
     }
 
     @Test
@@ -191,7 +197,7 @@ class DiceServiceTests {
         val request = RollDiceRequest(gameId = 1, playerId = 2)
         val result = diceService.rollDice(request, rollingPlayerId = 2)
 
-        verify(gameDao).updateAfterRoll(1, result.total, TurnPhase.RESOLVE_EFFECTS)
+        verify(gameDao).tryRecordDiceRoll(1, result.total)
         assertEquals(true, result.completed)
         assertEquals(TurnPhase.RESOLVE_EFFECTS, result.turnPhase)
     }
@@ -203,7 +209,7 @@ class DiceServiceTests {
         val request = RollDiceRequest(gameId = 1, playerId = 2)
         val result = diceService.rollDice(request, rollingPlayerId = 2)
 
-        verify(gameDao).updateAfterRoll(any(), any(), org.mockito.kotlin.eq(TurnPhase.RESOLVE_EFFECTS))
+        verify(gameDao).tryRecordDiceRoll(any(), any())
     }
 
     @Test
@@ -216,6 +222,6 @@ class DiceServiceTests {
         assertThrows(CustomWebSocketException::class.java) {
             diceService.rollDice(request, rollingPlayerId = 2)
         }
-        verify(gameDao, never()).updateAfterRoll(any(), any(), any())
+        verify(gameDao, never()).tryRecordDiceRoll(any(), any())
     }
 }

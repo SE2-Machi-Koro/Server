@@ -10,7 +10,7 @@ import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.CardModel
 import org.machikoro.server.domain.models.PlayerCardModel
 import org.machikoro.server.domain.models.PlayerModel
-import org.machikoro.server.exception.GameNotFoundException
+import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.service.interfaces.EarningsService
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -27,7 +27,8 @@ class EarningsServiceImpl(
     private val playerCardDao: PlayerCardDao,
     private val cardDao: CardDao,
     private val gameDao: GameDao,
-    private val gamePhaseService: GamePhaseService
+    private val gameStateGuard: GameStateGuard,
+    private val gameTransactionRunner: GameTransactionRunner,
 ) : EarningsService {
 
     fun computeEarnings(pairs: List<Pair<Int, Int>>): Int =
@@ -167,22 +168,35 @@ class EarningsServiceImpl(
      * This is the handoff point introduced for the buying-phase flow: earnings
      * are resolved first, and only then does the turn enter BUY_OR_BUILD.
      */
-    @Transactional
-    override fun resolveEffects(gameId: Int) {
-        val game = gameDao.findById(gameId)
-            ?: throw GameNotFoundException("Game $gameId not found")
+    override fun resolveEffects(gameId: Int): Unit = gameTransactionRunner.inTransaction {
+        val game = gameStateGuard.ensureGameIsRunning(gameId)
+        when (game.turnPhase) {
+            TurnPhase.ROLL_DICE -> throw CustomWebSocketException(
+                "DICE_ROLL_REQUIRED",
+                "Effects cannot be resolved before dice are rolled",
+            )
+            TurnPhase.BUY_OR_BUILD, TurnPhase.END_TURN -> throw CustomWebSocketException(
+                "EFFECTS_ALREADY_RESOLVED",
+                "Effects have already been resolved for this turn",
+            )
+            TurnPhase.RESOLVE_EFFECTS -> Unit
+        }
+        val diceRoll = game.lastDiceRoll ?: throw CustomWebSocketException(
+            "DICE_ROLL_REQUIRED",
+            "Effects require a stored dice roll",
+        )
 
-        // Ensure exact phase where earnings are calculated
-        check(game.turnPhase == TurnPhase.RESOLVE_EFFECTS) { "Game is not in RESOLVE_EFFECTS phase" }
-        val diceRoll = checkNotNull(game.lastDiceRoll) { "Dice roll not set" }
+        if (!gameDao.tryTransitionPhase(gameId, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD)) {
+            throw CustomWebSocketException(
+                "EFFECTS_ALREADY_RESOLVED",
+                "Effects have already been resolved for this turn",
+            )
+        }
 
         val players = playerDao.getPlayers(gameId)
-        val activePlayer = players[game.currentTurnIndex]
+        val activePlayer = players.getOrNull(game.currentTurnIndex)
+            ?: throw CustomWebSocketException("NO_ACTIVE_PLAYER", "Game $gameId has no active player")
 
-        // Distribute coins
         processEarnings(gameId, diceRoll, activePlayer.id)
-
-        // Route through phase service so all transition logic is applied consistently
-        gamePhaseService.advancePhase(gameId)
     }
 }

@@ -3,6 +3,7 @@ package org.machikoro.server.dao
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insertAndGetId
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -139,6 +140,33 @@ class GameDao {
             it[Games.turnPhase] = phase
         }
         if (updatedRows == 0) throw GameNotFoundException("Game $id not found")
+    }
+
+    /**
+     * Persists the only legal transition out of ROLL_DICE. The conditional
+     * update prevents two simultaneous requests from recording separate rolls.
+     */
+    fun tryRecordDiceRoll(id: Int, diceRoll: Int): Boolean = transaction {
+        Games.update({
+            (Games.id eq id) and
+                (Games.turnPhase eq TurnPhase.ROLL_DICE) and
+                Games.lastDiceRoll.isNull()
+        }) {
+            it[Games.lastDiceRoll] = diceRoll
+            it[Games.turnPhase] = TurnPhase.RESOLVE_EFFECTS
+        } > 0
+    }
+
+    /**
+     * Changes phase only when the stored phase still matches the action that
+     * requested the transition.
+     */
+    fun tryTransitionPhase(id: Int, expected: TurnPhase, next: TurnPhase): Boolean = transaction {
+        Games.update({
+            (Games.id eq id) and (Games.turnPhase eq expected)
+        }) {
+            it[Games.turnPhase] = next
+        } > 0
     }
 
     /**
