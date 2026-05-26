@@ -2,6 +2,7 @@ package org.machikoro.server.service
 
 import org.machikoro.server.dao.UserDao
 import org.machikoro.server.dto.DebugSeedResponse
+import org.machikoro.server.dto.LobbyRosterDto
 import org.machikoro.server.dto.LoginResponse
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.WebSocketMessage
@@ -51,6 +52,8 @@ class DebugService(
      * Adds up to 3 dummy players to an existing lobby identified by [lobbyCode].
      * Broadcasts a LOBBY_JOINED WebSocket message for each added player so the
      * real client's lobby screen updates in real time.
+     * After all dummies are added, broadcasts a full LOBBY_ROSTER so all clients
+     * (including the host) see the updated player list.
      */
     fun fillLobby(lobbyCode: String): List<LoginResponse> {
         val game = lobbyService.validateLobbyCode(lobbyCode)
@@ -87,6 +90,22 @@ class DebugService(
                 logger.debug("Skipped dummy '{}': {}", username, e.message)
             }
         }
+
+        // Broadcast full roster so all clients (including host) see the updated player list
+        if (added.isNotEmpty()) {
+            val roster = lobbyService.getLobbyRoster(game.id)
+            messagingTemplate.convertAndSend(
+                "/topic/game/${game.id}",
+                WebSocketMessage(
+                    type = MessageType.LOBBY_ROSTER,
+                    sender = "SERVER",
+                    content = "Lobby roster",
+                    gameId = game.id,
+                    payload = LobbyRosterDto(players = roster)
+                )
+            )
+        }
+
         return added
     }
 
