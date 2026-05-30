@@ -5,13 +5,17 @@ import io.swagger.v3.oas.annotations.tags.Tag
 import org.machikoro.server.dto.DebugSeedResponse
 import org.machikoro.server.dto.FillLobbyRequest
 import org.machikoro.server.dto.LoginResponse
+import org.machikoro.server.exception.InvalidSessionTokenException
+import org.machikoro.server.exception.NotAdminException
 import org.machikoro.server.service.DebugService
 import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
+import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 
@@ -25,11 +29,16 @@ class DebugController(private val debugService: DebugService) {
 
     @PostMapping("/seed")
     @Operation(summary = "Seed a ready-to-play debug game with four dummy players and return their session tokens")
-    fun seed(): ResponseEntity<DebugSeedResponse> {
+    fun seed(@RequestHeader("Authorization", required = false) authHeader: String?): ResponseEntity<DebugSeedResponse> {
         return try {
+            debugService.validateAdmin(authHeader)
             val result = debugService.seed()
             logger.info("Debug seed completed for game {}", result.gameState.game.id)
             ResponseEntity.ok(result)
+        } catch (e: InvalidSessionTokenException) {
+            ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+        } catch (e: NotAdminException) {
+            ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         } catch (e: Exception) {
             logger.error("Debug seed failed: {}", e.message)
             ResponseEntity.internalServerError().build()
@@ -37,12 +46,17 @@ class DebugController(private val debugService: DebugService) {
     }
 
     @DeleteMapping("/purge")
-    @Operation(summary = "Delete all games and players from the database")
-    fun purge(): ResponseEntity<Map<String, Int>> {
+    @Operation(summary = "Delete all games and players from the database — requires admin session token")
+    fun purge(@RequestHeader("Authorization", required = false) authHeader: String?): ResponseEntity<Map<String, Int>> {
         return try {
+            debugService.validateAdmin(authHeader)
             val deleted = debugService.purgeGames()
             logger.info("Debug purge deleted {} games", deleted)
             ResponseEntity.ok(mapOf("deletedGames" to deleted))
+        } catch (e: InvalidSessionTokenException) {
+            ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+        } catch (e: NotAdminException) {
+            ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         } catch (e: Exception) {
             logger.error("Debug purge failed: {}", e.message)
             ResponseEntity.internalServerError().build()
@@ -51,11 +65,19 @@ class DebugController(private val debugService: DebugService) {
 
     @PostMapping("/fill-lobby")
     @Operation(summary = "Fill an existing lobby with dummy players (up to 3) and broadcast LOBBY_JOINED events")
-    fun fillLobby(@RequestBody request: FillLobbyRequest): ResponseEntity<List<LoginResponse>> {
+    fun fillLobby(
+        @RequestHeader("Authorization", required = false) authHeader: String?,
+        @RequestBody request: FillLobbyRequest,
+    ): ResponseEntity<List<LoginResponse>> {
         return try {
+            debugService.validateAdmin(authHeader)
             val added = debugService.fillLobby(request.lobbyCode)
             logger.info("Filled lobby '{}' with {} dummy players", request.lobbyCode, added.size)
             ResponseEntity.ok(added)
+        } catch (e: InvalidSessionTokenException) {
+            ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+        } catch (e: NotAdminException) {
+            ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         } catch (e: Exception) {
             logger.error("Fill lobby failed for '{}': {}", request.lobbyCode, e.message)
             ResponseEntity.internalServerError().build()
@@ -64,11 +86,19 @@ class DebugController(private val debugService: DebugService) {
 
     @PostMapping("/reset-lobby")
     @Operation(summary = "Remove all dummy players from a lobby and broadcast LOBBY_LEFT events")
-    fun resetLobby(@RequestBody request: FillLobbyRequest): ResponseEntity<Map<String, Int>> {
+    fun resetLobby(
+        @RequestHeader("Authorization", required = false) authHeader: String?,
+        @RequestBody request: FillLobbyRequest,
+    ): ResponseEntity<Map<String, Int>> {
         return try {
+            debugService.validateAdmin(authHeader)
             val removed = debugService.resetLobby(request.lobbyCode)
             logger.info("Reset lobby '{}': removed {} dummy players", request.lobbyCode, removed)
             ResponseEntity.ok(mapOf("removedPlayers" to removed))
+        } catch (e: InvalidSessionTokenException) {
+            ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+        } catch (e: NotAdminException) {
+            ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         } catch (e: Exception) {
             logger.error("Reset lobby failed for '{}': {}", request.lobbyCode, e.message)
             ResponseEntity.internalServerError().build()
