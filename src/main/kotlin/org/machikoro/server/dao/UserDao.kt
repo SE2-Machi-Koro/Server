@@ -23,7 +23,8 @@ class UserDao {
         passwordHash = this[Users.passwordHash],
         sessionToken = this[Users.sessionToken],
         totalWins = this[Users.totalWins],
-        totalGamesPlayed = this[Users.totalGamesPlayed]
+        totalGamesPlayed = this[Users.totalGamesPlayed],
+        isAdmin = this[Users.isAdmin],
     )
 
     /**
@@ -64,13 +65,14 @@ class UserDao {
      * passwordHash is optional so existing fixtures keep working;
      * once registration is in place every real user will have one.
      */
-    fun create(username: String, passwordHash: String? = null): Int = transaction {
+    fun create(username: String, passwordHash: String? = null, isAdmin: Boolean = false): Int = transaction {
         Users.insertAndGetId {
             it[Users.username] = username
             it[Users.passwordHash] = passwordHash
             it[Users.sessionToken] = null
             it[Users.totalWins] = 0
             it[Users.totalGamesPlayed] = 0
+            it[Users.isAdmin] = isAdmin
         }.value
     }
 

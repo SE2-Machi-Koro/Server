@@ -33,19 +33,12 @@ class AdminSeeder(
         }
 
         ADMIN_USERNAMES.forEach { username ->
-            val existing = userDao.findByUsername(username)
-            when {
-                existing == null -> {
-                    val hash = passwordEncoder.encode(adminPassword)
-                    userDao.create(username, hash, isAdmin = true)
-                    logger.info("Created admin user '{}'", username)
-                }
-                !existing.isAdmin -> {
-                    // Upgrade if somehow the account exists without the flag
-                    userDao.setAdmin(existing.id, true)
-                    logger.info("Upgraded '{}' to admin", username)
-                }
-                else -> logger.debug("Admin user '{}' already exists", username)
+            if (userDao.findByUsername(username) == null) {
+                val hash = passwordEncoder.encode(adminPassword)
+                userDao.create(username, hash, isAdmin = true)
+                logger.info("Created admin user '{}'", username)
+            } else {
+                logger.debug("Admin user '{}' already exists", username)
             }
         }
     }
