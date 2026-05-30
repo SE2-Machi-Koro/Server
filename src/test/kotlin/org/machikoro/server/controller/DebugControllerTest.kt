@@ -62,7 +62,7 @@ class DebugControllerTest {
         val seedResponse = DebugSeedResponse(gameState = gameStateDto(), players = players)
         whenever(debugService.seed()).thenReturn(seedResponse)
 
-        val response = controller.seed()
+        val response = controller.seed("Bearer admin-token")
 
         assertEquals(HttpStatus.OK, response.statusCode)
         assertEquals(seedResponse, response.body)
@@ -73,7 +73,7 @@ class DebugControllerTest {
     fun `seed returns 500 when service throws`() {
         whenever(debugService.seed()).thenThrow(RuntimeException("DB unavailable"))
 
-        val response = controller.seed()
+        val response = controller.seed("Bearer admin-token")
 
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.statusCode)
         assertNull(response.body)
@@ -87,7 +87,7 @@ class DebugControllerTest {
         val added = listOf(loginResponse("debug_player2", 2), loginResponse("debug_player3", 3))
         whenever(debugService.fillLobby("ABC123")).thenReturn(added)
 
-        val response = controller.fillLobby(request)
+        val response = controller.fillLobby("Bearer admin-token", request)
 
         assertEquals(HttpStatus.OK, response.statusCode)
         assertEquals(added, response.body)
@@ -100,7 +100,7 @@ class DebugControllerTest {
         val request = FillLobbyRequest(lobbyCode = "FULL99")
         whenever(debugService.fillLobby("FULL99")).thenReturn(emptyList())
 
-        val response = controller.fillLobby(request)
+        val response = controller.fillLobby("Bearer admin-token", request)
 
         assertEquals(HttpStatus.OK, response.statusCode)
         assertEquals(emptyList<LoginResponse>(), response.body)
@@ -111,7 +111,7 @@ class DebugControllerTest {
         val request = FillLobbyRequest(lobbyCode = "NOPE")
         whenever(debugService.fillLobby("NOPE")).thenThrow(GameNotFoundException("Lobby not found"))
 
-        val response = controller.fillLobby(request)
+        val response = controller.fillLobby("Bearer admin-token", request)
 
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.statusCode)
         assertNull(response.body)
@@ -122,7 +122,7 @@ class DebugControllerTest {
         val request = FillLobbyRequest(lobbyCode = "ABC123")
         whenever(debugService.fillLobby("ABC123")).thenThrow(RuntimeException("Unexpected"))
 
-        val response = controller.fillLobby(request)
+        val response = controller.fillLobby("Bearer admin-token", request)
 
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.statusCode)
         assertNull(response.body)
@@ -134,7 +134,7 @@ class DebugControllerTest {
     fun `purge returns 200 OK with deleted game count`() {
         whenever(debugService.purgeGames()).thenReturn(5)
 
-        val response = controller.purge()
+        val response = controller.purge("Bearer admin-token")
 
         assertEquals(HttpStatus.OK, response.statusCode)
         assertEquals(mapOf("deletedGames" to 5), response.body)
@@ -144,7 +144,7 @@ class DebugControllerTest {
     fun `purge returns 500 when service throws`() {
         whenever(debugService.purgeGames()).thenThrow(RuntimeException("DB error"))
 
-        val response = controller.purge()
+        val response = controller.purge("Bearer admin-token")
 
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.statusCode)
         assertNull(response.body)
@@ -157,7 +157,7 @@ class DebugControllerTest {
         val request = FillLobbyRequest(lobbyCode = "ABC123")
         whenever(debugService.resetLobby("ABC123")).thenReturn(2)
 
-        val response = controller.resetLobby(request)
+        val response = controller.resetLobby("Bearer admin-token", request)
 
         assertEquals(HttpStatus.OK, response.statusCode)
         assertEquals(mapOf("removedPlayers" to 2), response.body)
@@ -168,7 +168,7 @@ class DebugControllerTest {
         val request = FillLobbyRequest(lobbyCode = "NOPE")
         whenever(debugService.resetLobby("NOPE")).thenThrow(GameNotFoundException("not found"))
 
-        val response = controller.resetLobby(request)
+        val response = controller.resetLobby("Bearer admin-token", request)
 
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.statusCode)
         assertNull(response.body)

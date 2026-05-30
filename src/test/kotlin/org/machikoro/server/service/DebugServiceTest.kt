@@ -60,6 +60,7 @@ class DebugServiceTest {
         sessionToken = null,
         totalWins = 0,
         totalGamesPlayed = 0,
+        isAdmin = false,
     )
 
     private fun gameStateDto() = GameStateDto(
@@ -75,7 +76,7 @@ class DebugServiceTest {
     // Stubs userDao so ensureUser will create a new user
     private fun stubNewUser(username: String, userId: Int) {
         whenever(userDao.findByUsername(username)).thenReturn(null)
-        whenever(userDao.create(eq(username), any())).thenReturn(userId)
+        whenever(userDao.create(eq(username), any(), any())).thenReturn(userId)
     }
 
     // Stubs userDao so ensureUser will reuse an existing user
@@ -104,7 +105,7 @@ class DebugServiceTest {
         assertEquals("debug_player1", result.players[0].username)
         assertEquals("debug_player4", result.players[3].username)
         assertEquals(expectedState, result.gameState)
-        verify(userDao, times(4)).create(any(), any())
+        verify(userDao, times(4)).create(any(), any(), any())
         verify(lobbyService).createLobby(1)
         verify(lobbyService, times(4)).addUserToLobby(eq(10), any())
         verify(lobbyService).startGame(eq(10), isNull())
@@ -122,7 +123,7 @@ class DebugServiceTest {
 
         service.seed()
 
-        verify(userDao, never()).create(any(), any())
+        verify(userDao, never()).create(any(), any(), any())
         verify(passwordEncoder, never()).encode(any())
     }
 
