@@ -45,6 +45,9 @@ services:
       # disable it inside the container so it doesn't try to spawn `docker compose`.
       - 'SPRING_DOCKER_COMPOSE_ENABLED=false'
       - 'WEBSOCKET_ALLOWED_ORIGINS=${WEBSOCKET_ALLOWED_ORIGINS:-http://se2-demo.aau.at:53210,https://se2-demo.aau.at:53210}'
+      # Admin seeding — set DEBUG_ENABLED=true and ADMIN_PASSWORD in .env to seed admin accounts
+      - 'DEBUG_ENABLED=${DEBUG_ENABLED:-false}'
+      - 'ADMIN_PASSWORD=${ADMIN_PASSWORD:-}'
     depends_on:
       postgres:
         condition: service_healthy
