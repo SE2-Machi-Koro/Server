@@ -78,6 +78,8 @@ object Users : IntIdTable("users") {
     val sessionToken = varchar("session_token", 255).nullable().uniqueIndex()
     val totalWins = integer("total_wins").default(0)
     val totalGamesPlayed = integer("total_games_played").default(0)
+    // Admin flag gates access to debug endpoints
+    val isAdmin = bool("is_admin").default(false)
 }
 
 /**

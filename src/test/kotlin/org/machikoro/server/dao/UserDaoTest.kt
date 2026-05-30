@@ -41,6 +41,18 @@ class UserDaoTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `create defaults isAdmin to false`() {
+        val id = dao.create("robin")
+        assertFalse(dao.findById(id)!!.isAdmin)
+    }
+
+    @Test
+    fun `create with isAdmin true persists admin flag`() {
+        val id = dao.create("admin_1", isAdmin = true)
+        assertTrue(dao.findById(id)!!.isAdmin)
+    }
+
+    @Test
     fun `findById returns null for unknown id`() {
         assertNull(dao.findById(999))
     }

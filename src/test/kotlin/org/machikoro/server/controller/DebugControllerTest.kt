@@ -11,7 +11,10 @@ import org.machikoro.server.dto.FillLobbyRequest
 import org.machikoro.server.dto.GameStateDto
 import org.machikoro.server.dto.LoginResponse
 import org.machikoro.server.exception.GameNotFoundException
+import org.machikoro.server.exception.InvalidSessionTokenException
+import org.machikoro.server.exception.NotAdminException
 import org.machikoro.server.service.DebugService
+import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import org.springframework.http.HttpStatus
@@ -62,7 +65,7 @@ class DebugControllerTest {
         val seedResponse = DebugSeedResponse(gameState = gameStateDto(), players = players)
         whenever(debugService.seed()).thenReturn(seedResponse)
 
-        val response = controller.seed()
+        val response = controller.seed("Bearer admin-token")
 
         assertEquals(HttpStatus.OK, response.statusCode)
         assertEquals(seedResponse, response.body)
@@ -73,7 +76,7 @@ class DebugControllerTest {
     fun `seed returns 500 when service throws`() {
         whenever(debugService.seed()).thenThrow(RuntimeException("DB unavailable"))
 
-        val response = controller.seed()
+        val response = controller.seed("Bearer admin-token")
 
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.statusCode)
         assertNull(response.body)
@@ -87,7 +90,7 @@ class DebugControllerTest {
         val added = listOf(loginResponse("debug_player2", 2), loginResponse("debug_player3", 3))
         whenever(debugService.fillLobby("ABC123")).thenReturn(added)
 
-        val response = controller.fillLobby(request)
+        val response = controller.fillLobby("Bearer admin-token", request)
 
         assertEquals(HttpStatus.OK, response.statusCode)
         assertEquals(added, response.body)
@@ -100,7 +103,7 @@ class DebugControllerTest {
         val request = FillLobbyRequest(lobbyCode = "FULL99")
         whenever(debugService.fillLobby("FULL99")).thenReturn(emptyList())
 
-        val response = controller.fillLobby(request)
+        val response = controller.fillLobby("Bearer admin-token", request)
 
         assertEquals(HttpStatus.OK, response.statusCode)
         assertEquals(emptyList<LoginResponse>(), response.body)
@@ -111,7 +114,7 @@ class DebugControllerTest {
         val request = FillLobbyRequest(lobbyCode = "NOPE")
         whenever(debugService.fillLobby("NOPE")).thenThrow(GameNotFoundException("Lobby not found"))
 
-        val response = controller.fillLobby(request)
+        val response = controller.fillLobby("Bearer admin-token", request)
 
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.statusCode)
         assertNull(response.body)
@@ -122,7 +125,7 @@ class DebugControllerTest {
         val request = FillLobbyRequest(lobbyCode = "ABC123")
         whenever(debugService.fillLobby("ABC123")).thenThrow(RuntimeException("Unexpected"))
 
-        val response = controller.fillLobby(request)
+        val response = controller.fillLobby("Bearer admin-token", request)
 
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.statusCode)
         assertNull(response.body)
@@ -134,7 +137,7 @@ class DebugControllerTest {
     fun `purge returns 200 OK with deleted game count`() {
         whenever(debugService.purgeGames()).thenReturn(5)
 
-        val response = controller.purge()
+        val response = controller.purge("Bearer admin-token")
 
         assertEquals(HttpStatus.OK, response.statusCode)
         assertEquals(mapOf("deletedGames" to 5), response.body)
@@ -144,7 +147,7 @@ class DebugControllerTest {
     fun `purge returns 500 when service throws`() {
         whenever(debugService.purgeGames()).thenThrow(RuntimeException("DB error"))
 
-        val response = controller.purge()
+        val response = controller.purge("Bearer admin-token")
 
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.statusCode)
         assertNull(response.body)
@@ -157,7 +160,7 @@ class DebugControllerTest {
         val request = FillLobbyRequest(lobbyCode = "ABC123")
         whenever(debugService.resetLobby("ABC123")).thenReturn(2)
 
-        val response = controller.resetLobby(request)
+        val response = controller.resetLobby("Bearer admin-token", request)
 
         assertEquals(HttpStatus.OK, response.statusCode)
         assertEquals(mapOf("removedPlayers" to 2), response.body)
@@ -168,9 +171,67 @@ class DebugControllerTest {
         val request = FillLobbyRequest(lobbyCode = "NOPE")
         whenever(debugService.resetLobby("NOPE")).thenThrow(GameNotFoundException("not found"))
 
-        val response = controller.resetLobby(request)
+        val response = controller.resetLobby("Bearer admin-token", request)
 
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.statusCode)
         assertNull(response.body)
+    }
+
+    // === Admin auth — 401 / 403 across all endpoints ===
+
+    @Test
+    fun `seed returns 401 when session token is invalid`() {
+        whenever(debugService.validateAdmin(any())).thenThrow(InvalidSessionTokenException("bad token"))
+
+        assertEquals(HttpStatus.UNAUTHORIZED, controller.seed("Bearer bad").statusCode)
+    }
+
+    @Test
+    fun `seed returns 403 when user is not admin`() {
+        whenever(debugService.validateAdmin(any())).thenThrow(NotAdminException("not admin"))
+
+        assertEquals(HttpStatus.FORBIDDEN, controller.seed("Bearer token").statusCode)
+    }
+
+    @Test
+    fun `purge returns 401 when session token is invalid`() {
+        whenever(debugService.validateAdmin(any())).thenThrow(InvalidSessionTokenException("bad token"))
+
+        assertEquals(HttpStatus.UNAUTHORIZED, controller.purge("Bearer bad").statusCode)
+    }
+
+    @Test
+    fun `purge returns 403 when user is not admin`() {
+        whenever(debugService.validateAdmin(any())).thenThrow(NotAdminException("not admin"))
+
+        assertEquals(HttpStatus.FORBIDDEN, controller.purge("Bearer token").statusCode)
+    }
+
+    @Test
+    fun `fillLobby returns 401 when session token is invalid`() {
+        whenever(debugService.validateAdmin(any())).thenThrow(InvalidSessionTokenException("bad token"))
+
+        assertEquals(HttpStatus.UNAUTHORIZED, controller.fillLobby("Bearer bad", FillLobbyRequest("X")).statusCode)
+    }
+
+    @Test
+    fun `fillLobby returns 403 when user is not admin`() {
+        whenever(debugService.validateAdmin(any())).thenThrow(NotAdminException("not admin"))
+
+        assertEquals(HttpStatus.FORBIDDEN, controller.fillLobby("Bearer token", FillLobbyRequest("X")).statusCode)
+    }
+
+    @Test
+    fun `resetLobby returns 401 when session token is invalid`() {
+        whenever(debugService.validateAdmin(any())).thenThrow(InvalidSessionTokenException("bad token"))
+
+        assertEquals(HttpStatus.UNAUTHORIZED, controller.resetLobby("Bearer bad", FillLobbyRequest("X")).statusCode)
+    }
+
+    @Test
+    fun `resetLobby returns 403 when user is not admin`() {
+        whenever(debugService.validateAdmin(any())).thenThrow(NotAdminException("not admin"))
+
+        assertEquals(HttpStatus.FORBIDDEN, controller.resetLobby("Bearer token", FillLobbyRequest("X")).statusCode)
     }
 }

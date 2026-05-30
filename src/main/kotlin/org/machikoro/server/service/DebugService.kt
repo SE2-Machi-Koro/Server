@@ -5,7 +5,9 @@ import org.machikoro.server.dto.DebugSeedResponse
 import org.machikoro.server.dto.LoginResponse
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.WebSocketMessage
+import org.machikoro.server.exception.InvalidSessionTokenException
 import org.machikoro.server.exception.LobbyFullException
+import org.machikoro.server.exception.NotAdminException
 import org.slf4j.LoggerFactory
 import org.springframework.messaging.simp.SimpMessagingTemplate
 import org.springframework.security.crypto.password.PasswordEncoder
@@ -115,6 +117,15 @@ class DebugService(
         // Delete debug users so they get fresh IDs (and names reset to debug_player1 etc.) next fill
         userDao.deleteByUsernamePrefix(LobbyService.DEBUG_USER_PREFIX)
         return deleted
+    }
+
+    // Throws 401 if token is missing/invalid, 403 if user is not an admin
+    fun validateAdmin(authHeader: String?) {
+        val token = authHeader?.removePrefix("Bearer ")?.trim()
+            ?: throw InvalidSessionTokenException("Missing Authorization header")
+        val user = userDao.findBySessionToken(token)
+            ?: throw InvalidSessionTokenException("Invalid session token")
+        if (!user.isAdmin) throw NotAdminException("Admin access required")
     }
 
     // Creates the user if absent, then issues a fresh session token

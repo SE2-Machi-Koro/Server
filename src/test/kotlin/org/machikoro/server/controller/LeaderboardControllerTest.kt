@@ -22,6 +22,7 @@ class LeaderboardControllerTest {
         sessionToken = null,
         totalWins = wins,
         totalGamesPlayed = played,
+        isAdmin = false,
     )
 
     @Test

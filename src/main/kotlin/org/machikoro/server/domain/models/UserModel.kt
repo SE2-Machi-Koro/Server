@@ -10,5 +10,7 @@ data class UserModel(
     @field:JsonIgnore
     val sessionToken: String?,
     val totalWins: Int,
-    val totalGamesPlayed: Int
+    val totalGamesPlayed: Int,
+    @field:JsonIgnore
+    val isAdmin: Boolean,
 )
