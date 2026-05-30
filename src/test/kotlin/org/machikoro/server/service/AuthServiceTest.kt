@@ -53,7 +53,7 @@ class AuthServiceTest {
         }
 
         verify(passwordEncoder, never()).encode(any())
-        verify(userDao, never()).create(any(), any())
+        verify(userDao, never()).create(any(), any(), any())
     }
 
     @Test
@@ -194,6 +194,7 @@ class AuthServiceTest {
         sessionToken = sessionToken,
         totalWins = 0,
         totalGamesPlayed = 0,
+        isAdmin = false,
     )
 
     companion object {
