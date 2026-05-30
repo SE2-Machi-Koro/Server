@@ -2,6 +2,7 @@ package org.machikoro.server.service
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertDoesNotThrow
 import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.dao.UserDao
 import org.machikoro.server.domain.enums.GameStatus
@@ -13,7 +14,9 @@ import org.machikoro.server.dto.GameStateDto
 import org.machikoro.server.dto.LobbyRosterPlayerDto
 import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.exception.GameStartedException
+import org.machikoro.server.exception.InvalidSessionTokenException
 import org.machikoro.server.exception.LobbyFullException
+import org.machikoro.server.exception.NotAdminException
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
@@ -280,5 +283,41 @@ class DebugServiceTest {
         assertEquals(3, count)
         verify(lobbyService).purgeAllGames()
         verify(userDao).deleteByUsernamePrefix(LobbyService.DEBUG_USER_PREFIX)
+    }
+
+    // === validateAdmin() ===
+
+    @Test
+    fun `validateAdmin throws InvalidSessionTokenException when header is null`() {
+        assertThrows<InvalidSessionTokenException> {
+            service.validateAdmin(null)
+        }
+    }
+
+    @Test
+    fun `validateAdmin throws InvalidSessionTokenException when token not found in db`() {
+        whenever(userDao.findBySessionToken("bad")).thenReturn(null)
+
+        assertThrows<InvalidSessionTokenException> {
+            service.validateAdmin("Bearer bad")
+        }
+    }
+
+    @Test
+    fun `validateAdmin throws NotAdminException when user is not admin`() {
+        // userModel helper defaults isAdmin to false
+        whenever(userDao.findBySessionToken("token")).thenReturn(userModel(1, "alice"))
+
+        assertThrows<NotAdminException> {
+            service.validateAdmin("Bearer token")
+        }
+    }
+
+    @Test
+    fun `validateAdmin passes without throwing when user is admin`() {
+        val admin = userModel(1, "admin_1").copy(isAdmin = true)
+        whenever(userDao.findBySessionToken("token")).thenReturn(admin)
+
+        assertDoesNotThrow { service.validateAdmin("Bearer token") }
     }
 }

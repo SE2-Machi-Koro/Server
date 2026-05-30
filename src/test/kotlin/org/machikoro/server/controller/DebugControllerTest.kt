@@ -11,7 +11,10 @@ import org.machikoro.server.dto.FillLobbyRequest
 import org.machikoro.server.dto.GameStateDto
 import org.machikoro.server.dto.LoginResponse
 import org.machikoro.server.exception.GameNotFoundException
+import org.machikoro.server.exception.InvalidSessionTokenException
+import org.machikoro.server.exception.NotAdminException
 import org.machikoro.server.service.DebugService
+import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import org.springframework.http.HttpStatus
@@ -172,5 +175,63 @@ class DebugControllerTest {
 
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.statusCode)
         assertNull(response.body)
+    }
+
+    // === Admin auth — 401 / 403 across all endpoints ===
+
+    @Test
+    fun `seed returns 401 when session token is invalid`() {
+        whenever(debugService.validateAdmin(any())).thenThrow(InvalidSessionTokenException("bad token"))
+
+        assertEquals(HttpStatus.UNAUTHORIZED, controller.seed("Bearer bad").statusCode)
+    }
+
+    @Test
+    fun `seed returns 403 when user is not admin`() {
+        whenever(debugService.validateAdmin(any())).thenThrow(NotAdminException("not admin"))
+
+        assertEquals(HttpStatus.FORBIDDEN, controller.seed("Bearer token").statusCode)
+    }
+
+    @Test
+    fun `purge returns 401 when session token is invalid`() {
+        whenever(debugService.validateAdmin(any())).thenThrow(InvalidSessionTokenException("bad token"))
+
+        assertEquals(HttpStatus.UNAUTHORIZED, controller.purge("Bearer bad").statusCode)
+    }
+
+    @Test
+    fun `purge returns 403 when user is not admin`() {
+        whenever(debugService.validateAdmin(any())).thenThrow(NotAdminException("not admin"))
+
+        assertEquals(HttpStatus.FORBIDDEN, controller.purge("Bearer token").statusCode)
+    }
+
+    @Test
+    fun `fillLobby returns 401 when session token is invalid`() {
+        whenever(debugService.validateAdmin(any())).thenThrow(InvalidSessionTokenException("bad token"))
+
+        assertEquals(HttpStatus.UNAUTHORIZED, controller.fillLobby("Bearer bad", FillLobbyRequest("X")).statusCode)
+    }
+
+    @Test
+    fun `fillLobby returns 403 when user is not admin`() {
+        whenever(debugService.validateAdmin(any())).thenThrow(NotAdminException("not admin"))
+
+        assertEquals(HttpStatus.FORBIDDEN, controller.fillLobby("Bearer token", FillLobbyRequest("X")).statusCode)
+    }
+
+    @Test
+    fun `resetLobby returns 401 when session token is invalid`() {
+        whenever(debugService.validateAdmin(any())).thenThrow(InvalidSessionTokenException("bad token"))
+
+        assertEquals(HttpStatus.UNAUTHORIZED, controller.resetLobby("Bearer bad", FillLobbyRequest("X")).statusCode)
+    }
+
+    @Test
+    fun `resetLobby returns 403 when user is not admin`() {
+        whenever(debugService.validateAdmin(any())).thenThrow(NotAdminException("not admin"))
+
+        assertEquals(HttpStatus.FORBIDDEN, controller.resetLobby("Bearer token", FillLobbyRequest("X")).statusCode)
     }
 }
