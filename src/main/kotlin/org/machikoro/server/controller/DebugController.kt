@@ -2,9 +2,9 @@ package org.machikoro.server.controller
 
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
+import org.machikoro.server.dto.DebugEndGameError
 import org.machikoro.server.dto.DebugSeedResponse
 import org.machikoro.server.dto.EndGameRequest
-import org.machikoro.server.dto.EndTurnOutcome
 import org.machikoro.server.dto.FillLobbyRequest
 import org.machikoro.server.dto.LoginResponse
 import org.machikoro.server.exception.CustomWebSocketException
@@ -121,7 +121,7 @@ class DebugController(
     fun endGame(
         @RequestHeader("Authorization", required = false) authHeader: String?,
         @RequestBody request: EndGameRequest,
-    ): ResponseEntity<EndTurnOutcome.Won> {
+    ): ResponseEntity<Any> {
         return try {
             val caller = debugService.validateAdmin(authHeader)
             val outcome = debugService.endGame(request.gameId, caller)
@@ -131,22 +131,25 @@ class DebugController(
             logger.info("Debug end-game succeeded for game {}, winner player {}", request.gameId, outcome.winnerId)
             ResponseEntity.ok(outcome)
         } catch (e: InvalidSessionTokenException) {
-            ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+            ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(DebugEndGameError("UNAUTHENTICATED", e.message ?: "Missing or invalid session token"))
         } catch (e: NotAdminException) {
-            ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+            ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(DebugEndGameError("NOT_ADMIN", e.message ?: "Admin access required"))
         } catch (e: GameNotFoundException) {
             logger.warn("Debug end-game rejected: {}", e.message)
-            ResponseEntity.status(HttpStatus.NOT_FOUND).build()
+            ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(DebugEndGameError("GAME_NOT_FOUND", e.message ?: "Game not found"))
         } catch (e: NotInGameException) {
             logger.warn("Debug end-game rejected: {}", e.message)
-            ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).build()
+            ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(DebugEndGameError("NOT_IN_GAME", e.message ?: "Caller is not a player in the game"))
         } catch (e: CustomWebSocketException) {
             // GameStateGuard raises this for GAME_FINISHED / GAME_NOT_STARTED
             logger.warn("Debug end-game rejected [{}]: {}", e.errorCode, e.message)
-            ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).build()
-        } catch (e: Exception) {
-            logger.error("Debug end-game failed for game {}: {}", request.gameId, e.message)
-            ResponseEntity.internalServerError().build()
+            ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(DebugEndGameError(e.errorCode, e.message))
         }
+        // Any unexpected exception propagates to Spring's default 500 handler — no broad catch (#305 DoD).
     }
 }

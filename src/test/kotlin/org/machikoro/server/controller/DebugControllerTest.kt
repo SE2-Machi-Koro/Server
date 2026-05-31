@@ -3,10 +3,12 @@ package org.machikoro.server.controller
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.UserModel
+import org.machikoro.server.dto.DebugEndGameError
 import org.machikoro.server.dto.DebugSeedResponse
 import org.machikoro.server.dto.FillLobbyRequest
 import org.machikoro.server.dto.GameStateDto
@@ -324,39 +326,40 @@ class DebugControllerTest {
     }
 
     @Test
-    fun `endGame returns 422 when caller is not in the game`() {
+    fun `endGame returns 422 with structured error when caller is not in the game`() {
         whenever(debugService.validateAdmin(any())).thenReturn(adminUser())
         whenever(debugService.endGame(eq(7), any()))
             .thenThrow(NotInGameException("not a player"))
 
-        assertEquals(
-            HttpStatus.UNPROCESSABLE_ENTITY,
-            controller.endGame("Bearer admin-token", EndGameRequest(gameId = 7)).statusCode,
-        )
+        val response = controller.endGame("Bearer admin-token", EndGameRequest(gameId = 7))
+
+        assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, response.statusCode)
+        assertEquals(DebugEndGameError("NOT_IN_GAME", "not a player"), response.body)
         verify(gameEndBroadcaster, never()).broadcast(any(), any(), any())
     }
 
     @Test
-    fun `endGame returns 422 when game state precondition fails`() {
+    fun `endGame returns 422 with structured error when game state precondition fails`() {
         whenever(debugService.validateAdmin(any())).thenReturn(adminUser())
         whenever(debugService.endGame(eq(7), any()))
             .thenThrow(CustomWebSocketException(errorCode = "GAME_FINISHED", message = "Game 7 has already ended"))
 
-        assertEquals(
-            HttpStatus.UNPROCESSABLE_ENTITY,
-            controller.endGame("Bearer admin-token", EndGameRequest(gameId = 7)).statusCode,
-        )
+        val response = controller.endGame("Bearer admin-token", EndGameRequest(gameId = 7))
+
+        assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, response.statusCode)
+        assertEquals(DebugEndGameError("GAME_FINISHED", "Game 7 has already ended"), response.body)
     }
 
     @Test
-    fun `endGame returns 500 when service throws unexpected exception`() {
+    fun `endGame propagates unexpected exceptions instead of a broad catch`() {
+        // #305 DoD: no broad catch(Exception) — unexpected errors bubble to Spring's default 500 handler.
         whenever(debugService.validateAdmin(any())).thenReturn(adminUser())
         whenever(debugService.endGame(eq(7), any()))
             .thenThrow(RuntimeException("DB unavailable"))
 
-        val response = controller.endGame("Bearer admin-token", EndGameRequest(gameId = 7))
-
-        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.statusCode)
-        assertNull(response.body)
+        assertThrows<RuntimeException> {
+            controller.endGame("Bearer admin-token", EndGameRequest(gameId = 7))
+        }
+        verify(gameEndBroadcaster, never()).broadcast(any(), any(), any())
     }
 }
