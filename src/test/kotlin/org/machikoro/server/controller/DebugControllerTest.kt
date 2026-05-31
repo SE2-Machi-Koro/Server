@@ -6,23 +6,36 @@ import org.junit.jupiter.api.Test
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.GameModel
+import org.machikoro.server.domain.models.UserModel
 import org.machikoro.server.dto.DebugSeedResponse
 import org.machikoro.server.dto.FillLobbyRequest
 import org.machikoro.server.dto.GameStateDto
 import org.machikoro.server.dto.LoginResponse
+import org.machikoro.server.dto.EndGameRequest
+import org.machikoro.server.dto.EndTurnOutcome
+import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.exception.InvalidSessionTokenException
 import org.machikoro.server.exception.NotAdminException
+import org.machikoro.server.exception.NotInGameException
 import org.machikoro.server.service.DebugService
+import org.machikoro.server.service.GameEndBroadcaster
+import org.machikoro.server.service.GamePhaseService
 import org.mockito.kotlin.any
+import org.mockito.kotlin.eq
+import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.http.HttpStatus
 
 class DebugControllerTest {
 
     private val debugService = mock<DebugService>()
-    private val controller = DebugController(debugService)
+    private val gameEndBroadcaster = mock<GameEndBroadcaster>()
+    private val gamePhaseService = mock<GamePhaseService>()
+    private val controller = DebugController(debugService, gameEndBroadcaster, gamePhaseService)
 
     // --- helpers ---
 
@@ -51,6 +64,16 @@ class DebugControllerTest {
 
     private fun loginResponse(username: String, userId: Int) =
         LoginResponse(sessionToken = "token-$userId", username = username, userId = userId)
+
+    private fun adminUser() = UserModel(
+        id = 99,
+        username = "admin_1",
+        passwordHash = "hash",
+        sessionToken = "admin-token",
+        totalWins = 0,
+        totalGamesPlayed = 0,
+        isAdmin = true,
+    )
 
     // === POST /debug/seed ===
 
@@ -233,5 +256,107 @@ class DebugControllerTest {
         whenever(debugService.validateAdmin(any())).thenThrow(NotAdminException("not admin"))
 
         assertEquals(HttpStatus.FORBIDDEN, controller.resetLobby("Bearer token", FillLobbyRequest("X")).statusCode)
+    }
+
+    // === endGame ===
+
+    @Test
+    fun `endGame returns 200 OK with Won outcome, broadcasts then cleans up on success`() {
+        val admin = adminUser()
+        val outcome = EndTurnOutcome.Won(winnerId = 42, roundsPlayed = 5)
+        whenever(debugService.validateAdmin(any())).thenReturn(admin)
+        // eq(admin) proves the controller threads validateAdmin's result into endGame (no re-resolve).
+        whenever(debugService.endGame(eq(7), eq(admin))).thenReturn(outcome)
+
+        val response = controller.endGame("Bearer admin-token", EndGameRequest(gameId = 7))
+
+        assertEquals(HttpStatus.OK, response.statusCode)
+        assertEquals(outcome, response.body)
+        verify(gameEndBroadcaster).broadcast(7, 42, 5)
+        verify(gamePhaseService).cleanupFinishedGameData(7)
+    }
+
+    @Test
+    fun `endGame returns 401 when session token is invalid`() {
+        whenever(debugService.validateAdmin(any())).thenThrow(InvalidSessionTokenException("bad token"))
+
+        assertEquals(
+            HttpStatus.UNAUTHORIZED,
+            controller.endGame("Bearer bad", EndGameRequest(gameId = 7)).statusCode,
+        )
+        verify(gameEndBroadcaster, never()).broadcast(any(), any(), any())
+        verify(gamePhaseService, never()).cleanupFinishedGameData(any())
+    }
+
+    @Test
+    fun `endGame returns 401 when Authorization header is missing`() {
+        whenever(debugService.validateAdmin(isNull())).thenThrow(InvalidSessionTokenException("Missing Authorization header"))
+
+        assertEquals(
+            HttpStatus.UNAUTHORIZED,
+            controller.endGame(null, EndGameRequest(gameId = 7)).statusCode,
+        )
+        verify(gameEndBroadcaster, never()).broadcast(any(), any(), any())
+    }
+
+    @Test
+    fun `endGame returns 403 when user is not admin`() {
+        whenever(debugService.validateAdmin(any())).thenThrow(NotAdminException("not admin"))
+
+        assertEquals(
+            HttpStatus.FORBIDDEN,
+            controller.endGame("Bearer token", EndGameRequest(gameId = 7)).statusCode,
+        )
+        verify(gameEndBroadcaster, never()).broadcast(any(), any(), any())
+    }
+
+    @Test
+    fun `endGame returns 404 when game does not exist`() {
+        whenever(debugService.validateAdmin(any())).thenReturn(adminUser())
+        whenever(debugService.endGame(eq(404), any()))
+            .thenThrow(GameNotFoundException("Game 404 not found"))
+
+        assertEquals(
+            HttpStatus.NOT_FOUND,
+            controller.endGame("Bearer admin-token", EndGameRequest(gameId = 404)).statusCode,
+        )
+        verify(gameEndBroadcaster, never()).broadcast(any(), any(), any())
+    }
+
+    @Test
+    fun `endGame returns 422 when caller is not in the game`() {
+        whenever(debugService.validateAdmin(any())).thenReturn(adminUser())
+        whenever(debugService.endGame(eq(7), any()))
+            .thenThrow(NotInGameException("not a player"))
+
+        assertEquals(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            controller.endGame("Bearer admin-token", EndGameRequest(gameId = 7)).statusCode,
+        )
+        verify(gameEndBroadcaster, never()).broadcast(any(), any(), any())
+    }
+
+    @Test
+    fun `endGame returns 422 when game state precondition fails`() {
+        whenever(debugService.validateAdmin(any())).thenReturn(adminUser())
+        whenever(debugService.endGame(eq(7), any()))
+            .thenThrow(CustomWebSocketException(errorCode = "GAME_FINISHED", message = "Game 7 has already ended"))
+
+        assertEquals(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            controller.endGame("Bearer admin-token", EndGameRequest(gameId = 7)).statusCode,
+        )
+    }
+
+    @Test
+    fun `endGame returns 500 when service throws unexpected exception`() {
+        whenever(debugService.validateAdmin(any())).thenReturn(adminUser())
+        whenever(debugService.endGame(eq(7), any()))
+            .thenThrow(RuntimeException("DB unavailable"))
+
+        val response = controller.endGame("Bearer admin-token", EndGameRequest(gameId = 7))
+
+        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.statusCode)
+        assertNull(response.body)
     }
 }
