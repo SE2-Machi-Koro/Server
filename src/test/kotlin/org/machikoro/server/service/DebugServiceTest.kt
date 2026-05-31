@@ -3,7 +3,6 @@ package org.machikoro.server.service
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
-import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.UserDao
 import org.machikoro.server.domain.enums.GameStatus
@@ -40,12 +39,12 @@ class DebugServiceTest {
     private val passwordEncoder = mock<PasswordEncoder>()
     private val messagingTemplate = mock<SimpMessagingTemplate>()
     private val gameStateGuard = mock<GameStateGuard>()
-    private val gameDao = mock<GameDao>()
     private val playerDao = mock<PlayerDao>()
+    private val gamePhaseService = mock<GamePhaseService>()
 
     private val service = DebugService(
         userDao, lobbyService, passwordEncoder, messagingTemplate,
-        gameStateGuard, gameDao, playerDao,
+        gameStateGuard, playerDao, gamePhaseService,
     )
 
     // --- helpers ---
@@ -334,33 +333,27 @@ class DebugServiceTest {
     // === endGame() ===
     // The endpoint resolves + admin-checks the caller (validateAdmin) and owns the
     // GAME_END broadcast + cleanup; the service takes the already-resolved UserModel
-    // and only applies the transactional win side effects. See DebugControllerTest.
+    // and delegates the win side effects to GamePhaseService.finishGameWithWinner. See DebugControllerTest.
 
     private fun adminUser(id: Int, username: String) =
         userModel(id, username).copy(isAdmin = true)
 
     @Test
-    fun `endGame happy path increments stats, sets game FINISHED, returns Won`() {
+    fun `endGame delegates to GamePhaseService finishGameWithWinner and returns its outcome`() {
         val gameId = 7
         val admin = adminUser(99, "admin_1")
         val game = game(gameId).copy(status = GameStatus.IN_PROGRESS, roundNumber = 5)
         val adminPlayer = PlayerModel(id = 42, gameId = gameId, userId = admin.id, turnOrder = 1, coins = 8, lastSeenAt = null)
-        val allPlayers = listOf(
-            PlayerModel(id = 41, gameId = gameId, userId = 200, turnOrder = 0, coins = 3, lastSeenAt = null),
-            adminPlayer,
-        )
+        val won = EndTurnOutcome.Won(winnerId = 42, roundsPlayed = 5)
 
         whenever(gameStateGuard.ensureGameIsRunning(gameId)).thenReturn(game)
         whenever(playerDao.findByGameIdAndUserId(gameId, admin.id)).thenReturn(adminPlayer)
-        whenever(playerDao.getPlayers(gameId)).thenReturn(allPlayers)
+        whenever(gamePhaseService.finishGameWithWinner(gameId, adminPlayer, 5)).thenReturn(won)
 
         val outcome = service.endGame(gameId, admin)
 
-        assertEquals(EndTurnOutcome.Won(winnerId = 42, roundsPlayed = 5), outcome)
-        verify(userDao).incrementWins(admin.id)
-        verify(userDao).incrementGamesPlayed(200)
-        verify(userDao).incrementGamesPlayed(admin.id)
-        verify(gameDao).updateStatus(gameId, GameStatus.FINISHED)
+        assertEquals(won, outcome)
+        verify(gamePhaseService).finishGameWithWinner(gameId, adminPlayer, 5)
     }
 
     @Test
@@ -372,7 +365,7 @@ class DebugServiceTest {
         assertThrows<GameNotFoundException> {
             service.endGame(404, admin)
         }
-        verify(gameDao, never()).updateStatus(any(), any())
+        verify(gamePhaseService, never()).finishGameWithWinner(any(), any(), any())
     }
 
     @Test
@@ -384,7 +377,7 @@ class DebugServiceTest {
         assertThrows<CustomWebSocketException> {
             service.endGame(7, admin)
         }
-        verify(gameDao, never()).updateStatus(any(), any())
+        verify(gamePhaseService, never()).finishGameWithWinner(any(), any(), any())
     }
 
     @Test
@@ -398,7 +391,6 @@ class DebugServiceTest {
         assertThrows<NotInGameException> {
             service.endGame(gameId, admin)
         }
-        verify(userDao, never()).incrementWins(any())
-        verify(gameDao, never()).updateStatus(any(), any())
+        verify(gamePhaseService, never()).finishGameWithWinner(any(), any(), any())
     }
 }

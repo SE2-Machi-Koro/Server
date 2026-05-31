@@ -1,9 +1,7 @@
 package org.machikoro.server.service
 
-import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.UserDao
-import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.models.UserModel
 import org.machikoro.server.dto.DebugSeedResponse
 import org.machikoro.server.dto.EndTurnOutcome
@@ -29,8 +27,8 @@ class DebugService(
     private val passwordEncoder: PasswordEncoder,
     private val messagingTemplate: SimpMessagingTemplate,
     private val gameStateGuard: GameStateGuard,
-    private val gameDao: GameDao,
     private val playerDao: PlayerDao,
+    private val gamePhaseService: GamePhaseService,
 ) {
     private val logger = LoggerFactory.getLogger(DebugService::class.java)
 
@@ -146,12 +144,12 @@ class DebugService(
      * the winner. Used by the `/debug/end-game` endpoint (#305) so testers can
      * reach the winner screen without playing through.
      *
-     * Mirrors `GamePhaseService.endTurn`'s win-handling side effects — stat
-     * increments + status transition — but bypasses `WinConditionService.detectWinner`
-     * so no landmarks are required. Like the production path, the mutations run in
-     * one transaction here, while broadcasting GAME_END and cleaning up the finished
-     * game are the controller's responsibility (mirroring `GameController.endTurn`),
-     * so they happen after this transaction commits.
+     * Delegates the win side effects to [GamePhaseService.finishGameWithWinner] —
+     * the same path the natural end-of-turn win uses — but bypasses
+     * `WinConditionService.detectWinner` so no landmarks are required. Like the
+     * production path the mutations run in one transaction here, while broadcasting
+     * GAME_END and cleaning up the finished game are the controller's responsibility
+     * (mirroring `GameController.endTurn`), so they happen after this commits.
      *
      * Throws:
      *  - `org.machikoro.server.exception.GameNotFoundException` via [gameStateGuard] when the game does not exist.
@@ -164,15 +162,13 @@ class DebugService(
         val callerPlayer = playerDao.findByGameIdAndUserId(gameId, caller.id)
             ?: throw NotInGameException("User ${caller.username} is not a player in game $gameId")
 
-        userDao.incrementWins(caller.id)
-        playerDao.getPlayers(gameId).forEach { userDao.incrementGamesPlayed(it.userId) }
-        gameDao.updateStatus(gameId, GameStatus.FINISHED)
+        val outcome = gamePhaseService.finishGameWithWinner(gameId, callerPlayer, game.roundNumber)
 
         logger.info(
             "Debug end-game forced winner: player {} (user '{}') in game {} (round {})",
             callerPlayer.id, caller.username, gameId, game.roundNumber,
         )
-        return EndTurnOutcome.Won(winnerId = callerPlayer.id, roundsPlayed = game.roundNumber)
+        return outcome
     }
 
     // Creates the user if absent, then issues a fresh session token

@@ -8,6 +8,7 @@ import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.dao.UserDao
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
+import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.dto.EndTurnOutcome
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -55,14 +56,25 @@ class GamePhaseService(
         gameDao.updateTurnPhase(gameId, TurnPhase.END_TURN)
 
         winConditionService.detectWinner(gameId)?.let { winner ->
-            userDao.incrementWins(winner.userId)
-            playerDao.getPlayers(gameId).forEach { userDao.incrementGamesPlayed(it.userId) }
-            gameDao.updateStatus(gameId, GameStatus.FINISHED)
-            return EndTurnOutcome.Won(winner.id, game.roundNumber)
+            return finishGameWithWinner(gameId, winner, game.roundNumber)
         }
 
         val nextPhase = advanceTurn(gameId)
         return EndTurnOutcome.Continue(nextPhase)
+    }
+
+    /**
+     * Applies the shared end-of-game win side effects — records the win and
+     * games-played stats and transitions the game to FINISHED — and returns the
+     * [EndTurnOutcome.Won]. Reused by the natural [endTurn] win path and the
+     * debug end-game endpoint (#305) so both paths produce an identical result.
+     * Callers run inside their own transaction and own the GAME_END broadcast.
+     */
+    fun finishGameWithWinner(gameId: Int, winner: PlayerModel, roundNumber: Int): EndTurnOutcome.Won {
+        userDao.incrementWins(winner.userId)
+        playerDao.getPlayers(gameId).forEach { userDao.incrementGamesPlayed(it.userId) }
+        gameDao.updateStatus(gameId, GameStatus.FINISHED)
+        return EndTurnOutcome.Won(winner.id, roundNumber)
     }
 
     /** Advances a game to the next player's turn and persists it. */
