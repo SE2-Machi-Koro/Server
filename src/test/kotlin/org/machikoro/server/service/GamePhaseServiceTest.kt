@@ -34,6 +34,9 @@ class GamePhaseServiceTest {
     private val gameMarketplaceDao = mock<GameMarketplaceDao>()
     private val gameStateGuard = mock<GameStateGuard>()
     private val winConditionService = mock<WinConditionService>()
+    private val transactionRunner = object : GameTransactionRunner {
+        override fun <T> inTransaction(action: () -> T): T = action()
+    }
 
     private val service = GamePhaseService(
         gameDao,
@@ -43,7 +46,8 @@ class GamePhaseServiceTest {
         playerLandmarkDao,
         gameMarketplaceDao,
         gameStateGuard,
-        winConditionService
+        winConditionService,
+        transactionRunner,
     )
 
     private fun gameInPhase(
@@ -64,63 +68,19 @@ class GamePhaseServiceTest {
         roundNumber = roundNumber,
     )
 
-
     @Test
-    fun `ROLL_DICE advances to RESOLVE_EFFECTS`() {
-        assertEquals(TurnPhase.RESOLVE_EFFECTS, service.nextPhase(TurnPhase.ROLL_DICE))
-    }
-
-    @Test
-    fun `RESOLVE_EFFECTS advances to BUY_OR_BUILD`() {
-        assertEquals(TurnPhase.BUY_OR_BUILD, service.nextPhase(TurnPhase.RESOLVE_EFFECTS))
-    }
-
-    @Test
-    fun `BUY_OR_BUILD advances to END_TURN`() {
-        assertEquals(TurnPhase.END_TURN, service.nextPhase(TurnPhase.BUY_OR_BUILD))
-    }
-
-    @Test
-    fun `END_TURN cycles back to ROLL_DICE`() {
-        assertEquals(TurnPhase.ROLL_DICE, service.nextPhase(TurnPhase.END_TURN))
-    }
-
-    @Test
-    fun `nextPhase handles every TurnPhase value`() {
-        TurnPhase.entries.forEach { phase ->
-            service.nextPhase(phase)
-        }
-    }
-
-    @Test
-    fun `full cycle completes correctly`() {
-        var phase = TurnPhase.ROLL_DICE
-        assertEquals(TurnPhase.ROLL_DICE, phase)
-
-        phase = service.nextPhase(phase)
-        assertEquals(TurnPhase.RESOLVE_EFFECTS, phase)
-
-        phase = service.nextPhase(phase)
-        assertEquals(TurnPhase.BUY_OR_BUILD, phase)
-
-        phase = service.nextPhase(phase)
-        assertEquals(TurnPhase.END_TURN, phase)
-
-        phase = service.nextPhase(phase)
-        assertEquals(TurnPhase.ROLL_DICE, phase)
-    }
-
-    @Test
-    fun `advancePhase reads current phase and persists the next one`() {
+    fun `endTurn rejects when another request has already completed the transition`() {
         val gameId = 42
         whenever(gameStateGuard.ensureGameIsRunning(gameId))
-            .thenReturn(gameInPhase(gameId, TurnPhase.ROLL_DICE))
+            .thenReturn(gameInPhase(gameId, TurnPhase.BUY_OR_BUILD))
+        whenever(gameDao.tryTransitionPhase(gameId, TurnPhase.BUY_OR_BUILD, TurnPhase.END_TURN))
+            .thenReturn(false)
 
-        val result = service.advancePhase(gameId)
+        val ex = assertThrows<CustomWebSocketException> { service.endTurn(gameId) }
 
-        assertEquals(TurnPhase.RESOLVE_EFFECTS, result)
-        verify(gameStateGuard).ensureGameIsRunning(gameId)
-        verify(gameDao).updateTurnPhase(gameId, TurnPhase.RESOLVE_EFFECTS)
+        assertEquals("TURN_ALREADY_ENDED", ex.errorCode)
+        verify(gameDao).tryTransitionPhase(gameId, TurnPhase.BUY_OR_BUILD, TurnPhase.END_TURN)
+        verify(gameDao, never()).advanceTurn(any(), any(), any())
     }
 
     @Test
@@ -132,23 +92,12 @@ class GamePhaseServiceTest {
             .thenReturn(listOf(mock<PlayerModel>()))
         whenever(winConditionService.detectWinner(gameId))
             .thenReturn(null)
+        whenever(gameDao.tryTransitionPhase(gameId, TurnPhase.BUY_OR_BUILD, TurnPhase.END_TURN))
+            .thenReturn(true)
 
         val result = service.endTurn(gameId)
         assertTrue(result is EndTurnOutcome.Continue)
         assertEquals(TurnPhase.ROLL_DICE, result.nextPhase)
-    }
-
-    @Test
-    fun `advancePhase rejects FINISHED games and does not persist`() {
-        val gameId = 99
-        whenever(gameStateGuard.ensureGameIsRunning(gameId))
-            .thenThrow(CustomWebSocketException("GAME_FINISHED", "Game $gameId has already ended"))
-
-        val ex = assertThrows<CustomWebSocketException> {
-            service.advancePhase(gameId)
-        }
-        assertEquals("GAME_FINISHED", ex.errorCode)
-        verify(gameDao, never()).updateTurnPhase(any(), any())
     }
 
     @Test
@@ -162,6 +111,8 @@ class GamePhaseServiceTest {
                 PlayerModel(2, gameId, 11, 1, 3, lastSeenAt = 30),
             )
         )
+        whenever(gameDao.tryTransitionPhase(gameId, TurnPhase.BUY_OR_BUILD, TurnPhase.END_TURN))
+            .thenReturn(true)
 
         val result = service.endTurn(gameId)
 
@@ -173,7 +124,7 @@ class GamePhaseServiceTest {
 
         val ordered = inOrder(gameStateGuard, gameDao)
         ordered.verify(gameStateGuard).ensureGameIsRunning(gameId)
-        ordered.verify(gameDao).updateTurnPhase(gameId, TurnPhase.END_TURN)
+        ordered.verify(gameDao).tryTransitionPhase(gameId, TurnPhase.BUY_OR_BUILD, TurnPhase.END_TURN)
         ordered.verify(gameDao).advanceTurn(gameId, 1, 1)
     }
 
@@ -188,6 +139,8 @@ class GamePhaseServiceTest {
                 PlayerModel(2, gameId, 11, 1, 3, lastSeenAt = 30),
             )
         )
+        whenever(gameDao.tryTransitionPhase(gameId, TurnPhase.BUY_OR_BUILD, TurnPhase.END_TURN))
+            .thenReturn(true)
 
         val result = service.endTurn(gameId)
 
@@ -197,7 +150,7 @@ class GamePhaseServiceTest {
             (result).nextPhase
         )
 
-        verify(gameDao).updateTurnPhase(gameId, TurnPhase.END_TURN)
+        verify(gameDao).tryTransitionPhase(gameId, TurnPhase.BUY_OR_BUILD, TurnPhase.END_TURN)
         verify(gameDao).advanceTurn(gameId, 0, 4)
     }
 
@@ -215,6 +168,8 @@ class GamePhaseServiceTest {
             .thenReturn(winner)
         whenever(playerDao.getPlayers(gameId))
             .thenReturn(listOf(winner))
+        whenever(gameDao.tryTransitionPhase(gameId, TurnPhase.BUY_OR_BUILD, TurnPhase.END_TURN))
+            .thenReturn(true)
 
         val result = service.endTurn(gameId)
 
@@ -228,7 +183,7 @@ class GamePhaseServiceTest {
             (result).roundsPlayed
         )
 
-        verify(gameDao).updateTurnPhase(gameId, TurnPhase.END_TURN)
+        verify(gameDao).tryTransitionPhase(gameId, TurnPhase.BUY_OR_BUILD, TurnPhase.END_TURN)
         verify(userDao).incrementWins(userId)
         verify(gameDao).updateStatus(gameId, GameStatus.FINISHED)
     }
@@ -256,11 +211,12 @@ class GamePhaseServiceTest {
         whenever(gameStateGuard.ensureGameIsRunning(gameId))
             .thenReturn(gameInPhase(gameId, TurnPhase.RESOLVE_EFFECTS))
 
-        assertThrows<IllegalStateException> {
+        val ex = assertThrows<CustomWebSocketException> {
             service.endTurn(gameId)
         }
+        assertEquals("INVALID_TURN_PHASE", ex.errorCode)
 
-        verify(gameDao, never()).updateTurnPhase(gameId, TurnPhase.END_TURN)
+        verify(gameDao, never()).tryTransitionPhase(gameId, TurnPhase.BUY_OR_BUILD, TurnPhase.END_TURN)
         verify(gameDao, never()).advanceTurn(any(), any(), any())
         verifyNoMoreInteractions(playerDao)
     }
@@ -276,7 +232,7 @@ class GamePhaseServiceTest {
         }
         assertEquals("GAME_FINISHED", ex.errorCode)
 
-        verify(gameDao, never()).updateTurnPhase(any(), any())
+        verify(gameDao, never()).tryTransitionPhase(any(), any(), any())
         verify(gameDao, never()).advanceTurn(any(), any(), any())
         verifyNoMoreInteractions(playerDao)
     }

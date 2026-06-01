@@ -245,39 +245,28 @@ class GameControllerTest {
     // ── advancePhase ──────────────────────────────────────────────────────────
 
     @Test
-    fun `advancePhase delegates to service with the requested game id`() {
+    fun `advancePhase is rejected without mutating state`() {
         val gameId = 42
-        val snapshot = gameStateDto(gameId, turnPhase = TurnPhase.RESOLVE_EFFECTS)
-        whenever(gamePhaseService.advancePhase(gameId)).thenReturn(TurnPhase.RESOLVE_EFFECTS)
-        whenever(gameSyncService.buildSnapshot(gameId)).thenReturn(snapshot)
 
-        controller.advancePhase(AdvancePhaseRequest(gameId), authedAccessor())
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.advancePhase(AdvancePhaseRequest(gameId), authedAccessor())
+        }
 
+        assertEquals("DIRECT_PHASE_ADVANCE_FORBIDDEN", ex.errorCode)
         verify(gameStateGuard).ensureSenderIsActivePlayer(gameId, alice)
-        verify(gamePhaseService).advancePhase(gameId)
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+        verify(gameSyncService, never()).buildSnapshot(any())
     }
 
     @Test
-    fun `advancePhase broadcasts new phase and activePlayerId as GAME_ACTION`() {
+    fun `advancePhase rejection does not invoke end turn behavior`() {
         val gameId = 42
-        val snapshot = gameStateDto(gameId, turnPhase = TurnPhase.RESOLVE_EFFECTS)
-        whenever(gamePhaseService.advancePhase(gameId)).thenReturn(TurnPhase.RESOLVE_EFFECTS)
-        whenever(gameSyncService.buildSnapshot(gameId)).thenReturn(snapshot)
 
-        controller.advancePhase(AdvancePhaseRequest(gameId), authedAccessor())
+        assertThrows<CustomWebSocketException> {
+            controller.advancePhase(AdvancePhaseRequest(gameId), authedAccessor())
+        }
 
-        val captor = argumentCaptor<WebSocketMessage>()
-        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
-
-        val message = captor.firstValue
-        assertEquals(MessageType.GAME_ACTION, message.type)
-        assertEquals("server", message.sender)
-        @Suppress("UNCHECKED_CAST")
-        val payload = message.payload as Map<String, Any?>
-        assertEquals("PHASE_ADVANCED", payload["event"])
-        assertEquals("RESOLVE_EFFECTS", payload["turnPhase"])
-        assertEquals(1, payload["activePlayerId"])
-        assertEquals(snapshot, payload["state"])
+        verify(gamePhaseService, never()).endTurn(any())
     }
 
     @Test
@@ -290,7 +279,6 @@ class GameControllerTest {
             controller.advancePhase(AdvancePhaseRequest(gameId), authedAccessor())
         }
         assertEquals("NOT_YOUR_TURN", ex.errorCode)
-        verify(gamePhaseService, never()).advancePhase(any())
         verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }
 
@@ -304,7 +292,6 @@ class GameControllerTest {
             controller.advancePhase(AdvancePhaseRequest(gameId), authedAccessor())
         }
         assertEquals("GAME_NOT_STARTED", ex.errorCode)
-        verify(gamePhaseService, never()).advancePhase(any())
         verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }
 
@@ -561,6 +548,34 @@ class GameControllerTest {
     }
 
     @Test
+    fun `rollDice broadcasts domain error code to game topic on rejected roll`() {
+        val gameId = 1
+        val activePlayer = PlayerModel(id = 9, gameId = gameId, userId = alice.userId, turnOrder = 0, coins = 3, lastSeenAt = null)
+        val request = RollDiceRequest(gameId = gameId, playerId = null)
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice)).thenReturn(activePlayer)
+        whenever(diceService.rollDice(request, activePlayer.id))
+            .thenThrow(CustomWebSocketException("ROLL_ALREADY_COMPLETED", "Dice have already been rolled for this turn"))
+
+        controller.rollDice(request, authedAccessor())
+
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+        val message = captor.firstValue
+        assertEquals(MessageType.ERROR, message.type)
+        assertEquals("SERVER", message.sender)
+        assertEquals(
+            mapOf(
+                "event" to "ROLL_FAILED",
+                "code" to "ROLL_ALREADY_COMPLETED",
+                "message" to "Dice have already been rolled for this turn",
+            ),
+            message.payload,
+        )
+        verify(diceService).rollDice(request, activePlayer.id)
+        verify(gameStateGuard, never()).ensureSenderOwnsPlayer(any(), any(), any())
+    }
+
+    @Test
     fun `rollDice propagates NOT_YOUR_TURN and does not call service or broadcast`() {
         val gameId = 1
         val playerId = 2
@@ -604,7 +619,6 @@ class GameControllerTest {
     @Test
     fun `advancePhase throws UNAUTHENTICATED when accessor has no principal`() {
         assertUnauthenticated { controller.advancePhase(AdvancePhaseRequest(42), it) }
-        verify(gamePhaseService, never()).advancePhase(any())
     }
 
     @Test

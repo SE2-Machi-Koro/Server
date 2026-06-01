@@ -21,7 +21,7 @@ class DiceService(
     fun rollDice(request: RollDiceRequest, rollingPlayerId: Int): RollDiceResponse = synchronized(rollLocks.computeIfAbsent(request.gameId) { Any() }) {
         val game = gameStateGuard.ensureGameIsRunning(request.gameId)
 
-        if (game.turnPhase != TurnPhase.ROLL_DICE) {
+        if (game.turnPhase != TurnPhase.ROLL_DICE || game.lastDiceRoll != null) {
             throw CustomWebSocketException("ROLL_ALREADY_COMPLETED", "Dice have already been rolled for this turn")
         }
 
@@ -47,7 +47,9 @@ class DiceService(
         }
         val total = dice.sum()
 
-        gameDao.updateAfterRoll(request.gameId, total, TurnPhase.RESOLVE_EFFECTS)
+        if (!gameDao.tryRecordDiceRoll(request.gameId, total)) {
+            throw CustomWebSocketException("ROLL_ALREADY_COMPLETED", "Dice have already been rolled for this turn")
+        }
 
         return RollDiceResponse(dice = dice, total = total)
     }

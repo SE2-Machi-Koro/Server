@@ -15,6 +15,7 @@ PostgreSQL. Designed for reliability, scalability, and developer productivity.
   statuses.
 - **Game Logic Engine:** Calculates earnings, applies card effects based on dice rolls, and detects win conditions (
   e.g., landmark completion).
+- **Authoritative Turns:** Clients request roll, resolve, purchase, and end-turn actions; only the server advances legal phases.
 - **In-Game Chat:** Built-in chat system for players in the lobby and during the game.
 - **Data Persistence:** Uses JetBrains Exposed ORM to safely store users, games, cards, and landmarks in PostgreSQL.
 - **Quality Assured:** Comprehensive test suite with Testcontainers, JUnit5, and a strict ≥80% Jacoco coverage quality
@@ -288,6 +289,8 @@ Sonar analysis settings are defined in `build.gradle.kts` under the Gradle `sona
 ## API & WebSocket Documentation
 
 For detailed API documentation, the server exposes both standard REST and asynchronous API documentation.
+
+The gameplay loop is action-driven: `ROLL_DICE --rollDice--> RESOLVE_EFFECTS --resolveEffects--> BUY_OR_BUILD --endTurn--> ROLL_DICE`. Purchases are optional and limited to one during `BUY_OR_BUILD`. `/app/game.advancePhase` is a deprecated compatibility destination that is rejected and cannot skip required turn actions.
 
 - **Swagger UI (REST):** Accessible at `http://localhost:8080/swagger-ui.html`. Powered by Springdoc OpenAPI, this interface provides interactive documentation for our standard REST endpoints.
 - **Springwolf UI (AsyncAPI/WebSockets):** Accessible at `http://localhost:8080/springwolf/asyncapi-ui.html`. Powered by Springwolf, this provides interactive documentation and an event publisher for our STOMP over WebSocket channels, which are the backbone of our real-time game communications.

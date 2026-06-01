@@ -7,6 +7,7 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.database.AbstractDBSetup
 import org.machikoro.server.database.CardActivationNumbers
 import org.machikoro.server.database.Cards
@@ -20,6 +21,7 @@ import org.machikoro.server.domain.enums.EstablishmentType
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.PaymentSource
 import org.machikoro.server.domain.enums.TurnPhase
+import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.service.interfaces.EarningsService
 import org.springframework.beans.factory.annotation.Autowired
 import kotlin.test.Test
@@ -151,6 +153,21 @@ class EarningsIntegrationTest : AbstractDBSetup() {
         // P2: 3 + 1 (Cafe, from P1) = 4
         assertEquals(2, p1.coins)
         assertEquals(4, p2.coins)
+        assertEquals(TurnPhase.BUY_OR_BUILD, gameDao.findById(gameId)!!.turnPhase)
+    }
+
+    @Test
+    fun `duplicate effect resolution is rejected without changing coins`() {
+        earningsService.resolveEffects(gameId)
+        val before = playerDao.getPlayers(gameId).map { it.id to it.coins }
+
+        val ex = assertThrows<CustomWebSocketException> {
+            earningsService.resolveEffects(gameId)
+        }
+
+        assertEquals("EFFECTS_ALREADY_RESOLVED", ex.errorCode)
+        assertEquals(before, playerDao.getPlayers(gameId).map { it.id to it.coins })
+        assertEquals(TurnPhase.BUY_OR_BUILD, gameDao.findById(gameId)!!.turnPhase)
     }
 
     @Test

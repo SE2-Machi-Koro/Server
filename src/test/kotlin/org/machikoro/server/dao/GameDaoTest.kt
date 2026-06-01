@@ -131,6 +131,26 @@ class GameDaoTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `tryRecordDiceRoll records exactly one roll in a turn`() {
+        val id = gameDao.create(hostId)
+
+        assertTrue(gameDao.tryRecordDiceRoll(id, diceRoll = 4))
+        assertFalse(gameDao.tryRecordDiceRoll(id, diceRoll = 6))
+
+        val game = gameDao.findById(id)!!
+        assertEquals(4, game.lastDiceRoll)
+        assertEquals(TurnPhase.RESOLVE_EFFECTS, game.turnPhase)
+    }
+
+    @Test
+    fun `tryTransitionPhase rejects a stale expected phase`() {
+        val id = gameDao.create(hostId)
+
+        assertFalse(gameDao.tryTransitionPhase(id, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD))
+        assertEquals(TurnPhase.ROLL_DICE, gameDao.findById(id)!!.turnPhase)
+    }
+
+    @Test
     fun `updateHasPurchasedThisTurn changes purchase state`() {
         val id = gameDao.create(hostId)
         gameDao.updateHasPurchasedThisTurn(id, true)
