@@ -138,8 +138,9 @@ class DebugController(
                 .body(DebugEndGameError("NOT_ADMIN", e.message ?: "Admin access required"))
         } catch (e: GameNotFoundException) {
             logger.warn("Debug end-game rejected: {}", e.message)
+            // GameNotFoundException extends CustomWebSocketException, whose message is non-null.
             ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(DebugEndGameError("GAME_NOT_FOUND", e.message ?: "Game not found"))
+                .body(DebugEndGameError("GAME_NOT_FOUND", e.message))
         } catch (e: NotInGameException) {
             logger.warn("Debug end-game rejected: {}", e.message)
             ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
