@@ -2,21 +2,24 @@ package org.machikoro.server.service
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.assertDoesNotThrow
 import org.junit.jupiter.api.assertThrows
+import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.UserDao
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.domain.models.UserModel
+import org.machikoro.server.dto.EndTurnOutcome
 import org.machikoro.server.dto.GameStateDto
 import org.machikoro.server.dto.LobbyRosterPlayerDto
+import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.exception.InvalidSessionTokenException
 import org.machikoro.server.exception.LobbyFullException
 import org.machikoro.server.exception.NotAdminException
+import org.machikoro.server.exception.NotInGameException
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
@@ -35,8 +38,14 @@ class DebugServiceTest {
     private val lobbyService = mock<LobbyService>()
     private val passwordEncoder = mock<PasswordEncoder>()
     private val messagingTemplate = mock<SimpMessagingTemplate>()
+    private val gameStateGuard = mock<GameStateGuard>()
+    private val playerDao = mock<PlayerDao>()
+    private val gamePhaseService = mock<GamePhaseService>()
 
-    private val service = DebugService(userDao, lobbyService, passwordEncoder, messagingTemplate)
+    private val service = DebugService(
+        userDao, lobbyService, passwordEncoder, messagingTemplate,
+        gameStateGuard, playerDao, gamePhaseService,
+    )
 
     // --- helpers ---
 
@@ -314,10 +323,74 @@ class DebugServiceTest {
     }
 
     @Test
-    fun `validateAdmin passes without throwing when user is admin`() {
+    fun `validateAdmin returns the admin user when token is valid and user is admin`() {
         val admin = userModel(1, "admin_1").copy(isAdmin = true)
         whenever(userDao.findBySessionToken("token")).thenReturn(admin)
 
-        assertDoesNotThrow { service.validateAdmin("Bearer token") }
+        assertEquals(admin, service.validateAdmin("Bearer token"))
+    }
+
+    // === endGame() ===
+    // The endpoint resolves + admin-checks the caller (validateAdmin) and owns the
+    // GAME_END broadcast + cleanup; the service takes the already-resolved UserModel
+    // and delegates the win side effects to GamePhaseService.finishGameWithWinner. See DebugControllerTest.
+
+    private fun adminUser(id: Int, username: String) =
+        userModel(id, username).copy(isAdmin = true)
+
+    @Test
+    fun `endGame delegates to GamePhaseService finishGameWithWinner and returns its outcome`() {
+        val gameId = 7
+        val admin = adminUser(99, "admin_1")
+        val game = game(gameId).copy(status = GameStatus.IN_PROGRESS, roundNumber = 5)
+        val adminPlayer = PlayerModel(id = 42, gameId = gameId, userId = admin.id, turnOrder = 1, coins = 8, lastSeenAt = null)
+        val won = EndTurnOutcome.Won(winnerId = 42, roundsPlayed = 5)
+
+        whenever(gameStateGuard.ensureGameIsRunning(gameId)).thenReturn(game)
+        whenever(playerDao.findByGameIdAndUserId(gameId, admin.id)).thenReturn(adminPlayer)
+        whenever(gamePhaseService.finishGameWithWinner(gameId, adminPlayer, 5)).thenReturn(won)
+
+        val outcome = service.endGame(gameId, admin)
+
+        assertEquals(won, outcome)
+        verify(gamePhaseService).finishGameWithWinner(gameId, adminPlayer, 5)
+    }
+
+    @Test
+    fun `endGame propagates GameNotFoundException from the guard and does not mutate state`() {
+        val admin = adminUser(99, "admin_1")
+        whenever(gameStateGuard.ensureGameIsRunning(404))
+            .thenThrow(GameNotFoundException("Game 404 not found"))
+
+        assertThrows<GameNotFoundException> {
+            service.endGame(404, admin)
+        }
+        verify(gamePhaseService, never()).finishGameWithWinner(any(), any(), any())
+    }
+
+    @Test
+    fun `endGame propagates CustomWebSocketException when game is already finished`() {
+        val admin = adminUser(99, "admin_1")
+        whenever(gameStateGuard.ensureGameIsRunning(7))
+            .thenThrow(CustomWebSocketException(errorCode = "GAME_FINISHED", message = "Game 7 has already ended"))
+
+        assertThrows<CustomWebSocketException> {
+            service.endGame(7, admin)
+        }
+        verify(gamePhaseService, never()).finishGameWithWinner(any(), any(), any())
+    }
+
+    @Test
+    fun `endGame throws NotInGameException when caller is admin but not a player in the game`() {
+        val gameId = 7
+        val admin = adminUser(99, "admin_1")
+        whenever(gameStateGuard.ensureGameIsRunning(gameId))
+            .thenReturn(game(gameId).copy(status = GameStatus.IN_PROGRESS))
+        whenever(playerDao.findByGameIdAndUserId(gameId, admin.id)).thenReturn(null)
+
+        assertThrows<NotInGameException> {
+            service.endGame(gameId, admin)
+        }
+        verify(gamePhaseService, never()).finishGameWithWinner(any(), any(), any())
     }
 }

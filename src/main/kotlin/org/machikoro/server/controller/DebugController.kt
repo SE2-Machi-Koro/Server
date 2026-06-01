@@ -2,12 +2,19 @@ package org.machikoro.server.controller
 
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
+import org.machikoro.server.dto.DebugEndGameError
 import org.machikoro.server.dto.DebugSeedResponse
+import org.machikoro.server.dto.EndGameRequest
 import org.machikoro.server.dto.FillLobbyRequest
 import org.machikoro.server.dto.LoginResponse
+import org.machikoro.server.exception.CustomWebSocketException
+import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.exception.InvalidSessionTokenException
 import org.machikoro.server.exception.NotAdminException
+import org.machikoro.server.exception.NotInGameException
 import org.machikoro.server.service.DebugService
+import org.machikoro.server.service.GameEndBroadcaster
+import org.machikoro.server.service.GamePhaseService
 import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.http.HttpStatus
@@ -24,7 +31,11 @@ import org.springframework.web.bind.annotation.RestController
 @RequestMapping("/debug")
 @Tag(name = "Debug", description = "Development-only helpers for seeding test data")
 @ConditionalOnProperty(name = ["debug.enabled"], havingValue = "true")
-class DebugController(private val debugService: DebugService) {
+class DebugController(
+    private val debugService: DebugService,
+    private val gameEndBroadcaster: GameEndBroadcaster,
+    private val gamePhaseService: GamePhaseService,
+) {
     private val logger = LoggerFactory.getLogger(DebugController::class.java)
 
     @PostMapping("/seed")
@@ -103,5 +114,43 @@ class DebugController(private val debugService: DebugService) {
             logger.error("Reset lobby failed for '{}': {}", request.lobbyCode, e.message)
             ResponseEntity.internalServerError().build()
         }
+    }
+
+    @PostMapping("/end-game")
+    @Operation(summary = "Force the current game to end with the caller as winner — admin only")
+    fun endGame(
+        @RequestHeader("Authorization", required = false) authHeader: String?,
+        @RequestBody request: EndGameRequest,
+    ): ResponseEntity<Any> {
+        return try {
+            val caller = debugService.validateAdmin(authHeader)
+            val outcome = debugService.endGame(request.gameId, caller)
+            // Broadcast GAME_END then clean up post-commit, mirroring GameController.endTurn's win handling.
+            gameEndBroadcaster.broadcast(request.gameId, outcome.winnerId, outcome.roundsPlayed)
+            gamePhaseService.cleanupFinishedGameData(request.gameId)
+            logger.info("Debug end-game succeeded for game {}, winner player {}", request.gameId, outcome.winnerId)
+            ResponseEntity.ok(outcome)
+        } catch (e: InvalidSessionTokenException) {
+            ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(DebugEndGameError("UNAUTHENTICATED", e.message ?: "Missing or invalid session token"))
+        } catch (e: NotAdminException) {
+            ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(DebugEndGameError("NOT_ADMIN", e.message ?: "Admin access required"))
+        } catch (e: GameNotFoundException) {
+            logger.warn("Debug end-game rejected: {}", e.message)
+            // GameNotFoundException extends CustomWebSocketException, whose message is non-null.
+            ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(DebugEndGameError("GAME_NOT_FOUND", e.message))
+        } catch (e: NotInGameException) {
+            logger.warn("Debug end-game rejected: {}", e.message)
+            ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(DebugEndGameError("NOT_IN_GAME", e.message ?: "Caller is not a player in the game"))
+        } catch (e: CustomWebSocketException) {
+            // GameStateGuard raises this for GAME_FINISHED / GAME_NOT_STARTED
+            logger.warn("Debug end-game rejected [{}]: {}", e.errorCode, e.message)
+            ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(DebugEndGameError(e.errorCode, e.message))
+        }
+        // Any unexpected exception propagates to Spring's default 500 handler — no broad catch (#305 DoD).
     }
 }

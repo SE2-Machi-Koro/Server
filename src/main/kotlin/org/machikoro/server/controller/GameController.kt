@@ -16,6 +16,7 @@ import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.exception.NotHostException
 import org.machikoro.server.service.DiceService
+import org.machikoro.server.service.GameEndBroadcaster
 import org.machikoro.server.service.GamePhaseService
 import org.machikoro.server.service.GameSyncService
 import org.machikoro.server.service.GameStateGuard
@@ -42,6 +43,7 @@ class GameController(
     private val connectionTracker: WebSocketConnectionTracker,
     private val gameStateGuard: GameStateGuard,
     private val gameSyncService: GameSyncService,
+    private val gameEndBroadcaster: GameEndBroadcaster,
 ) {
     private val logger = LoggerFactory.getLogger(GameController::class.java)
 
@@ -272,7 +274,7 @@ class GameController(
             }
             is EndTurnOutcome.Won -> {
                 logger.info("Game ${request.gameId} finished, winner=${result.winnerId}")
-                broadcastWin(request.gameId, result.winnerId, result.roundsPlayed)
+                gameEndBroadcaster.broadcast(request.gameId, result.winnerId, result.roundsPlayed)
                 gamePhaseService.cleanupFinishedGameData(request.gameId)
             }
         }
@@ -407,23 +409,6 @@ class GameController(
                 sender = "server",
                 payload = payload,
                 gameId = request.gameId,
-            ),
-        )
-    }
-
-    private fun broadcastWin(gameId: Int, winnerId: Int, roundsPlayed: Int) {
-        val state = gameSyncService.buildSnapshot(gameId)
-        messagingTemplate.convertAndSend(
-            "/topic/game/$gameId",
-            WebSocketMessage(
-                type = MessageType.GAME_END,
-                sender = "server",
-                payload = mapOf(
-                    "winnerId" to winnerId,
-                    "roundsPlayed" to roundsPlayed,
-                    "state" to state,
-                ),
-                gameId = gameId,
             ),
         )
     }
