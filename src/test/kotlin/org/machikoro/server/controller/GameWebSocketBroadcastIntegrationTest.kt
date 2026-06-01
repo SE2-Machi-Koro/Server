@@ -158,14 +158,26 @@ class GameWebSocketBroadcastIntegrationTest {
         )
 
         sendJson(hostSession, "/app/game.start", mapOf("gameId" to gameId))
-        val startedPair = assertSameGameBroadcast(hostGameQueue, guestGameQueue, MessageType.GAME_STARTED)
-        assertSameGameActionBroadcast(hostGameQueue, guestGameQueue, "GAME_STARTED")
+        val startMessages = takeSameMessageBatch(hostGameQueue, guestGameQueue, expectedMessages = 2, description = "game start")
+        val startedPair = assertSameBroadcastInBatch(startMessages, "GAME_STARTED frame") {
+            it["type"].asText() == MessageType.GAME_STARTED.name
+        }
+        assertSameBroadcastInBatch(startMessages, "GAME_STARTED action") {
+            it["type"].asText() == MessageType.GAME_ACTION.name &&
+                it["payload"]["event"].asText() == "GAME_STARTED"
+        }
 
         val firstActiveUserId = startedPair.first["payload"]["activePlayerId"].asInt()
         val firstActiveSession = sessionFor(firstActiveUserId, host, hostSession, guestSession)
         sendJson(firstActiveSession, "/app/game.rollDice", mapOf("gameId" to gameId))
-        assertSameGameBroadcast(hostGameQueue, guestGameQueue, MessageType.ROLL_DICE)
-        assertSameGameActionBroadcast(hostGameQueue, guestGameQueue, "DICE_ROLLED")
+        val firstRollMessages = takeSameMessageBatch(hostGameQueue, guestGameQueue, expectedMessages = 2, description = "first dice roll")
+        assertSameBroadcastInBatch(firstRollMessages, "ROLL_DICE frame") {
+            it["type"].asText() == MessageType.ROLL_DICE.name
+        }
+        assertSameBroadcastInBatch(firstRollMessages, "DICE_ROLLED action") {
+            it["type"].asText() == MessageType.GAME_ACTION.name &&
+                it["payload"]["event"].asText() == "DICE_ROLLED"
+        }
 
         sendJson(firstActiveSession, "/app/game.resolveEffects", mapOf("gameId" to gameId))
         assertSameGameActionBroadcast(hostGameQueue, guestGameQueue, "EFFECTS_RESOLVED")
@@ -184,8 +196,14 @@ class GameWebSocketBroadcastIntegrationTest {
 
         val secondActiveSession = sessionFor(secondActiveUserId, host, hostSession, guestSession)
         sendJson(secondActiveSession, "/app/game.rollDice", mapOf("gameId" to gameId))
-        assertSameGameBroadcast(hostGameQueue, guestGameQueue, MessageType.ROLL_DICE)
-        assertSameGameActionBroadcast(hostGameQueue, guestGameQueue, "DICE_ROLLED")
+        val secondRollMessages = takeSameMessageBatch(hostGameQueue, guestGameQueue, expectedMessages = 2, description = "second dice roll")
+        assertSameBroadcastInBatch(secondRollMessages, "second ROLL_DICE frame") {
+            it["type"].asText() == MessageType.ROLL_DICE.name
+        }
+        assertSameBroadcastInBatch(secondRollMessages, "second DICE_ROLLED action") {
+            it["type"].asText() == MessageType.GAME_ACTION.name &&
+                it["payload"]["event"].asText() == "DICE_ROLLED"
+        }
     }
 
     @Test
@@ -406,6 +424,29 @@ class GameWebSocketBroadcastIntegrationTest {
         return hostMessage to guestMessage
     }
 
+    private fun takeSameMessageBatch(
+        hostQueue: BlockingQueue<JsonNode>,
+        guestQueue: BlockingQueue<JsonNode>,
+        expectedMessages: Int,
+        description: String,
+    ): Pair<List<JsonNode>, List<JsonNode>> =
+        takeMessages(hostQueue, expectedMessages, description) to
+            takeMessages(guestQueue, expectedMessages, description)
+
+    private fun assertSameBroadcastInBatch(
+        messages: Pair<List<JsonNode>, List<JsonNode>>,
+        description: String,
+        predicate: (JsonNode) -> Boolean,
+    ): Pair<JsonNode, JsonNode> {
+        val (hostMessages, guestMessages) = messages
+        val hostMessage = hostMessages.firstOrNull(predicate)
+            ?: error("Timed out waiting for $description; seen=$hostMessages")
+        val guestMessage = guestMessages.firstOrNull(predicate)
+            ?: error("Timed out waiting for $description; seen=$guestMessages")
+        assertEquivalentGameBroadcast(hostMessage, guestMessage)
+        return hostMessage to guestMessage
+    }
+
     private fun takeGameAction(queue: BlockingQueue<JsonNode>, event: String): JsonNode =
         generateSequence { takeMessage(queue, MessageType.GAME_ACTION) }
             .first { it["payload"]["event"].asText() == event }
@@ -442,6 +483,20 @@ class GameWebSocketBroadcastIntegrationTest {
             }
         }
         error("Timed out waiting for $type; seen=$seen")
+    }
+
+    private fun takeMessages(queue: BlockingQueue<JsonNode>, count: Int, description: String): List<JsonNode> {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(MESSAGE_TIMEOUT_SECONDS)
+        val messages = mutableListOf<JsonNode>()
+        while (messages.size < count && System.nanoTime() < deadline) {
+            val remaining = deadline - System.nanoTime()
+            val message = queue.poll(remaining, TimeUnit.NANOSECONDS) ?: break
+            messages.add(message)
+        }
+        if (messages.size < count) {
+            error("Timed out waiting for $count messages for $description; seen=$messages")
+        }
+        return messages
     }
 
     private fun sessionFor(
