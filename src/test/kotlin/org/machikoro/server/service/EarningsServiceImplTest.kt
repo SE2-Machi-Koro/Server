@@ -295,6 +295,99 @@ class EarningsServiceImplTest {
         assertEquals("DICE_ROLL_REQUIRED", ex.errorCode)
     }
 
+    @Test
+    fun `resolveEffects rejects duplicate resolution in buy phase`() {
+        val game = GameModel(
+            id = 1, status = GameStatus.IN_PROGRESS, hostUserId = 1, lobbyCode = "TEST",
+            maxPlayers = 4, currentTurnIndex = 0, turnPhase = TurnPhase.BUY_OR_BUILD,
+            lastDiceRoll = 4, roundNumber = 1, hasPurchasedThisTurn = false
+        )
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(game)
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            service.resolveEffects(1)
+        }
+
+        assertEquals("EFFECTS_ALREADY_RESOLVED", ex.errorCode)
+        verify(gameDao, never()).tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD)
+        verify(playerDao, never()).getPlayers(anyInt())
+    }
+
+    @Test
+    fun `resolveEffects rejects duplicate resolution in end turn phase`() {
+        val game = GameModel(
+            id = 1, status = GameStatus.IN_PROGRESS, hostUserId = 1, lobbyCode = "TEST",
+            maxPlayers = 4, currentTurnIndex = 0, turnPhase = TurnPhase.END_TURN,
+            lastDiceRoll = 4, roundNumber = 1, hasPurchasedThisTurn = false
+        )
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(game)
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            service.resolveEffects(1)
+        }
+
+        assertEquals("EFFECTS_ALREADY_RESOLVED", ex.errorCode)
+        verify(gameDao, never()).tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD)
+        verify(playerDao, never()).getPlayers(anyInt())
+    }
+
+    @Test
+    fun `resolveEffects requires stored dice roll in resolve phase`() {
+        val game = GameModel(
+            id = 1, status = GameStatus.IN_PROGRESS, hostUserId = 1, lobbyCode = "TEST",
+            maxPlayers = 4, currentTurnIndex = 0, turnPhase = TurnPhase.RESOLVE_EFFECTS,
+            lastDiceRoll = null, roundNumber = 1, hasPurchasedThisTurn = false
+        )
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(game)
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            service.resolveEffects(1)
+        }
+
+        assertEquals("DICE_ROLL_REQUIRED", ex.errorCode)
+        verify(gameDao, never()).tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD)
+        verify(playerDao, never()).getPlayers(anyInt())
+    }
+
+    @Test
+    fun `resolveEffects rejects stale transition without applying earnings`() {
+        val game = GameModel(
+            id = 1, status = GameStatus.IN_PROGRESS, hostUserId = 1, lobbyCode = "TEST",
+            maxPlayers = 4, currentTurnIndex = 0, turnPhase = TurnPhase.RESOLVE_EFFECTS,
+            lastDiceRoll = 4, roundNumber = 1, hasPurchasedThisTurn = false
+        )
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(game)
+        whenever(gameDao.tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD))
+            .thenReturn(false)
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            service.resolveEffects(1)
+        }
+
+        assertEquals("EFFECTS_ALREADY_RESOLVED", ex.errorCode)
+        verify(playerDao, never()).getPlayers(anyInt())
+    }
+
+    @Test
+    fun `resolveEffects rejects missing active player after phase transition`() {
+        val game = GameModel(
+            id = 1, status = GameStatus.IN_PROGRESS, hostUserId = 1, lobbyCode = "TEST",
+            maxPlayers = 4, currentTurnIndex = 1, turnPhase = TurnPhase.RESOLVE_EFFECTS,
+            lastDiceRoll = 4, roundNumber = 1, hasPurchasedThisTurn = false
+        )
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(game)
+        whenever(gameDao.tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD))
+            .thenReturn(true)
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3)))
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            service.resolveEffects(1)
+        }
+
+        assertEquals("NO_ACTIVE_PLAYER", ex.errorCode)
+        verify(cardDao, never()).findByActivationNumber(anyInt())
+    }
+
     private fun player(id: Int, coins: Int): PlayerModel =
         PlayerModel(id = id, gameId = 1, userId = id, turnOrder = 0, coins = coins, lastSeenAt = null)
 

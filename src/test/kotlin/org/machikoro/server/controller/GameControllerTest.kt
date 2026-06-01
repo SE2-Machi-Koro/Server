@@ -548,6 +548,34 @@ class GameControllerTest {
     }
 
     @Test
+    fun `rollDice broadcasts domain error code to game topic on rejected roll`() {
+        val gameId = 1
+        val activePlayer = PlayerModel(id = 9, gameId = gameId, userId = alice.userId, turnOrder = 0, coins = 3, lastSeenAt = null)
+        val request = RollDiceRequest(gameId = gameId, playerId = null)
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice)).thenReturn(activePlayer)
+        whenever(diceService.rollDice(request, activePlayer.id))
+            .thenThrow(CustomWebSocketException("ROLL_ALREADY_COMPLETED", "Dice have already been rolled for this turn"))
+
+        controller.rollDice(request, authedAccessor())
+
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+        val message = captor.firstValue
+        assertEquals(MessageType.ERROR, message.type)
+        assertEquals("SERVER", message.sender)
+        assertEquals(
+            mapOf(
+                "event" to "ROLL_FAILED",
+                "code" to "ROLL_ALREADY_COMPLETED",
+                "message" to "Dice have already been rolled for this turn",
+            ),
+            message.payload,
+        )
+        verify(diceService).rollDice(request, activePlayer.id)
+        verify(gameStateGuard, never()).ensureSenderOwnsPlayer(any(), any(), any())
+    }
+
+    @Test
     fun `rollDice propagates NOT_YOUR_TURN and does not call service or broadcast`() {
         val gameId = 1
         val playerId = 2
