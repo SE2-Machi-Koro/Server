@@ -189,6 +189,23 @@ class GamePhaseServiceTest {
     }
 
     @Test
+    fun `finishGameWithWinner records stats for all players, finishes game, and returns Won`() {
+        val gameId = 30
+        val roundNumber = 7
+        val winner = PlayerModel(id = 1, gameId = gameId, userId = 10, turnOrder = 0, coins = 3, lastSeenAt = null)
+        val loser = PlayerModel(id = 2, gameId = gameId, userId = 20, turnOrder = 1, coins = 5, lastSeenAt = null)
+        whenever(playerDao.getPlayers(gameId)).thenReturn(listOf(winner, loser))
+
+        val result = service.finishGameWithWinner(gameId, winner, roundNumber)
+
+        assertEquals(EndTurnOutcome.Won(winnerId = 1, roundsPlayed = roundNumber), result)
+        verify(userDao).incrementWins(10)
+        verify(userDao).incrementGamesPlayed(10)
+        verify(userDao).incrementGamesPlayed(20)
+        verify(gameDao).updateStatus(gameId, GameStatus.FINISHED)
+    }
+
+    @Test
     fun `endTurn rejects games outside buy or build phase`() {
         val gameId = 23
         whenever(gameStateGuard.ensureGameIsRunning(gameId))

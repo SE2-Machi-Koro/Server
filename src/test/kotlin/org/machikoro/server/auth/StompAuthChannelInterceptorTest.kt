@@ -196,5 +196,6 @@ class StompAuthChannelInterceptorTest {
         sessionToken = sessionToken,
         totalWins = 0,
         totalGamesPlayed = 0,
+        isAdmin = false,
     )
 }

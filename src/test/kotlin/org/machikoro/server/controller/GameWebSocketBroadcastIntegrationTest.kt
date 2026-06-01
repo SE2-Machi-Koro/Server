@@ -470,6 +470,7 @@ class GameWebSocketBroadcastIntegrationTest {
             sessionToken = login.sessionToken,
             totalWins = 0,
             totalGamesPlayed = 0,
+            isAdmin = false,
         )
 
     private fun game(

@@ -27,6 +27,7 @@ import org.machikoro.server.exception.GameFinishedException
 import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.exception.NotHostException
 import org.machikoro.server.service.DiceService
+import org.machikoro.server.service.GameEndBroadcaster
 import org.machikoro.server.service.GamePhaseService
 import org.machikoro.server.service.GameSyncService
 import org.machikoro.server.service.GameStateGuard
@@ -55,10 +56,11 @@ class GameControllerTest {
     private val connectionTracker = mock<WebSocketConnectionTracker>()
     private val gameStateGuard = mock<GameStateGuard>()
     private val gameSyncService = mock<GameSyncService>()
+    private val gameEndBroadcaster = mock<GameEndBroadcaster>()
     private val controller = GameController(
         gamePhaseService, messagingTemplate,
         purchaseService, diceService, lobbyService, connectionTracker,
-        gameStateGuard, gameSyncService,
+        gameStateGuard, gameSyncService, gameEndBroadcaster,
     )
 
     private val alice = UserPrincipal(userId = 1, username = "alice")
@@ -331,28 +333,18 @@ class GameControllerTest {
     }
 
     @Test
-    fun `endTurn broadcasts GAME_END on game topic when winner exists`() {
+    fun `endTurn delegates GAME_END broadcast to GameEndBroadcaster when winner exists`() {
         val gameId = 42
         val winnerId = 1
         val roundsPlayed = 10
-        val snapshot = gameStateDto(gameId)
         whenever(gamePhaseService.endTurn(gameId)).thenReturn(EndTurnOutcome.Won(winnerId, roundsPlayed))
-        whenever(gameSyncService.buildSnapshot(gameId)).thenReturn(snapshot)
 
         controller.endTurn(EndTurnRequest(gameId), authedAccessor())
 
-        val captor = argumentCaptor<WebSocketMessage>()
-        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+        // Broadcast logic itself is owned by GameEndBroadcaster (covered by its own test);
+        // here we only verify the controller delegates with the right arguments.
+        verify(gameEndBroadcaster).broadcast(gameId, winnerId, roundsPlayed)
         verify(gamePhaseService).cleanupFinishedGameData(gameId)
-
-        val message = captor.firstValue
-        assertEquals(MessageType.GAME_END, message.type)
-        assertEquals(gameId, message.gameId)
-        @Suppress("UNCHECKED_CAST")
-        val payload = message.payload as Map<String, Any?>
-        assertEquals(winnerId, payload["winnerId"])
-        assertEquals(roundsPlayed, payload["roundsPlayed"])
-        assertEquals(snapshot, payload["state"])
     }
 
     @Test
