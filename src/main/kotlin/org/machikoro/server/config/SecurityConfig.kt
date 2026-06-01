@@ -1,5 +1,6 @@
 package org.machikoro.server.config
 
+import org.machikoro.server.auth.TokenAuthFilter
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -8,12 +9,14 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.security.web.SecurityFilterChain
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter
 
 @Configuration
 @EnableWebSecurity
 class SecurityConfig(
     // Mirror the same default as DebugController so security rules match controller availability
-    @Value("\${debug.enabled:false}") private val debugEnabled: Boolean
+    @Value("\${debug.enabled:false}") private val debugEnabled: Boolean,
+    private val tokenAuthFilter: TokenAuthFilter,
 ) {
 
     /**
@@ -26,13 +29,15 @@ class SecurityConfig(
      * without a session-bound CSRF token.
      * CSRF remains enabled for all other endpoints including API routes.
      * Debug endpoints are only opened when debug.enabled=true (set via DEBUG_ENABLED env var).
+     * TokenAuthFilter validates Bearer session tokens for all authenticated REST endpoints.
      */
     @Bean
     fun securityFilterChain(http: HttpSecurity): SecurityFilterChain {
         http
+            .addFilterBefore(tokenAuthFilter, UsernamePasswordAuthenticationFilter::class.java)
             .csrf { csrf ->
-                // Only exempt /debug/** from CSRF when debug endpoints are active
-                val csrfExempt = mutableListOf("/ws", "/ws/**", "/ws-sockjs", "/ws-sockjs/**", "/auth/**")
+                // Exempt token-authenticated REST endpoints — Android client never sends CSRF tokens
+                val csrfExempt = mutableListOf("/ws", "/ws/**", "/ws-sockjs", "/ws-sockjs/**", "/auth/**", "/leaderboard")
                 if (debugEnabled) csrfExempt.add("/debug/**")
                 csrf.ignoringRequestMatchers(*csrfExempt.toTypedArray())
             }
