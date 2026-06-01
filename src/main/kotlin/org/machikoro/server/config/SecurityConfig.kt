@@ -36,8 +36,8 @@ class SecurityConfig(
         http
             .addFilterBefore(tokenAuthFilter, UsernamePasswordAuthenticationFilter::class.java)
             .csrf { csrf ->
-                // Only exempt /debug/** from CSRF when debug endpoints are active
-                val csrfExempt = mutableListOf("/ws", "/ws/**", "/ws-sockjs", "/ws-sockjs/**", "/auth/**")
+                // Exempt token-authenticated REST endpoints — Android client never sends CSRF tokens
+                val csrfExempt = mutableListOf("/ws", "/ws/**", "/ws-sockjs", "/ws-sockjs/**", "/auth/**", "/leaderboard")
                 if (debugEnabled) csrfExempt.add("/debug/**")
                 csrf.ignoringRequestMatchers(*csrfExempt.toTypedArray())
             }
