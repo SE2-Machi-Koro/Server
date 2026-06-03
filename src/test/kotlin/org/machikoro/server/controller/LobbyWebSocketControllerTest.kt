@@ -173,8 +173,8 @@ class LobbyWebSocketControllerTest {
 
         val destCaptor = argumentCaptor<String>()
         val msgCaptor = argumentCaptor<WebSocketMessage>()
-        // Expect two sends: LOBBY_ROSTER to the joiner's queue, then LOBBY_JOINED to the topic
-        verify(messagingTemplate, times(2)).convertAndSend(destCaptor.capture(), msgCaptor.capture())
+        // 3 sends: LOBBY_ROSTER to joiner's queue, LOBBY_JOINED to topic, LOBBY_ROSTER to topic
+        verify(messagingTemplate, times(3)).convertAndSend(destCaptor.capture(), msgCaptor.capture())
 
         // First send: LOBBY_ROSTER only to the joiner's session queue
         assertEquals("/queue/lobby-usersess-77", destCaptor.allValues[0])
@@ -197,8 +197,15 @@ class LobbyWebSocketControllerTest {
         assertEquals(1, joinPayload["gameId"])
         assertEquals(3, joinPayload["coins"])
 
+        // Third send: updated LOBBY_ROSTER broadcast so all lobby members stay in sync
+        assertEquals("/topic/game/1", destCaptor.allValues[2])
+        val broadcastRoster = msgCaptor.allValues[2]
+        assertEquals(MessageType.LOBBY_ROSTER, broadcastRoster.type)
+        assertEquals(LobbyRosterDto(players = roster), broadcastRoster.payload)
+
         verify(lobbyService).joinLobby("ABC1234", 20)
-        verify(lobbyService).getLobbyRoster(1)
+        // getLobbyRoster called twice: once for private send, once for topic broadcast
+        verify(lobbyService, times(2)).getLobbyRoster(1)
     }
 
     @Test
@@ -387,11 +394,13 @@ class LobbyWebSocketControllerTest {
     }
 
     @Test
-    fun `leaveLobby broadcasts LOBBY_LEFT to game topic when lobby persists`() {
+    fun `leaveLobby broadcasts LOBBY_LEFT then LOBBY_ROSTER to game topic when lobby persists`() {
+        val updatedRoster = listOf(
+            LobbyRosterPlayerDto(playerId = 2, userId = 20, username = "Player2", gameId = 1, turnOrder = 1, coins = 3),
+        )
         whenever(lobbyService.leaveLobby(1, 10))
-            .thenReturn(
-                LobbyLeavingOutcome.LobbyRemains( 10)
-            )
+            .thenReturn(LobbyLeavingOutcome.LobbyRemains(10))
+        whenever(lobbyService.getLobbyRoster(1)).thenReturn(updatedRoster)
 
         val accessor = authenticatedAccessor(
             userId = 10,
@@ -410,27 +419,22 @@ class LobbyWebSocketControllerTest {
 
         val destCaptor = argumentCaptor<String>()
         val msgCaptor = argumentCaptor<WebSocketMessage>()
+        // 2 sends: LOBBY_LEFT, then LOBBY_ROSTER so remaining members see updated ready states
+        verify(messagingTemplate, times(2)).convertAndSend(destCaptor.capture(), msgCaptor.capture())
 
-        verify(messagingTemplate)
-            .convertAndSend(
-                destCaptor.capture(),
-                msgCaptor.capture()
-            )
-
-        assertEquals(
-            "/topic/game/1",
-            destCaptor.firstValue
-        )
-
-        val msg = msgCaptor.firstValue
-        assertEquals(MessageType.LOBBY_LEFT, msg.type)
-        assertEquals("SERVER", msg.sender)
-        assertEquals(1, msg.gameId)
-
-        val payload = msg.payload as? Map<*, *>
-            ?: throw AssertionError("Payload is not a Map")
-
+        assertEquals("/topic/game/1", destCaptor.allValues[0])
+        val leftMsg = msgCaptor.allValues[0]
+        assertEquals(MessageType.LOBBY_LEFT, leftMsg.type)
+        assertEquals("SERVER", leftMsg.sender)
+        assertEquals(1, leftMsg.gameId)
+        val payload = leftMsg.payload as? Map<*, *> ?: throw AssertionError("Payload is not a Map")
         assertEquals(10, payload["userId"])
+
+        // Follow-up roster broadcast keeps remaining players in sync
+        assertEquals("/topic/game/1", destCaptor.allValues[1])
+        val rosterMsg = msgCaptor.allValues[1]
+        assertEquals(MessageType.LOBBY_ROSTER, rosterMsg.type)
+        assertEquals(LobbyRosterDto(players = updatedRoster), rosterMsg.payload)
     }
 
     @Test
@@ -478,11 +482,130 @@ class LobbyWebSocketControllerTest {
 
         assertEquals(10, payload["userId"])
     }
-    @Test
-    fun `joinLobby skips LOBBY_ROSTER when sessionId is null`() {
-        whenever(lobbyService.joinLobby("ABC1234", 20)).thenReturn(player())
+    // === toggleReady() ===
 
-        // Accessor with no sessionId — LOBBY_JOINED still broadcasts, LOBBY_ROSTER is skipped
+    @Test
+    fun `toggleReady throws when no authenticated principal is present`() {
+        val accessor = SimpMessageHeaderAccessor.create().apply { sessionId = "sess-1" }
+
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.toggleReady(
+                WebSocketMessage(type = MessageType.JOIN, sender = "ghost", payload = mapOf("gameId" to 1, "isReady" to true)),
+                accessor,
+            )
+        }
+
+        assertEquals("UNAUTHENTICATED", ex.errorCode)
+        verify(lobbyService, never()).setReadyState(any(), any(), any())
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+    }
+
+    @Test
+    fun `toggleReady throws when payload is not a Map`() {
+        val accessor = authenticatedAccessor(userId = 10, username = "Player1")
+
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.toggleReady(
+                WebSocketMessage(type = MessageType.JOIN, sender = "Player1", payload = "not-a-map"),
+                accessor,
+            )
+        }
+
+        assertEquals("INVALID_PAYLOAD", ex.errorCode)
+        verify(lobbyService, never()).setReadyState(any(), any(), any())
+    }
+
+    @Test
+    fun `toggleReady throws when gameId is missing from payload`() {
+        val accessor = authenticatedAccessor(userId = 10, username = "Player1")
+
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.toggleReady(
+                WebSocketMessage(type = MessageType.JOIN, sender = "Player1", payload = mapOf("isReady" to true)),
+                accessor,
+            )
+        }
+
+        assertEquals("MISSING_GAME_ID", ex.errorCode)
+        verify(lobbyService, never()).setReadyState(any(), any(), any())
+    }
+
+    @Test
+    fun `toggleReady throws when isReady is missing from payload`() {
+        val accessor = authenticatedAccessor(userId = 10, username = "Player1")
+
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.toggleReady(
+                WebSocketMessage(type = MessageType.JOIN, sender = "Player1", payload = mapOf("gameId" to 1)),
+                accessor,
+            )
+        }
+
+        assertEquals("MISSING_IS_READY", ex.errorCode)
+        verify(lobbyService, never()).setReadyState(any(), any(), any())
+    }
+
+    @Test
+    fun `toggleReady broadcasts LOBBY_ROSTER with updated ready states to game topic`() {
+        val gameId = 1
+        val roster = listOf(
+            LobbyRosterPlayerDto(playerId = 1, userId = 10, username = "Player1", gameId = gameId, turnOrder = 0, coins = 3, isReady = true),
+            LobbyRosterPlayerDto(playerId = 2, userId = 20, username = "Player2", gameId = gameId, turnOrder = 1, coins = 3, isReady = false),
+        )
+        whenever(lobbyService.setReadyState(gameId, 10, true)).thenReturn(roster)
+
+        val accessor = authenticatedAccessor(userId = 10, username = "Player1", sessionId = "sess-ready")
+
+        controller.toggleReady(
+            WebSocketMessage(type = MessageType.JOIN, sender = "Player1", payload = mapOf("gameId" to gameId, "isReady" to true)),
+            accessor,
+        )
+
+        val destCaptor = argumentCaptor<String>()
+        val msgCaptor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(destCaptor.capture(), msgCaptor.capture())
+
+        // Broadcast goes to the shared game topic, not a private queue
+        assertEquals("/topic/game/$gameId", destCaptor.firstValue)
+
+        val msg = msgCaptor.firstValue
+        assertEquals(MessageType.LOBBY_ROSTER, msg.type)
+        assertEquals("SERVER", msg.sender)
+        assertEquals(gameId, msg.gameId)
+        assertEquals(LobbyRosterDto(players = roster), msg.payload)
+    }
+
+    @Test
+    fun `toggleReady broadcasts unready state when isReady is false`() {
+        val gameId = 1
+        val roster = listOf(
+            LobbyRosterPlayerDto(playerId = 1, userId = 10, username = "Player1", gameId = gameId, turnOrder = 0, coins = 3, isReady = false),
+        )
+        whenever(lobbyService.setReadyState(gameId, 10, false)).thenReturn(roster)
+
+        val accessor = authenticatedAccessor(userId = 10, username = "Player1")
+
+        controller.toggleReady(
+            WebSocketMessage(type = MessageType.JOIN, sender = "Player1", payload = mapOf("gameId" to gameId, "isReady" to false)),
+            accessor,
+        )
+
+        val msgCaptor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(any<String>(), msgCaptor.capture())
+
+        val payload = msgCaptor.firstValue.payload as LobbyRosterDto
+        assertEquals(false, payload.players[0].isReady)
+    }
+
+    @Test
+    fun `joinLobby skips private LOBBY_ROSTER when sessionId is null but still broadcasts to topic`() {
+        val roster = listOf(
+            LobbyRosterPlayerDto(playerId = 5, userId = 20, username = "Player2", gameId = 1, turnOrder = 1, coins = 3),
+        )
+        whenever(lobbyService.joinLobby("ABC1234", 20)).thenReturn(player())
+        whenever(lobbyService.getLobbyRoster(1)).thenReturn(roster)
+
+        // No sessionId — private LOBBY_ROSTER skipped, but LOBBY_JOINED + topic LOBBY_ROSTER still sent
         val accessor = SimpMessageHeaderAccessor.create().apply {
             user = UserPrincipal(userId = 20, username = "Player2")
         }
@@ -494,9 +617,13 @@ class LobbyWebSocketControllerTest {
 
         val destCaptor = argumentCaptor<String>()
         val msgCaptor = argumentCaptor<WebSocketMessage>()
-        verify(messagingTemplate).convertAndSend(destCaptor.capture(), msgCaptor.capture())
-        assertEquals("/topic/game/1", destCaptor.firstValue)
-        assertEquals(MessageType.LOBBY_JOINED, msgCaptor.firstValue.type)
-        verify(lobbyService, never()).getLobbyRoster(any())
+        // 2 sends to topic: LOBBY_JOINED + LOBBY_ROSTER (private LOBBY_ROSTER skipped)
+        verify(messagingTemplate, times(2)).convertAndSend(destCaptor.capture(), msgCaptor.capture())
+        assertEquals("/topic/game/1", destCaptor.allValues[0])
+        assertEquals(MessageType.LOBBY_JOINED, msgCaptor.allValues[0].type)
+        assertEquals("/topic/game/1", destCaptor.allValues[1])
+        assertEquals(MessageType.LOBBY_ROSTER, msgCaptor.allValues[1].type)
+        // getLobbyRoster called once for the topic broadcast (not for the skipped private send)
+        verify(lobbyService, times(1)).getLobbyRoster(1)
     }
 }

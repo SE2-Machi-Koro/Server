@@ -5,7 +5,6 @@ import io.github.springwolf.core.asyncapi.annotations.AsyncOperation
 import org.machikoro.server.auth.userPrincipal
 import org.machikoro.server.dto.LobbyLeavingOutcome
 import org.machikoro.server.dto.LobbyRosterDto
-import org.machikoro.server.dto.LobbyRosterPlayerDto
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.CustomWebSocketException
@@ -162,7 +161,8 @@ class LobbyWebSocketController(
             )
         }
 
-        // Broadcast join to all members already subscribed to this lobby's topic
+        // Broadcast join event to existing members, then follow up with full roster so
+        // ready states remain accurate for everyone in the lobby
         messagingTemplate.convertAndSend(
             "/topic/game/${player.gameId}",
             WebSocketMessage(
@@ -179,28 +179,19 @@ class LobbyWebSocketController(
                 )
             )
         )
+        val updatedRoster = lobbyService.getLobbyRoster(player.gameId)
+        messagingTemplate.convertAndSend(
+            "/topic/game/${player.gameId}",
+            WebSocketMessage(
+                type = MessageType.LOBBY_ROSTER,
+                sender = "SERVER",
+                content = "Lobby roster",
+                gameId = player.gameId,
+                payload = LobbyRosterDto(players = updatedRoster)
+            )
+        )
     }
 
-    /**
-     * Handles a player leaving a lobby via WebSocket.
-     *
-     * Client sends a message to `/app/lobby.leave` with the `gameId`
-     * in the payload.
-     *
-     * The authenticated player is removed from the lobby. If the lobby
-     * still contains real players, a `LOBBY_LEFT` event is broadcast to
-     * `/topic/game/{gameId}` so remaining members can update screen.
-     *
-     * If no real players remain (debug/dummy players do not count), the
-     * lobby is deleted and a `HOST_LEFT` event is broadcast so clients
-     * can close the lobby UI.
-     *
-     * Authentication is derived from the WebSocket principal; the sender
-     * field in [WebSocketMessage] is ignored to prevent spoofing.
-     *
-     * @throws CustomWebSocketException when authentication is missing,
-     * the payload is invalid, or `gameId` is absent.
-     */
     /**
      * Handles a player toggling their ready state in the lobby.
      *
@@ -254,6 +245,26 @@ class LobbyWebSocketController(
         )
     }
 
+    /**
+     * Handles a player leaving a lobby via WebSocket.
+     *
+     * Client sends a message to `/app/lobby.leave` with the `gameId`
+     * in the payload.
+     *
+     * The authenticated player is removed from the lobby. If the lobby
+     * still contains real players, a `LOBBY_LEFT` event is broadcast to
+     * `/topic/game/{gameId}` so remaining members can update screen.
+     *
+     * If no real players remain (debug/dummy players do not count), the
+     * lobby is deleted and a `HOST_LEFT` event is broadcast so clients
+     * can close the lobby UI.
+     *
+     * Authentication is derived from the WebSocket principal; the sender
+     * field in [WebSocketMessage] is ignored to prevent spoofing.
+     *
+     * @throws CustomWebSocketException when authentication is missing,
+     * the payload is invalid, or `gameId` is absent.
+     */
     @MessageMapping("/lobby.leave")
     @Suppress("UNUSED_PARAMETER")
     fun leaveLobby(
@@ -297,6 +308,18 @@ class LobbyWebSocketController(
                         payload = mapOf(
                             "userId" to principal.userId,
                         )
+                    )
+                )
+                // Broadcast updated roster so remaining members see accurate ready states
+                val updatedRoster = lobbyService.getLobbyRoster(gameId)
+                messagingTemplate.convertAndSend(
+                    "/topic/game/$gameId",
+                    WebSocketMessage(
+                        type = MessageType.LOBBY_ROSTER,
+                        sender = "SERVER",
+                        content = "Lobby roster",
+                        gameId = gameId,
+                        payload = LobbyRosterDto(players = updatedRoster)
                     )
                 )
             }
