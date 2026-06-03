@@ -128,7 +128,10 @@ class SpringContextRestartRecoveryIntegrationTest {
         lobbyService.addUserToLobby(sharedGameId, hostUserId)
         val gameCode = gameDao.findById(sharedGameId)!!.lobbyCode
         lobbyService.joinLobby(gameCode, guestUserId)
-        
+        // All players must be ready before startGame can proceed
+        lobbyService.setReadyState(sharedGameId, hostUserId, true)
+        lobbyService.setReadyState(sharedGameId, guestUserId, true)
+
         lobbyService.startGame(sharedGameId)
         
         val players = playerDao.getPlayers(sharedGameId)

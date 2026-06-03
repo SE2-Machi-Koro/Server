@@ -93,6 +93,9 @@ class GameSyncServiceIntegrationTest : AbstractDBSetup() {
         secondUserId = userIds.second
         firstPlayerId = playerDao.addPlayer(gameId, userIds.first).id
         secondPlayerId = playerDao.addPlayer(gameId, userIds.second).id
+        // All players must be ready before startGame can proceed
+        lobbyService.setReadyState(gameId, firstUserId, true)
+        lobbyService.setReadyState(gameId, secondUserId, true)
     }
 
     @Test

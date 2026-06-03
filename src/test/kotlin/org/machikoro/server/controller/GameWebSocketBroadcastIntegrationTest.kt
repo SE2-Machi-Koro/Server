@@ -150,6 +150,8 @@ class GameWebSocketBroadcastIntegrationTest {
             ),
         )
         assertSameGameBroadcast(hostGameQueue, guestGameQueue, MessageType.LOBBY_JOINED)
+        // joinLobby also broadcasts a roster update to the topic — drain it before game.start
+        assertSameGameBroadcast(hostGameQueue, guestGameQueue, MessageType.LOBBY_ROSTER)
 
         sendJson(
             guestSession,
