@@ -27,7 +27,6 @@ import org.machikoro.server.exception.LobbyFullException
 import org.machikoro.server.exception.NotAllPlayersReadyException
 import org.machikoro.server.exception.NotEnoughPlayersException
 import org.machikoro.server.exception.NotHostException
-import org.machikoro.server.exception.PlayerNotFoundException
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -389,16 +388,27 @@ class LobbyServiceTest {
     // === leaveLobby() ===
 
     @Test
-    fun `leaveLobby throws PlayerNotFoundException when player is not in the game`() {
-        whenever(playerDao.findByGameIdAndUserId(1, 99))
-            .thenReturn(null)
+    fun `leaveLobby returns LobbyDeleted when player is not found (already purged or left)`() {
+        whenever(playerDao.findByGameIdAndUserId(1, 99)).thenReturn(null)
 
-        assertThrows<PlayerNotFoundException> {
-            lobbyService.leaveLobby(1, 99)
-        }
+        val result = lobbyService.leaveLobby(1, 99)
 
-        verify(playerDao, never())
-            .deleteByPlayerId(any())
+        assertEquals(LobbyLeavingOutcome.LobbyDeleted(1), result)
+        verify(playerDao, never()).deleteByPlayerId(any())
+    }
+
+    @Test
+    fun `leaveLobby returns LobbyDeleted when game is not found (already purged)`() {
+        val gameId = 1
+        val userId = 10
+        val p = player(5).copy(gameId = gameId, userId = userId)
+        whenever(playerDao.findByGameIdAndUserId(gameId, userId)).thenReturn(p)
+        whenever(gameDao.findById(gameId)).thenReturn(null)
+
+        val result = lobbyService.leaveLobby(gameId, userId)
+
+        assertEquals(LobbyLeavingOutcome.LobbyDeleted(gameId), result)
+        verify(playerDao, never()).deleteByPlayerId(any())
     }
 
     @Test
