@@ -25,10 +25,14 @@ class DiceService(
             throw CustomWebSocketException("ROLL_ALREADY_COMPLETED", "Dice have already been rolled for this turn")
         }
 
+        val requestedDiceCount = request.diceCount ?: request.payload?.diceCount ?: 1
+        if (requestedDiceCount !in 1..2) {
+            throw CustomWebSocketException("INVALID_DICE_COUNT", "diceCount must be 1 or 2")
+        }
+
         val rollTwoDice = request.rollTwoDice ||
-            request.diceCount == TWO_DICE_COUNT ||
-            request.payload?.rollTwoDice == true ||
-            request.payload?.diceCount == TWO_DICE_COUNT
+                requestedDiceCount == TWO_DICE_COUNT ||
+                request.payload?.rollTwoDice == true
 
         if (rollTwoDice) {
             val hasTrainStation = playerLandmarkDao
