@@ -22,7 +22,6 @@ import org.machikoro.server.exception.LobbyFullException
 import org.machikoro.server.exception.NotAllPlayersReadyException
 import org.machikoro.server.exception.NotEnoughPlayersException
 import org.machikoro.server.exception.NotHostException
-import org.machikoro.server.exception.PlayerNotFoundException
 import org.springframework.stereotype.Service
 import java.util.concurrent.ConcurrentHashMap
 
@@ -200,15 +199,15 @@ open class LobbyService(
      * [LobbyLeavingOutcome.LobbyRemains] if the host is still present and the
      * lobby remains active.
      *
-     * @throws PlayerNotFoundException if the user is not part of the lobby
-     * @throws GameNotFoundException if the game does not exist
+     * @throws GameNotFoundException if the game does not exist (stale gameId from reconnect)
      */
     fun leaveLobby(gameId: Int, userId: Int): LobbyLeavingOutcome = runInTransaction {
+        // Game or player already gone (e.g. purged by debug endpoint) — treat as already left
         val player = playerDao.findByGameIdAndUserId(gameId, userId)
-            ?: throw PlayerNotFoundException("Player $userId not found in game $gameId")
+            ?: return@runInTransaction LobbyLeavingOutcome.LobbyDeleted(gameId)
 
         val game = gameDao.findById(gameId)
-            ?: throw GameNotFoundException("Game $gameId not found")
+            ?: return@runInTransaction LobbyLeavingOutcome.LobbyDeleted(gameId)
 
         val shouldDeleteLobby =
             player.userId == game.hostUserId
