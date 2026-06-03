@@ -11,4 +11,6 @@ data class LobbyRosterPlayerDto(
     val gameId: Int,
     val turnOrder: Int,
     val coins: Int,
+    // Populated from in-memory ready state, not from DB
+    val isReady: Boolean = false,
 )
