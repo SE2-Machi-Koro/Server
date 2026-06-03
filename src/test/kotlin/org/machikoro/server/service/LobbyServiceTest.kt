@@ -24,6 +24,7 @@ import org.machikoro.server.exception.GameFinishedException
 import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.exception.LobbyFullException
+import org.machikoro.server.exception.NotAllPlayersReadyException
 import org.machikoro.server.exception.NotEnoughPlayersException
 import org.machikoro.server.exception.NotHostException
 import org.machikoro.server.exception.PlayerNotFoundException
@@ -281,6 +282,9 @@ class LobbyServiceTest {
         whenever(playerLandmarkDao.findByPlayerId(1)).thenReturn(emptyList())
         whenever(playerLandmarkDao.findByPlayerId(2)).thenReturn(emptyList())
         whenever(gameMarketplaceDao.findByGameIdAsMap(gameId)).thenReturn(emptyMap())
+        // Mark all players ready so startGame doesn't block on NOT_ALL_PLAYERS_READY
+        lobbyService.setReadyState(gameId, 1, true)
+        lobbyService.setReadyState(gameId, 2, true)
 
         val result = lobbyService.startGame(gameId)
 
@@ -649,6 +653,99 @@ class LobbyServiceTest {
         verify(gameDao, never()).delete(any())
     }
 
+    // === setReadyState() ===
+
+    @Test
+    fun `setReadyState marks player as ready and returns roster with isReady true`() {
+        val gameId = 1
+        whenever(playerDao.getLobbyRoster(gameId)).thenReturn(
+            listOf(rosterEntry(1, "alice", gameId))
+        )
+
+        val roster = lobbyService.setReadyState(gameId, 1, true)
+
+        assertEquals(true, roster[0].isReady)
+    }
+
+    @Test
+    fun `setReadyState marks player as not ready after toggling back`() {
+        val gameId = 1
+        whenever(playerDao.getLobbyRoster(gameId)).thenReturn(
+            listOf(rosterEntry(1, "alice", gameId))
+        )
+
+        lobbyService.setReadyState(gameId, 1, true)
+        val roster = lobbyService.setReadyState(gameId, 1, false)
+
+        assertEquals(false, roster[0].isReady)
+    }
+
+    @Test
+    fun `setReadyState only marks the specified player as ready`() {
+        val gameId = 1
+        whenever(playerDao.getLobbyRoster(gameId)).thenReturn(
+            listOf(
+                rosterEntry(1, "alice", gameId),
+                rosterEntry(2, "bob", gameId),
+            )
+        )
+
+        val roster = lobbyService.setReadyState(gameId, 1, true)
+
+        // Alice (userId=1) is ready, Bob (userId=2) is not
+        assertEquals(true, roster.first { it.userId == 1 }.isReady)
+        assertEquals(false, roster.first { it.userId == 2 }.isReady)
+    }
+
+    // === getLobbyRoster() — isReady enrichment ===
+
+    @Test
+    fun `getLobbyRoster enriches players with isReady true when they are in the ready set`() {
+        val gameId = 1
+        whenever(playerDao.getLobbyRoster(gameId)).thenReturn(
+            listOf(
+                rosterEntry(1, "alice", gameId),
+                rosterEntry(2, "bob", gameId),
+            )
+        )
+        lobbyService.setReadyState(gameId, 1, true)
+
+        val roster = lobbyService.getLobbyRoster(gameId)
+
+        assertEquals(true, roster.first { it.userId == 1 }.isReady)
+        assertEquals(false, roster.first { it.userId == 2 }.isReady)
+    }
+
+    // === startGame() — NotAllPlayersReadyException ===
+
+    @Test
+    fun `startGame throws NotAllPlayersReadyException when no players are ready`() {
+        val gameId = 1
+        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING))
+        whenever(playerDao.getPlayers(gameId)).thenReturn(listOf(player(1), player(2)))
+
+        assertThrows<NotAllPlayersReadyException> {
+            lobbyService.startGame(gameId)
+        }
+
+        verify(initializationService, never()).initializeGame(any())
+    }
+
+    @Test
+    fun `startGame throws NotAllPlayersReadyException when only one of two players is ready`() {
+        val gameId = 1
+        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING))
+        whenever(playerDao.getPlayers(gameId)).thenReturn(listOf(player(1), player(2)))
+        // Only player 1 is ready — player 2 is still not
+        lobbyService.setReadyState(gameId, 1, true)
+
+        assertThrows<NotAllPlayersReadyException> {
+            lobbyService.startGame(gameId)
+        }
+
+        verify(initializationService, never()).initializeGame(any())
+    }
+
     // === startGame() — playerUsernames ===
 
     @Test
@@ -667,6 +764,9 @@ class LobbyServiceTest {
         whenever(playerDao.getLobbyRoster(gameId)).thenReturn(
             listOf(rosterEntry(1, "alice", gameId), rosterEntry(2, "bob", gameId))
         )
+        // Mark all players ready so startGame doesn't block on NOT_ALL_PLAYERS_READY
+        lobbyService.setReadyState(gameId, 1, true)
+        lobbyService.setReadyState(gameId, 2, true)
 
         val result = lobbyService.startGame(gameId)
 

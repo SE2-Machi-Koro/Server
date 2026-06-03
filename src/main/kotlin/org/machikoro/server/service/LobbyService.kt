@@ -215,6 +215,8 @@ open class LobbyService(
 
         if (!shouldDeleteLobby) {
             playerDao.deleteByPlayerId(player.id)
+            // Clear ready state so a rejoining player must re-ready
+            readyPlayers[gameId]?.remove(player.userId)
         }
 
         if (shouldDeleteLobby || noRealPlayersRemain(gameId)) {
