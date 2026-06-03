@@ -5,6 +5,7 @@ import io.github.springwolf.core.asyncapi.annotations.AsyncOperation
 import org.machikoro.server.auth.userPrincipal
 import org.machikoro.server.dto.LobbyLeavingOutcome
 import org.machikoro.server.dto.LobbyRosterDto
+import org.machikoro.server.dto.LobbyRosterPlayerDto
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.CustomWebSocketException
@@ -200,6 +201,59 @@ class LobbyWebSocketController(
      * @throws CustomWebSocketException when authentication is missing,
      * the payload is invalid, or `gameId` is absent.
      */
+    /**
+     * Handles a player toggling their ready state in the lobby.
+     *
+     * Client sends `{"gameId": <id>, "isReady": <bool>}` in the payload to `/app/lobby.ready`.
+     * Server updates in-memory ready state and broadcasts the full LOBBY_ROSTER with
+     * updated isReady flags to `/topic/game/{gameId}` so all lobby members stay in sync.
+     */
+    @MessageMapping("/lobby.ready")
+    fun toggleReady(
+        @Payload message: WebSocketMessage,
+        headerAccessor: SimpMessageHeaderAccessor,
+    ) {
+        val principal = headerAccessor.userPrincipal()
+            ?: throw CustomWebSocketException(
+                errorCode = "UNAUTHENTICATED",
+                message = "Authenticated principal not found",
+            )
+
+        val payload = message.payload as? Map<*, *>
+            ?: throw CustomWebSocketException(
+                errorCode = "INVALID_PAYLOAD",
+                message = "lobby.ready payload must contain gameId and isReady",
+            )
+
+        val gameId = (payload["gameId"] as? Number)?.toInt()
+            ?: throw CustomWebSocketException(
+                errorCode = "MISSING_GAME_ID",
+                message = "gameId is missing or not a number",
+            )
+
+        val isReady = payload["isReady"] as? Boolean
+            ?: throw CustomWebSocketException(
+                errorCode = "MISSING_IS_READY",
+                message = "isReady is missing or not a boolean",
+            )
+
+        logger.info("User '{}' set ready={} in game {}", principal.username, isReady, gameId)
+
+        val roster = lobbyService.setReadyState(gameId, principal.userId, isReady)
+
+        // Broadcast updated roster so all lobby members see the new ready state
+        messagingTemplate.convertAndSend(
+            "/topic/game/$gameId",
+            WebSocketMessage(
+                type = MessageType.LOBBY_ROSTER,
+                sender = "SERVER",
+                content = "Lobby roster updated",
+                gameId = gameId,
+                payload = LobbyRosterDto(players = roster)
+            )
+        )
+    }
+
     @MessageMapping("/lobby.leave")
     @Suppress("UNUSED_PARAMETER")
     fun leaveLobby(

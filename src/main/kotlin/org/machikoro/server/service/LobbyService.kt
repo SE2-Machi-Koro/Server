@@ -19,6 +19,7 @@ import org.machikoro.server.exception.GameFinishedException
 import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.exception.LobbyFullException
+import org.machikoro.server.exception.NotAllPlayersReadyException
 import org.machikoro.server.exception.NotEnoughPlayersException
 import org.machikoro.server.exception.NotHostException
 import org.machikoro.server.exception.PlayerNotFoundException
@@ -39,6 +40,9 @@ open class LobbyService(
 
     // ConcurrentHashMap for thread-safe lock creation and removal
     private val lobbyLocks = ConcurrentHashMap<Int, Any>()
+
+    // In-memory ready state: gameId -> set of userIds who pressed ready
+    private val readyPlayers = ConcurrentHashMap<Int, MutableSet<Int>>()
 
     /**
      * Runs [block] inside an Exposed transaction.
@@ -99,10 +103,22 @@ open class LobbyService(
     }
 
     /**
-     * Returns the current lobby roster for [gameId], including usernames, ordered by turn order.
+     * Returns the current lobby roster for [gameId], enriched with in-memory ready state.
      */
     fun getLobbyRoster(gameId: Int): List<LobbyRosterPlayerDto> = runInTransaction {
-        playerDao.getLobbyRoster(gameId)
+        val ready = readyPlayers[gameId] ?: emptySet()
+        playerDao.getLobbyRoster(gameId).map { it.copy(isReady = it.userId in ready) }
+    }
+
+    /**
+     * Toggles [userId]'s ready state in [gameId] and returns the updated roster.
+     *
+     * Thread-safe via [ConcurrentHashMap.newKeySet] on the inner set.
+     */
+    fun setReadyState(gameId: Int, userId: Int, isReady: Boolean): List<LobbyRosterPlayerDto> {
+        val readySet = readyPlayers.computeIfAbsent(gameId) { ConcurrentHashMap.newKeySet() }
+        if (isReady) readySet.add(userId) else readySet.remove(userId)
+        return getLobbyRoster(gameId)
     }
 
     /**
@@ -163,6 +179,7 @@ open class LobbyService(
             gameDao.delete(game.id)
         }
         lobbyLocks.clear()
+        readyPlayers.clear()
         games.size
     }
 
@@ -231,6 +248,7 @@ open class LobbyService(
         playerDao.deleteByGameId(gameId)
         gameDao.delete(gameId)
         lobbyLocks.remove(gameId)
+        readyPlayers.remove(gameId)
     }
 
     /**
@@ -288,6 +306,14 @@ open class LobbyService(
                     )
                 }
 
+                val ready = readyPlayers[gameId] ?: emptySet()
+                val notReady = players.filter { it.userId !in ready }
+                if (notReady.isNotEmpty()) {
+                    throw NotAllPlayersReadyException(
+                        "Game $gameId: ${notReady.size} player(s) not ready"
+                    )
+                }
+
                 val shuffled = initializationService.initializeGame(gameId)
 
                 gameDao.updateStatus(gameId, GameStatus.IN_PROGRESS)
@@ -318,8 +344,9 @@ open class LobbyService(
                 )
             }
         }
-        // Game is now IN_PROGRESS; no new joins can happen, so the lock is no longer needed
+        // Game is now IN_PROGRESS; lobby state is no longer needed
         lobbyLocks.remove(gameId)
+        readyPlayers.remove(gameId)
         return result
     }
 }
