@@ -4,7 +4,7 @@ import io.swagger.v3.oas.annotations.media.Schema
 
 @Schema(
     description = "Result of leaving lobby",
-    oneOf = [LobbyLeavingOutcome.LobbyRemains::class, LobbyLeavingOutcome.LobbyDeleted::class]
+    oneOf = [LobbyLeavingOutcome.LobbyRemains::class, LobbyLeavingOutcome.LobbyDeleted::class, LobbyLeavingOutcome.NotAMember::class]
 )
 sealed interface LobbyLeavingOutcome {
 
@@ -19,4 +19,8 @@ sealed interface LobbyLeavingOutcome {
         @field:Schema(description = "ID of the game to close lobby for", example = "1")
         val gameId: Int
     ) : LobbyLeavingOutcome
+
+    // Stale/duplicate leave frame — caller was not a member; no broadcast needed
+    @Schema(description = "Caller was not in the lobby; no-op, no topic broadcast")
+    data object NotAMember : LobbyLeavingOutcome
 }
