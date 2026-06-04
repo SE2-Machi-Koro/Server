@@ -17,7 +17,6 @@ import org.machikoro.server.dto.LobbyLeavingOutcome
 import org.machikoro.server.dto.LobbyRosterDto
 import org.machikoro.server.dto.LobbyRosterPlayerDto
 import org.machikoro.server.exception.GameNotFoundException
-import org.machikoro.server.exception.PlayerNotFoundException
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.mock
@@ -362,33 +361,26 @@ class LobbyWebSocketControllerTest {
     }
 
     @Test
-    fun `leaveLobby throws when player is not in lobby`() {
+    fun `leaveLobby does nothing when caller is not a member of the lobby`() {
         whenever(lobbyService.leaveLobby(1, 10))
-            .thenThrow(
-                PlayerNotFoundException(
-                    "Player 10 not found in game 1"
-                )
-            )
+            .thenReturn(LobbyLeavingOutcome.NotAMember)
 
         val accessor = authenticatedAccessor(
             userId = 10,
             username = "Player1"
         )
 
-        assertThrows<PlayerNotFoundException> {
-            controller.leaveLobby(
-                WebSocketMessage(
-                    type = MessageType.JOIN,
-                    sender = "Player1",
-                    payload = mapOf("gameId" to 1)
-                ),
-                accessor,
-            )
-        }
+        controller.leaveLobby(
+            WebSocketMessage(
+                type = MessageType.JOIN,
+                sender = "Player1",
+                payload = mapOf("gameId" to 1)
+            ),
+            accessor,
+        )
 
-        verify(lobbyService)
-            .leaveLobby(1, 10)
-
+        verify(lobbyService).leaveLobby(1, 10)
+        // No topic broadcast — stale/duplicate frame must not trigger HOST_LEFT
         verify(messagingTemplate, never())
             .convertAndSend(any<String>(), any<WebSocketMessage>())
     }
@@ -593,7 +585,8 @@ class LobbyWebSocketControllerTest {
         val msgCaptor = argumentCaptor<WebSocketMessage>()
         verify(messagingTemplate).convertAndSend(any<String>(), msgCaptor.capture())
 
-        val payload = msgCaptor.firstValue.payload as LobbyRosterDto
+        val payload = msgCaptor.firstValue.payload as? LobbyRosterDto
+            ?: throw AssertionError("Payload is not a LobbyRosterDto")
         assertEquals(false, payload.players[0].isReady)
     }
 

@@ -294,6 +294,11 @@ class LobbyWebSocketController(
         val result = lobbyService.leaveLobby(gameId, principal.userId)
 
         when(result) {
+            is LobbyLeavingOutcome.NotAMember -> {
+                // Stale or duplicate frame — caller was not in the lobby; no topic broadcast
+                logger.debug("User '{}' not a member of game {} — suppressing HOST_LEFT", principal.username, gameId)
+                return
+            }
             is LobbyLeavingOutcome.LobbyRemains -> {
                 logger.info(
                     "Player ${principal.userId} left game"
