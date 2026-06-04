@@ -22,6 +22,7 @@ import org.machikoro.server.exception.LobbyFullException
 import org.machikoro.server.exception.NotAllPlayersReadyException
 import org.machikoro.server.exception.NotEnoughPlayersException
 import org.machikoro.server.exception.NotHostException
+import org.machikoro.server.exception.PlayerNotFoundException
 import org.springframework.stereotype.Service
 import java.util.concurrent.ConcurrentHashMap
 
@@ -112,11 +113,29 @@ open class LobbyService(
     /**
      * Toggles [userId]'s ready state in [gameId] and returns the updated roster.
      *
-     * Thread-safe via [ConcurrentHashMap.newKeySet] on the inner set.
+     * Validates the game exists, is WAITING, and the caller is a member before
+     * touching in-memory state. Thread-safe via [ConcurrentHashMap.newKeySet].
+     *
+     * @throws GameNotFoundException   if no game with [gameId] exists.
+     * @throws GameStartedException    if the game is not in WAITING state.
+     * @throws PlayerNotFoundException if [userId] is not a member of [gameId].
      */
     fun setReadyState(gameId: Int, userId: Int, isReady: Boolean): List<LobbyRosterPlayerDto> {
-        val readySet = readyPlayers.computeIfAbsent(gameId) { ConcurrentHashMap.newKeySet() }
-        if (isReady) readySet.add(userId) else readySet.remove(userId)
+        runInTransaction {
+            val game = gameDao.findById(gameId)
+                ?: throw GameNotFoundException("Game $gameId not found")
+            if (game.status != GameStatus.WAITING) {
+                throw GameStartedException("Game $gameId is not accepting ready state changes")
+            }
+            playerDao.findByGameIdAndUserId(gameId, userId)
+                ?: throw PlayerNotFoundException("User $userId is not in game $gameId")
+        }
+        // Only create the set when adding — avoids orphaned empty entries for non-members
+        if (isReady) {
+            readyPlayers.computeIfAbsent(gameId) { ConcurrentHashMap.newKeySet() }.add(userId)
+        } else {
+            readyPlayers[gameId]?.remove(userId)
+        }
         return getLobbyRoster(gameId)
     }
 
@@ -162,7 +181,10 @@ open class LobbyService(
             if (players.size >= game.maxPlayers) {
                 throw LobbyFullException("Game $gameId is full (max ${game.maxPlayers} players)")
             }
-            return playerDao.addPlayer(gameId, userId)
+            val newPlayer = playerDao.addPlayer(gameId, userId)
+            // Reset ready states so all players must re-ready with the new roster
+            readyPlayers.remove(gameId)
+            return newPlayer
         }
     }
 
@@ -202,12 +224,12 @@ open class LobbyService(
      * @throws GameNotFoundException if the game does not exist (stale gameId from reconnect)
      */
     fun leaveLobby(gameId: Int, userId: Int): LobbyLeavingOutcome = runInTransaction {
-        // Game or player already gone (e.g. purged by debug endpoint) — treat as already left
+        // Player or game already gone — return no-op to suppress HOST_LEFT broadcast
         val player = playerDao.findByGameIdAndUserId(gameId, userId)
-            ?: return@runInTransaction LobbyLeavingOutcome.LobbyDeleted(gameId)
+            ?: return@runInTransaction LobbyLeavingOutcome.NotAMember
 
         val game = gameDao.findById(gameId)
-            ?: return@runInTransaction LobbyLeavingOutcome.LobbyDeleted(gameId)
+            ?: return@runInTransaction LobbyLeavingOutcome.NotAMember
 
         val shouldDeleteLobby =
             player.userId == game.hostUserId
@@ -307,8 +329,20 @@ open class LobbyService(
                     )
                 }
 
+                // Auto-ready the host — calling startGame is implicit readiness consent
+                if (requestingUserId != null) {
+                    readyPlayers.computeIfAbsent(gameId) { ConcurrentHashMap.newKeySet() }.add(requestingUserId)
+                }
+
+                // Fetch roster once for the ready gate and post-start snapshot
+                val lobbyRoster = playerDao.getLobbyRoster(gameId)
+                // Debug bots have no client to press ready — exclude from the gate
+                val realPlayerIds = lobbyRoster
+                    .filter { !it.username.startsWith(DEBUG_USER_PREFIX) }
+                    .map { it.userId }
+                    .toSet()
                 val ready = readyPlayers[gameId] ?: emptySet()
-                val notReady = players.filter { it.userId !in ready }
+                val notReady = realPlayerIds.filter { it !in ready }
                 if (notReady.isNotEmpty()) {
                     throw NotAllPlayersReadyException(
                         "Game $gameId: ${notReady.size} player(s) not ready"
@@ -329,7 +363,11 @@ open class LobbyService(
                 val marketplace = gameMarketplaceDao.findByGameIdAsMap(gameId)
                 val cardDefinitions = cardDao.findAll().map { it.toDefinitionDto() }
                 val landmarkDefinitions = landmarkDao.findAll().map { it.toDefinitionDto() }
-                val playerUsernames = playerDao.getLobbyRoster(gameId).associate { it.playerId to it.username }
+                // Reuse roster already fetched above
+                val playerUsernames = lobbyRoster.associate { it.playerId to it.username }
+
+                // Lobby state no longer needed inside the lock
+                readyPlayers.remove(gameId)
 
                 GameStateDto(
                     game = updatedGame,
@@ -345,9 +383,8 @@ open class LobbyService(
                 )
             }
         }
-        // Game is now IN_PROGRESS; lobby state is no longer needed
+        // Remove the lock after the transaction commits
         lobbyLocks.remove(gameId)
-        readyPlayers.remove(gameId)
         return result
     }
 }
