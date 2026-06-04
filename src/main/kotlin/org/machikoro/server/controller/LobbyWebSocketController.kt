@@ -10,6 +10,7 @@ import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.service.LobbyService
+import org.machikoro.server.service.PendingLobbyCreatedCache
 import org.slf4j.LoggerFactory
 import org.springframework.messaging.handler.annotation.MessageMapping
 import org.springframework.messaging.handler.annotation.Payload
@@ -21,6 +22,7 @@ import org.springframework.stereotype.Controller
 class LobbyWebSocketController(
     private val lobbyService: LobbyService,
     private val messagingTemplate: SimpMessagingTemplate,
+    private val pendingLobbyCreatedCache: PendingLobbyCreatedCache,
 ) {
     private val logger = LoggerFactory.getLogger(LobbyWebSocketController::class.java)
 
@@ -64,21 +66,24 @@ class LobbyWebSocketController(
 
         val lobby = lobbyService.createLobby(principal.userId)
 
-        // Deliver only to the creator — avoids auto-joining unrelated clients
-        messagingTemplate.convertAndSend(
-            "/queue/lobby-user$sessionId",
-            WebSocketMessage(
-                type = MessageType.LOBBY_CREATED,
-                sender = "SERVER",
-                content = "Lobby created",
-                gameId = lobby.id,
-                payload = mapOf(
-                    "lobbyCode" to lobby.lobbyCode,
-                    "hostUserId" to lobby.hostUserId,
-                    "status" to lobby.status.name
-                )
+        val response = WebSocketMessage(
+            type = MessageType.LOBBY_CREATED,
+            sender = "SERVER",
+            content = "Lobby created",
+            gameId = lobby.id,
+            payload = mapOf(
+                "lobbyCode" to lobby.lobbyCode,
+                "hostUserId" to lobby.hostUserId,
+                "status" to lobby.status.name
             )
         )
+
+        // Store before sending: if the SUBSCRIBE frame races ahead of SEND in the inbound channel,
+        // the SessionSubscribeEvent listener will replay from here once the subscription is confirmed
+        pendingLobbyCreatedCache.put(sessionId, response)
+
+        // Deliver only to the creator — avoids auto-joining unrelated clients
+        messagingTemplate.convertAndSend("/queue/lobby-user$sessionId", response)
     }
 
     /**

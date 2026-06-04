@@ -17,6 +17,8 @@ import org.machikoro.server.dto.LobbyLeavingOutcome
 import org.machikoro.server.dto.LobbyRosterDto
 import org.machikoro.server.dto.LobbyRosterPlayerDto
 import org.machikoro.server.exception.GameNotFoundException
+import org.machikoro.server.service.PendingLobbyCreatedCache
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.mock
@@ -31,7 +33,9 @@ class LobbyWebSocketControllerTest {
 
     private val lobbyService = mock<LobbyService>()
     private val messagingTemplate = mock<SimpMessagingTemplate>()
-    private val controller = LobbyWebSocketController(lobbyService, messagingTemplate)
+    // Use a real cache instance — no external dependencies
+    private val pendingLobbyCreatedCache = PendingLobbyCreatedCache()
+    private val controller = LobbyWebSocketController(lobbyService, messagingTemplate, pendingLobbyCreatedCache)
 
     // Helper: accessor with authenticated principal and a session ID
     private fun authenticatedAccessor(userId: Int, username: String, sessionId: String = "test-session"): SimpMessageHeaderAccessor =
@@ -92,6 +96,24 @@ class LobbyWebSocketControllerTest {
         assertEquals("WAITING", payload["status"])
 
         verify(lobbyService).createLobby(10)
+    }
+
+    @Test
+    fun `createLobby stores LOBBY_CREATED in pending cache for subscribe-event replay`() {
+        whenever(lobbyService.createLobby(10)).thenReturn(game())
+
+        val accessor = authenticatedAccessor(userId = 10, username = "Player1", sessionId = "sess-42")
+
+        controller.createLobby(
+            WebSocketMessage(type = MessageType.JOIN, sender = "ignored-by-server", content = "create lobby"),
+            accessor,
+        )
+
+        // Pending entry must survive after the direct send so the subscribe-event replay path can consume it
+        val pending = pendingLobbyCreatedCache.consume("sess-42")
+        assertNotNull(pending)
+        assertEquals(MessageType.LOBBY_CREATED, pending!!.type)
+        assertEquals(1, pending.gameId)
     }
 
     @Test
