@@ -4,12 +4,12 @@
 CREATE TABLE cards
 (
     id                 SERIAL PRIMARY KEY,
-    card_type          VARCHAR2(50) NOT NULL,
+    card_type          ${varchar_type}(50) NOT NULL,
     cost               INT         NOT NULL,
     income             INT         NOT NULL,
-    color              VARCHAR2(20) NOT NULL,
-    establishment_type VARCHAR2(20) NOT NULL,
-    payment_source     VARCHAR2(20) NOT NULL,
+    color              ${varchar_type}(20) NOT NULL,
+    establishment_type ${varchar_type}(20) NOT NULL,
+    payment_source     ${varchar_type}(20) NOT NULL,
     CONSTRAINT cards_card_type_unique UNIQUE (card_type),
     CONSTRAINT cards_card_type_check CHECK (card_type IN (
                                                           'WHEAT_FIELD', 'RANCH', 'FOREST', 'MINE', 'APPLE_ORCHARD',
@@ -40,7 +40,7 @@ CREATE TABLE card_activation_numbers
 CREATE TABLE landmarks
 (
     id            SERIAL PRIMARY KEY,
-    landmark_type VARCHAR2(50) NOT NULL,
+    landmark_type ${varchar_type}(50) NOT NULL,
     cost          INT         NOT NULL,
     CONSTRAINT landmarks_landmark_type_unique UNIQUE (landmark_type),
     CONSTRAINT landmarks_landmark_type_check CHECK (landmark_type IN (
@@ -54,9 +54,9 @@ CREATE TABLE landmarks
 CREATE TABLE users
 (
     id                 SERIAL PRIMARY KEY,
-    username           VARCHAR2(50) NOT NULL,
-    password_hash      VARCHAR2(60),
-    session_token      VARCHAR2(255),
+    username           ${varchar_type}(50) NOT NULL,
+    password_hash      ${varchar_type}(60),
+    session_token      ${varchar_type}(255),
     total_wins         INT         NOT NULL DEFAULT 0,
     total_games_played INT         NOT NULL DEFAULT 0,
     CONSTRAINT users_username_unique UNIQUE (username),
@@ -66,12 +66,12 @@ CREATE TABLE users
 CREATE TABLE games
 (
     id                      SERIAL PRIMARY KEY,
-    status                  VARCHAR2(20) NOT NULL DEFAULT 'WAITING',
+    status                  ${varchar_type}(20) NOT NULL DEFAULT 'WAITING',
     host_user_id            INT         NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
-    lobby_code              VARCHAR2(7)  NOT NULL,
+    lobby_code              ${varchar_type}(7)  NOT NULL,
     max_players             INT         NOT NULL DEFAULT 4,
     current_turn_index      INT         NOT NULL DEFAULT 0,
-    turn_phase              VARCHAR2(20) NOT NULL DEFAULT 'ROLL_DICE',
+    turn_phase              ${varchar_type}(20) NOT NULL DEFAULT 'ROLL_DICE',
     last_dice_roll          INT,
     round_number            INT         NOT NULL DEFAULT 1,
     has_purchased_this_turn BOOLEAN     NOT NULL DEFAULT FALSE,
