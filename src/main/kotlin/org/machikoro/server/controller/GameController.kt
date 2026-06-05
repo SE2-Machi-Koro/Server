@@ -128,7 +128,7 @@ class GameController(
             broadcastStartFailure(gameTopic, request.gameId, e.message, e.errorCode)
         } catch (e: NotHostException) {
             logger.warn("START_GAME rejected for gameId={}: {}", request.gameId, e.message)
-            broadcastStartFailure(gameTopic, request.gameId, e.message, "NOT_HOST")
+            broadcastStartFailure(gameTopic, request.gameId, e.message ?: "User is not the lobby host", "NOT_HOST")
         }
     }
 
