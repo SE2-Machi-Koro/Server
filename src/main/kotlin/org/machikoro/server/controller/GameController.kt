@@ -11,6 +11,7 @@ import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.PurchaseRequest
 import org.machikoro.server.dto.RollDiceRequest
 import org.machikoro.server.dto.StartGameRequest
+import org.machikoro.server.dto.WebSocketErrorDto
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.exception.GameStartedException
@@ -47,10 +48,6 @@ class GameController(
 ) {
     private val logger = LoggerFactory.getLogger(GameController::class.java)
 
-    companion object {
-        private const val UNKNOWN_ERROR = "Unknown error"
-    }
-
     /**
      * Handle the START_GAME signal from the lobby host.
      *
@@ -82,7 +79,12 @@ class GameController(
                 WebSocketMessage(
                     type = MessageType.ERROR,
                     sender = "server",
-                    payload = mapOf("event" to "START_FAILED", "message" to "Unknown session — please reconnect"),
+                    payload = WebSocketErrorDto(
+                        code = "UNKNOWN_SESSION",
+                        message = "Unknown session - please reconnect",
+                        context = mapOf("event" to "START_FAILED"),
+                    ),
+                    gameId = request.gameId,
                 )
             )
             return
@@ -127,15 +129,17 @@ class GameController(
                     gameId = request.gameId,
                 )
             )
+        } catch (e: CustomWebSocketException) {
+            logger.warn("START_GAME rejected for game {} [{}]: {}", request.gameId, e.errorCode, e.message)
+            broadcastGameTopicError(
+                gameId = request.gameId,
+                error = WebSocketErrorDto.from(e, mapOf("event" to "START_FAILED")),
+            )
         } catch (e: Exception) {
             logger.error("START_GAME failed for gameId=${request.gameId}", e)
-            messagingTemplate.convertAndSend(
-                gameTopic,
-                WebSocketMessage(
-                    type = MessageType.ERROR,
-                    sender = "server",
-                    payload = mapOf("event" to "START_FAILED", "message" to (e.message ?: UNKNOWN_ERROR)),
-                )
+            broadcastGameTopicError(
+                gameId = request.gameId,
+                error = WebSocketErrorDto.internal(mapOf("event" to "START_FAILED")),
             )
         }
     }
@@ -194,14 +198,9 @@ class GameController(
             logger.debug("enterGameScreen: userId=${principal.userId} is not host of game $gameId, skipping")
         } catch (e: Exception) {
             logger.error("enterGameScreen failed for gameId=$gameId, userId=${principal.userId}", e)
-            messagingTemplate.convertAndSend(
-                gameTopic,
-                WebSocketMessage(
-                    type = MessageType.ERROR,
-                    sender = "server",
-                    payload = mapOf("event" to "ENTER_SCREEN_FAILED", "message" to (e.message ?: UNKNOWN_ERROR)),
-                    gameId = gameId,
-                )
+            broadcastGameTopicError(
+                gameId = gameId,
+                error = WebSocketErrorDto.internal(mapOf("event" to "ENTER_SCREEN_FAILED")),
             )
         }
     }
@@ -337,23 +336,17 @@ class GameController(
             )
         } catch (e: CustomWebSocketException) {
             logger.warn("Roll dice rejected for game {} [{}]: {}", request.gameId, e.errorCode, e.message)
-            messagingTemplate.convertAndSend(
-                gameTopic,
-                WebSocketMessage(
-                    type = MessageType.ERROR,
-                    sender = "SERVER",
-                    payload = mapOf("event" to "ROLL_FAILED", "code" to e.errorCode, "message" to e.message)
-                )
+            broadcastGameTopicError(
+                gameId = request.gameId,
+                sender = "SERVER",
+                error = WebSocketErrorDto.from(e, mapOf("event" to "ROLL_FAILED")),
             )
         } catch (e: Exception) {
             logger.error("Failed to roll dice for game ${request.gameId}", e)
-            messagingTemplate.convertAndSend(
-                gameTopic,
-                WebSocketMessage(
-                    type = MessageType.ERROR,
-                    sender = "SERVER",
-                    payload = mapOf("event" to "ROLL_FAILED", "message" to (e.message ?: UNKNOWN_ERROR))
-                )
+            broadcastGameTopicError(
+                gameId = request.gameId,
+                sender = "SERVER",
+                error = WebSocketErrorDto.internal(mapOf("event" to "ROLL_FAILED")),
             )
         }
     }
@@ -399,25 +392,34 @@ class GameController(
     }
 
     private fun broadcastPurchaseFailure(request: PurchaseRequest, exception: CustomWebSocketException) {
-        val payload = linkedMapOf<String, Any?>(
+        val context = linkedMapOf<String, Any?>(
             "event" to "PURCHASE_FAILED",
-            "code" to exception.errorCode,
-            "message" to exception.message,
             "purchaseType" to request.purchaseType.name,
         )
-        request.cardType?.let { payload["cardType"] = it.name }
-        request.landmarkType?.let { payload["landmarkType"] = it.name }
+        request.cardType?.let { context["cardType"] = it.name }
+        request.landmarkType?.let { context["landmarkType"] = it.name }
 
         // Purchase failures use the game-topic WebSocketMessage envelope so
         // clients can leave pending purchase state without parsing raw STOMP
         // user-queue error payloads.
+        broadcastGameTopicError(
+            gameId = request.gameId,
+            error = WebSocketErrorDto.from(exception, context),
+        )
+    }
+
+    private fun broadcastGameTopicError(
+        gameId: Int,
+        error: WebSocketErrorDto,
+        sender: String = "server",
+    ) {
         messagingTemplate.convertAndSend(
-            "/topic/game/${request.gameId}",
+            "/topic/game/$gameId",
             WebSocketMessage(
                 type = MessageType.ERROR,
-                sender = "server",
-                payload = payload,
-                gameId = request.gameId,
+                sender = sender,
+                payload = error,
+                gameId = gameId,
             ),
         )
     }
