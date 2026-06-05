@@ -217,19 +217,16 @@ class GameControllerTest {
     }
 
     @Test
-    fun `enterGameScreen broadcasts ERROR when unexpected exception occurs`() {
+    fun `enterGameScreen propagates unexpected exception to global handler`() {
         val gameId = 10
         whenever(lobbyService.startGame(gameId, alice.userId))
             .thenThrow(RuntimeException("unexpected failure"))
 
-        controller.enterGameScreen(EnterGameScreenRequest(gameId), authedAccessor())
-
-        val captor = argumentCaptor<WebSocketMessage>()
-        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
-        val message = captor.firstValue
-        assertEquals(MessageType.ERROR, message.type)
-        @Suppress("UNCHECKED_CAST")
-        assertEquals("ENTER_SCREEN_FAILED", (message.payload as Map<String, Any>)["event"])
+        val ex = assertThrows<RuntimeException> {
+            controller.enterGameScreen(EnterGameScreenRequest(gameId), authedAccessor())
+        }
+        assertEquals("unexpected failure", ex.message)
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }
 
     @Test
@@ -529,21 +526,19 @@ class GameControllerTest {
     }
 
     @Test
-    fun `rollDice broadcasts error to game topic on failure`() {
+    fun `rollDice propagates unexpected failure to global handler`() {
         val gameId = 1
         val activePlayer = PlayerModel(id = 9, gameId = gameId, userId = alice.userId, turnOrder = 0, coins = 3, lastSeenAt = null)
         val request = RollDiceRequest(gameId = gameId, playerId = null)
         whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice)).thenReturn(activePlayer)
         whenever(diceService.rollDice(request, activePlayer.id)).thenThrow(RuntimeException("dice exploded"))
 
-        controller.rollDice(request, authedAccessor())
-
-        val captor = argumentCaptor<WebSocketMessage>()
-        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
-        val message = captor.firstValue
-        assertEquals(MessageType.ERROR, message.type)
-        assertEquals(mapOf("event" to "ROLL_FAILED", "message" to "dice exploded"), message.payload)
+        val ex = assertThrows<RuntimeException> {
+            controller.rollDice(request, authedAccessor())
+        }
+        assertEquals("dice exploded", ex.message)
         verify(diceService).rollDice(request, activePlayer.id)
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
         verify(gameStateGuard, never()).ensureSenderOwnsPlayer(any(), any(), any())
     }
 
