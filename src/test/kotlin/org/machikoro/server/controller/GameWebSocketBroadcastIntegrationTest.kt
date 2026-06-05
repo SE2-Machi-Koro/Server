@@ -463,12 +463,13 @@ class GameWebSocketBroadcastIntegrationTest {
 
     private fun assertPurchaseFailurePayload(message: JsonNode) {
         val payload = message["payload"]
+        val context = payload["context"]
         assertEquals("server", message["sender"].asText())
-        assertEquals("PURCHASE_FAILED", payload["event"].asText())
         assertEquals("DUPLICATE_PURPLE_ESTABLISHMENT", payload["code"].asText())
         assertEquals("Player already owns purple establishment STADIUM", payload["message"].asText())
-        assertEquals("ESTABLISHMENT", payload["purchaseType"].asText())
-        assertEquals("STADIUM", payload["cardType"].asText())
+        assertEquals("PURCHASE_FAILED", context["event"].asText())
+        assertEquals("ESTABLISHMENT", context["purchaseType"].asText())
+        assertEquals("STADIUM", context["cardType"].asText())
     }
 
     private fun takeMessage(queue: BlockingQueue<JsonNode>, type: MessageType): JsonNode {

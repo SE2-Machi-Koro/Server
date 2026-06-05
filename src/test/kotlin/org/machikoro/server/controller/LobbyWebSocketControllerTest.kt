@@ -7,6 +7,7 @@ import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.dto.MessageType
+import org.machikoro.server.dto.WebSocketErrorDto
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.service.LobbyService
@@ -274,8 +275,10 @@ class LobbyWebSocketControllerTest {
         assertEquals("SERVER", msg.sender)
         assertEquals("Lobby code is invalid", msg.content)
 
-        val payload = msg.payload as? Map<*, *> ?: throw AssertionError("Payload is not a Map")
-        assertEquals("INVALID_LOBBY_CODE", payload["errorCode"])
+        val payload = msg.payload as? WebSocketErrorDto ?: throw AssertionError("Payload is not a WebSocketErrorDto")
+        assertEquals("INVALID_LOBBY_CODE", payload.code)
+        assertEquals("Lobby code is invalid", payload.message)
+        assertEquals("LOBBY_JOIN_FAILED", payload.context["event"])
     }
 
     // === leaveLobby() ===
