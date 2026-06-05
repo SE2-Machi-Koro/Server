@@ -47,10 +47,6 @@ class GameController(
 ) {
     private val logger = LoggerFactory.getLogger(GameController::class.java)
 
-    companion object {
-        private const val UNKNOWN_ERROR = "Unknown error"
-    }
-
     /**
      * Handle the START_GAME signal from the lobby host.
      *
@@ -127,16 +123,12 @@ class GameController(
                     gameId = request.gameId,
                 )
             )
-        } catch (e: Exception) {
-            logger.error("START_GAME failed for gameId=${request.gameId}", e)
-            messagingTemplate.convertAndSend(
-                gameTopic,
-                WebSocketMessage(
-                    type = MessageType.ERROR,
-                    sender = "server",
-                    payload = mapOf("event" to "START_FAILED", "message" to (e.message ?: UNKNOWN_ERROR)),
-                )
-            )
+        } catch (e: CustomWebSocketException) {
+            logger.warn("START_GAME rejected for gameId={} [{}]: {}", request.gameId, e.errorCode, e.message)
+            broadcastStartFailure(gameTopic, request.gameId, e.message, e.errorCode)
+        } catch (e: NotHostException) {
+            logger.warn("START_GAME rejected for gameId={}: {}", request.gameId, e.message)
+            broadcastStartFailure(gameTopic, request.gameId, e.message, "NOT_HOST")
         }
     }
 
@@ -192,17 +184,6 @@ class GameController(
         } catch (e: NotHostException) {
             // Non-host entered screen — host will trigger initialization when they enter
             logger.debug("enterGameScreen: userId=${principal.userId} is not host of game $gameId, skipping")
-        } catch (e: Exception) {
-            logger.error("enterGameScreen failed for gameId=$gameId, userId=${principal.userId}", e)
-            messagingTemplate.convertAndSend(
-                gameTopic,
-                WebSocketMessage(
-                    type = MessageType.ERROR,
-                    sender = "server",
-                    payload = mapOf("event" to "ENTER_SCREEN_FAILED", "message" to (e.message ?: UNKNOWN_ERROR)),
-                    gameId = gameId,
-                )
-            )
         }
     }
 
@@ -345,17 +326,19 @@ class GameController(
                     payload = mapOf("event" to "ROLL_FAILED", "code" to e.errorCode, "message" to e.message)
                 )
             )
-        } catch (e: Exception) {
-            logger.error("Failed to roll dice for game ${request.gameId}", e)
-            messagingTemplate.convertAndSend(
-                gameTopic,
-                WebSocketMessage(
-                    type = MessageType.ERROR,
-                    sender = "SERVER",
-                    payload = mapOf("event" to "ROLL_FAILED", "message" to (e.message ?: UNKNOWN_ERROR))
-                )
-            )
         }
+    }
+
+    private fun broadcastStartFailure(gameTopic: String, gameId: Int, message: String, code: String) {
+        messagingTemplate.convertAndSend(
+            gameTopic,
+            WebSocketMessage(
+                type = MessageType.ERROR,
+                sender = "server",
+                payload = mapOf("event" to "START_FAILED", "code" to code, "message" to message),
+                gameId = gameId,
+            )
+        )
     }
 
     /**
