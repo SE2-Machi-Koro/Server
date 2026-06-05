@@ -3,6 +3,7 @@ package org.machikoro.server.controller
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.dto.LoginRequest
 import org.machikoro.server.dto.LoginResponse
 import org.machikoro.server.dto.LogoutRequest
@@ -38,15 +39,15 @@ class AuthControllerTests {
     }
 
     @Test
-    fun `register returns bad request when username already taken`() {
+    fun `register propagates duplicate username for centralized handling`() {
         val request = RegisterRequest(username = "alice", password = "hunter2")
         whenever(authService.register("alice", "hunter2"))
             .thenThrow(DuplicateUserException("Username 'alice' is already taken"))
 
-        val response = controller.register(request)
-
-        assertEquals(HttpStatus.BAD_REQUEST, response.statusCode)
-        assertEquals("Username 'alice' is already taken", response.body)
+        val ex = assertThrows<DuplicateUserException> {
+            controller.register(request)
+        }
+        assertEquals("Username 'alice' is already taken", ex.message)
     }
 
     @Test
@@ -66,15 +67,15 @@ class AuthControllerTests {
     }
 
     @Test
-    fun `login returns 401 with the generic body on InvalidCredentialsException`() {
+    fun `login propagates InvalidCredentialsException for centralized handling`() {
         val request = LoginRequest(username = "alice", password = "wrong")
         whenever(authService.login("alice", "wrong"))
             .thenThrow(InvalidCredentialsException("Invalid username or password"))
 
-        val response = controller.login(request)
-
-        assertEquals(HttpStatus.UNAUTHORIZED, response.statusCode)
-        assertEquals("Invalid username or password", response.body)
+        val ex = assertThrows<InvalidCredentialsException> {
+            controller.login(request)
+        }
+        assertEquals("Invalid username or password", ex.message)
     }
 
     @Test
@@ -109,11 +110,13 @@ class AuthControllerTests {
         whenever(authService.login("alice", "wrong"))
             .thenThrow(InvalidCredentialsException("Invalid username or password"))
 
-        val unknownUserResponse = controller.login(LoginRequest("ghost", "any"))
-        val wrongPasswordResponse = controller.login(LoginRequest("alice", "wrong"))
+        val unknownUserError = assertThrows<InvalidCredentialsException> {
+            controller.login(LoginRequest("ghost", "any"))
+        }
+        val wrongPasswordError = assertThrows<InvalidCredentialsException> {
+            controller.login(LoginRequest("alice", "wrong"))
+        }
 
-        assertEquals(unknownUserResponse.statusCode, wrongPasswordResponse.statusCode)
-        assertEquals(unknownUserResponse.body, wrongPasswordResponse.body)
-        assertEquals(HttpStatus.UNAUTHORIZED, unknownUserResponse.statusCode)
+        assertEquals(unknownUserError.message, wrongPasswordError.message)
     }
 }
