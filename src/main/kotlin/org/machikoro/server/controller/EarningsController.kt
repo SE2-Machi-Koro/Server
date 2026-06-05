@@ -77,16 +77,6 @@ class EarningsController(
                     gameId = request.gameId,
                 )
             )
-        } catch (e: Exception) {
-            logger.error("Failed to resolve effects for game ${request.gameId}", e)
-            messagingTemplate.convertAndSend(
-                gameTopic,
-                WebSocketMessage(
-                    type = MessageType.ERROR,
-                    sender = "server",
-                    payload = mapOf("event" to "EFFECTS_FAILED", "message" to (e.message ?: "Unknown error"))
-                )
-            )
         }
     }
 }
