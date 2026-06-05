@@ -153,7 +153,7 @@ class GameControllerTest {
     }
 
     @Test
-    fun `startGame broadcasts ERROR frame when service throws`() {
+    fun `startGame broadcasts typed ERROR frame when service rejects`() {
         val gameId = 10
         val sessionId = "session-non-host"
         whenever(connectionTracker.getUserId(sessionId)).thenReturn(99)
@@ -167,8 +167,8 @@ class GameControllerTest {
         val message = captor.firstValue
         assertEquals(MessageType.ERROR, message.type)
         val payload = message.payload as WebSocketErrorDto
-        assertEquals("INTERNAL_ERROR", payload.code)
-        assertEquals("Unexpected error while processing WebSocket message", payload.message)
+        assertEquals("NOT_HOST", payload.code)
+        assertEquals("not host", payload.message)
         assertEquals("START_FAILED", payload.context["event"])
     }
 
