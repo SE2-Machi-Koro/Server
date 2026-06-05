@@ -63,6 +63,6 @@ class RestExceptionHandler {
 
     private fun status(status: HttpStatus, ex: RuntimeException): ResponseEntity<String> {
         logger.warn("REST request rejected with {}: {}", status.value(), ex.message)
-        return ResponseEntity.status(status).body(ex.message)
+        return ResponseEntity.status(status).body(ex.message ?: "Request rejected")
     }
 }
