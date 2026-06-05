@@ -1,5 +1,6 @@
 package org.machikoro.server.controller
 
+import org.machikoro.server.dto.GameStateDto
 import org.machikoro.server.service.LobbyService
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.PathVariable
@@ -20,12 +21,8 @@ class LobbyController(private val lobbyService: LobbyService) {
     fun startGame(
         @PathVariable gameId: Int,
         @org.springframework.web.bind.annotation.RequestParam requestingUserId: Int,
-    ): ResponseEntity<Any> {
-        return try {
-            val state = lobbyService.startGame(gameId, requestingUserId)
-            ResponseEntity.ok(state)
-        } catch (e: Exception) {
-            ResponseEntity.badRequest().body(e.message)
-        }
+    ): ResponseEntity<GameStateDto> {
+        val state = lobbyService.startGame(gameId, requestingUserId)
+        return ResponseEntity.ok(state)
     }
 }
