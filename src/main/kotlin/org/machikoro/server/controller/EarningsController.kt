@@ -5,6 +5,7 @@ import io.github.springwolf.core.asyncapi.annotations.AsyncOperation
 import org.machikoro.server.auth.requireUserPrincipal
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.ResolveEffectsRequest
+import org.machikoro.server.dto.WebSocketErrorDto
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.service.GameStateGuard
@@ -69,11 +70,7 @@ class EarningsController(
                 WebSocketMessage(
                     type = MessageType.ERROR,
                     sender = "server",
-                    payload = mapOf(
-                        "event" to "EFFECTS_FAILED",
-                        "code" to e.errorCode,
-                        "message" to e.message,
-                    ),
+                    payload = WebSocketErrorDto.from(e, mapOf("event" to "EFFECTS_FAILED")),
                     gameId = request.gameId,
                 )
             )
@@ -84,7 +81,8 @@ class EarningsController(
                 WebSocketMessage(
                     type = MessageType.ERROR,
                     sender = "server",
-                    payload = mapOf("event" to "EFFECTS_FAILED", "message" to (e.message ?: "Unknown error"))
+                    payload = WebSocketErrorDto.internal(mapOf("event" to "EFFECTS_FAILED")),
+                    gameId = request.gameId,
                 )
             )
         }
