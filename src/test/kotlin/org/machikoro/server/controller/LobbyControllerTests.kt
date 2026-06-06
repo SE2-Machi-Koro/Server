@@ -2,6 +2,7 @@ package org.machikoro.server.controller
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.GameModel
@@ -49,13 +50,14 @@ class LobbyControllerTests {
     }
 
     @Test
-    fun `startGame returns bad request on exception`() {
+    fun `startGame propagates exception for centralized handling`() {
         val gameId = 1
         val requestingUserId = 10
         whenever(lobbyService.startGame(eq(gameId), any())).thenThrow(RuntimeException("test error"))
 
-        val response = controller.startGame(gameId, requestingUserId)
-        assertEquals(HttpStatus.BAD_REQUEST, response.statusCode)
-        assertEquals("test error", response.body)
+        val exception = assertThrows<RuntimeException> {
+            controller.startGame(gameId, requestingUserId)
+        }
+        assertEquals("test error", exception.message)
     }
 }

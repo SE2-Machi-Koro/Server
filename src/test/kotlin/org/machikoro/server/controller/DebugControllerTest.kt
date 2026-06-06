@@ -1,14 +1,12 @@
 package org.machikoro.server.controller
 
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.UserModel
-import org.machikoro.server.dto.DebugEndGameError
 import org.machikoro.server.dto.DebugSeedResponse
 import org.machikoro.server.dto.FillLobbyRequest
 import org.machikoro.server.dto.GameStateDto
@@ -98,13 +96,13 @@ class DebugControllerTest {
     }
 
     @Test
-    fun `seed returns 500 when service throws`() {
+    fun `seed propagates unexpected service exception for centralized handling`() {
         whenever(debugService.seed()).thenThrow(RuntimeException("DB unavailable"))
 
-        val response = controller.seed("Bearer admin-token")
-
-        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.statusCode)
-        assertNull(response.body)
+        val exception = assertThrows<RuntimeException> {
+            controller.seed("Bearer admin-token")
+        }
+        assertEquals("DB unavailable", exception.message)
     }
 
     // === POST /debug/fill-lobby ===
@@ -135,25 +133,25 @@ class DebugControllerTest {
     }
 
     @Test
-    fun `fillLobby returns 500 when service throws GameNotFoundException`() {
+    fun `fillLobby propagates GameNotFoundException for centralized handling`() {
         val request = FillLobbyRequest(lobbyCode = "NOPE")
         whenever(debugService.fillLobby("NOPE")).thenThrow(GameNotFoundException("Lobby not found"))
 
-        val response = controller.fillLobby("Bearer admin-token", request)
-
-        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.statusCode)
-        assertNull(response.body)
+        val exception = assertThrows<GameNotFoundException> {
+            controller.fillLobby("Bearer admin-token", request)
+        }
+        assertEquals("Lobby not found", exception.message)
     }
 
     @Test
-    fun `fillLobby returns 500 when service throws unexpected exception`() {
+    fun `fillLobby propagates unexpected service exception for centralized handling`() {
         val request = FillLobbyRequest(lobbyCode = "ABC123")
         whenever(debugService.fillLobby("ABC123")).thenThrow(RuntimeException("Unexpected"))
 
-        val response = controller.fillLobby("Bearer admin-token", request)
-
-        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.statusCode)
-        assertNull(response.body)
+        val exception = assertThrows<RuntimeException> {
+            controller.fillLobby("Bearer admin-token", request)
+        }
+        assertEquals("Unexpected", exception.message)
     }
 
     // === DELETE /debug/purge ===
@@ -169,13 +167,13 @@ class DebugControllerTest {
     }
 
     @Test
-    fun `purge returns 500 when service throws`() {
+    fun `purge propagates unexpected service exception for centralized handling`() {
         whenever(debugService.purgeGames()).thenThrow(RuntimeException("DB error"))
 
-        val response = controller.purge("Bearer admin-token")
-
-        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.statusCode)
-        assertNull(response.body)
+        val exception = assertThrows<RuntimeException> {
+            controller.purge("Bearer admin-token")
+        }
+        assertEquals("DB error", exception.message)
     }
 
     // === POST /debug/reset-lobby ===
@@ -192,72 +190,97 @@ class DebugControllerTest {
     }
 
     @Test
-    fun `resetLobby returns 500 when service throws`() {
+    fun `resetLobby propagates GameNotFoundException for centralized handling`() {
         val request = FillLobbyRequest(lobbyCode = "NOPE")
         whenever(debugService.resetLobby("NOPE")).thenThrow(GameNotFoundException("not found"))
 
-        val response = controller.resetLobby("Bearer admin-token", request)
+        val exception = assertThrows<GameNotFoundException> {
+            controller.resetLobby("Bearer admin-token", request)
+        }
 
-        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.statusCode)
-        assertNull(response.body)
+        assertEquals("not found", exception.message)
     }
 
-    // === Admin auth — 401 / 403 across all endpoints ===
+    // === Admin auth — centralized 401 / 403 handling across all endpoints ===
 
     @Test
-    fun `seed returns 401 when session token is invalid`() {
+    fun `seed propagates invalid session token for centralized handling`() {
         whenever(debugService.validateAdmin(any())).thenThrow(InvalidSessionTokenException("bad token"))
 
-        assertEquals(HttpStatus.UNAUTHORIZED, controller.seed("Bearer bad").statusCode)
+        val exception = assertThrows<InvalidSessionTokenException> {
+            controller.seed("Bearer bad")
+        }
+        assertEquals("bad token", exception.message)
     }
 
     @Test
-    fun `seed returns 403 when user is not admin`() {
+    fun `seed propagates not admin for centralized handling`() {
         whenever(debugService.validateAdmin(any())).thenThrow(NotAdminException("not admin"))
 
-        assertEquals(HttpStatus.FORBIDDEN, controller.seed("Bearer token").statusCode)
+        val exception = assertThrows<NotAdminException> {
+            controller.seed("Bearer token")
+        }
+        assertEquals("not admin", exception.message)
     }
 
     @Test
-    fun `purge returns 401 when session token is invalid`() {
+    fun `purge propagates invalid session token for centralized handling`() {
         whenever(debugService.validateAdmin(any())).thenThrow(InvalidSessionTokenException("bad token"))
 
-        assertEquals(HttpStatus.UNAUTHORIZED, controller.purge("Bearer bad").statusCode)
+        val exception = assertThrows<InvalidSessionTokenException> {
+            controller.purge("Bearer bad")
+        }
+        assertEquals("bad token", exception.message)
     }
 
     @Test
-    fun `purge returns 403 when user is not admin`() {
+    fun `purge propagates not admin for centralized handling`() {
         whenever(debugService.validateAdmin(any())).thenThrow(NotAdminException("not admin"))
 
-        assertEquals(HttpStatus.FORBIDDEN, controller.purge("Bearer token").statusCode)
+        val exception = assertThrows<NotAdminException> {
+            controller.purge("Bearer token")
+        }
+        assertEquals("not admin", exception.message)
     }
 
     @Test
-    fun `fillLobby returns 401 when session token is invalid`() {
+    fun `fillLobby propagates invalid session token for centralized handling`() {
         whenever(debugService.validateAdmin(any())).thenThrow(InvalidSessionTokenException("bad token"))
 
-        assertEquals(HttpStatus.UNAUTHORIZED, controller.fillLobby("Bearer bad", FillLobbyRequest("X")).statusCode)
+        val exception = assertThrows<InvalidSessionTokenException> {
+            controller.fillLobby("Bearer bad", FillLobbyRequest("X"))
+        }
+        assertEquals("bad token", exception.message)
     }
 
     @Test
-    fun `fillLobby returns 403 when user is not admin`() {
+    fun `fillLobby propagates not admin for centralized handling`() {
         whenever(debugService.validateAdmin(any())).thenThrow(NotAdminException("not admin"))
 
-        assertEquals(HttpStatus.FORBIDDEN, controller.fillLobby("Bearer token", FillLobbyRequest("X")).statusCode)
+        val exception = assertThrows<NotAdminException> {
+            controller.fillLobby("Bearer token", FillLobbyRequest("X"))
+        }
+        assertEquals("not admin", exception.message)
     }
 
     @Test
-    fun `resetLobby returns 401 when session token is invalid`() {
+    fun `resetLobby propagates invalid session token for centralized handling`() {
         whenever(debugService.validateAdmin(any())).thenThrow(InvalidSessionTokenException("bad token"))
 
-        assertEquals(HttpStatus.UNAUTHORIZED, controller.resetLobby("Bearer bad", FillLobbyRequest("X")).statusCode)
+        val exception = assertThrows<InvalidSessionTokenException> {
+            controller.resetLobby("Bearer bad", FillLobbyRequest("X"))
+        }
+        assertEquals("bad token", exception.message)
     }
 
     @Test
-    fun `resetLobby returns 403 when user is not admin`() {
+    fun `resetLobby propagates not admin for centralized handling`() {
         whenever(debugService.validateAdmin(any())).thenThrow(NotAdminException("not admin"))
 
-        assertEquals(HttpStatus.FORBIDDEN, controller.resetLobby("Bearer token", FillLobbyRequest("X")).statusCode)
+        val exception = assertThrows<NotAdminException> {
+            controller.resetLobby("Bearer token", FillLobbyRequest("X"))
+        }
+        assertEquals("not admin", exception.message)
     }
 
     // === endGame ===
@@ -279,75 +302,76 @@ class DebugControllerTest {
     }
 
     @Test
-    fun `endGame returns 401 when session token is invalid`() {
+    fun `endGame propagates invalid session token for centralized handling`() {
         whenever(debugService.validateAdmin(any())).thenThrow(InvalidSessionTokenException("bad token"))
 
-        assertEquals(
-            HttpStatus.UNAUTHORIZED,
-            controller.endGame("Bearer bad", EndGameRequest(gameId = 7)).statusCode,
-        )
+        val exception = assertThrows<InvalidSessionTokenException> {
+            controller.endGame("Bearer bad", EndGameRequest(gameId = 7))
+        }
+        assertEquals("bad token", exception.message)
         verify(gameEndBroadcaster, never()).broadcast(any(), any(), any())
         verify(gamePhaseService, never()).cleanupFinishedGameData(any())
     }
 
     @Test
-    fun `endGame returns 401 when Authorization header is missing`() {
+    fun `endGame propagates missing Authorization header for centralized handling`() {
         whenever(debugService.validateAdmin(isNull())).thenThrow(InvalidSessionTokenException("Missing Authorization header"))
 
-        assertEquals(
-            HttpStatus.UNAUTHORIZED,
-            controller.endGame(null, EndGameRequest(gameId = 7)).statusCode,
-        )
+        val exception = assertThrows<InvalidSessionTokenException> {
+            controller.endGame(null, EndGameRequest(gameId = 7))
+        }
+        assertEquals("Missing Authorization header", exception.message)
         verify(gameEndBroadcaster, never()).broadcast(any(), any(), any())
     }
 
     @Test
-    fun `endGame returns 403 when user is not admin`() {
+    fun `endGame propagates not admin for centralized handling`() {
         whenever(debugService.validateAdmin(any())).thenThrow(NotAdminException("not admin"))
 
-        assertEquals(
-            HttpStatus.FORBIDDEN,
-            controller.endGame("Bearer token", EndGameRequest(gameId = 7)).statusCode,
-        )
+        val exception = assertThrows<NotAdminException> {
+            controller.endGame("Bearer token", EndGameRequest(gameId = 7))
+        }
+        assertEquals("not admin", exception.message)
         verify(gameEndBroadcaster, never()).broadcast(any(), any(), any())
     }
 
     @Test
-    fun `endGame returns 404 when game does not exist`() {
+    fun `endGame propagates GameNotFoundException for centralized handling`() {
         whenever(debugService.validateAdmin(any())).thenReturn(adminUser())
         whenever(debugService.endGame(eq(404), any()))
             .thenThrow(GameNotFoundException("Game 404 not found"))
 
-        assertEquals(
-            HttpStatus.NOT_FOUND,
-            controller.endGame("Bearer admin-token", EndGameRequest(gameId = 404)).statusCode,
-        )
+        val exception = assertThrows<GameNotFoundException> {
+            controller.endGame("Bearer admin-token", EndGameRequest(gameId = 404))
+        }
+        assertEquals("Game 404 not found", exception.message)
         verify(gameEndBroadcaster, never()).broadcast(any(), any(), any())
     }
 
     @Test
-    fun `endGame returns 422 with structured error when caller is not in the game`() {
+    fun `endGame propagates NotInGameException for centralized handling`() {
         whenever(debugService.validateAdmin(any())).thenReturn(adminUser())
         whenever(debugService.endGame(eq(7), any()))
             .thenThrow(NotInGameException("not a player"))
 
-        val response = controller.endGame("Bearer admin-token", EndGameRequest(gameId = 7))
-
-        assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, response.statusCode)
-        assertEquals(DebugEndGameError("NOT_IN_GAME", "not a player"), response.body)
+        val exception = assertThrows<NotInGameException> {
+            controller.endGame("Bearer admin-token", EndGameRequest(gameId = 7))
+        }
+        assertEquals("not a player", exception.message)
         verify(gameEndBroadcaster, never()).broadcast(any(), any(), any())
     }
 
     @Test
-    fun `endGame returns 422 with structured error when game state precondition fails`() {
+    fun `endGame propagates game state precondition failure for centralized handling`() {
         whenever(debugService.validateAdmin(any())).thenReturn(adminUser())
         whenever(debugService.endGame(eq(7), any()))
             .thenThrow(CustomWebSocketException(errorCode = "GAME_FINISHED", message = "Game 7 has already ended"))
 
-        val response = controller.endGame("Bearer admin-token", EndGameRequest(gameId = 7))
-
-        assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, response.statusCode)
-        assertEquals(DebugEndGameError("GAME_FINISHED", "Game 7 has already ended"), response.body)
+        val exception = assertThrows<CustomWebSocketException> {
+            controller.endGame("Bearer admin-token", EndGameRequest(gameId = 7))
+        }
+        assertEquals("GAME_FINISHED", exception.errorCode)
+        assertEquals("Game 7 has already ended", exception.message)
     }
 
     @Test
