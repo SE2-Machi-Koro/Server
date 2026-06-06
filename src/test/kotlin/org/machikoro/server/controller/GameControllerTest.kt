@@ -264,7 +264,7 @@ class GameControllerTest {
     }
 
     @Test
-    fun `enterGameScreen propagates unexpected exception to global handler`() {
+    fun `enterGameScreen broadcasts internal ERROR frame when service fails unexpectedly`() {
         val gameId = 10
         whenever(lobbyService.startGame(gameId, alice.userId))
             .thenThrow(RuntimeException("unexpected failure"))
@@ -606,7 +606,7 @@ class GameControllerTest {
     }
 
     @Test
-    fun `rollDice propagates unexpected failure to global handler`() {
+    fun `rollDice broadcasts internal ERROR frame when service fails unexpectedly`() {
         val gameId = 1
         val activePlayer = PlayerModel(id = 9, gameId = gameId, userId = alice.userId, turnOrder = 0, coins = 3, lastSeenAt = null)
         val request = RollDiceRequest(gameId = gameId, playerId = null)
