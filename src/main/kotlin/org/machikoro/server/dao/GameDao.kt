@@ -30,7 +30,8 @@ class GameDao {
         turnPhase = this[Games.turnPhase],
         lastDiceRoll = this[Games.lastDiceRoll],
         roundNumber = this[Games.roundNumber],
-        hasPurchasedThisTurn = this[Games.hasPurchasedThisTurn]
+        hasPurchasedThisTurn = this[Games.hasPurchasedThisTurn],
+        rerolledThisTurn = this[Games.rerolledThisTurn],
     )
 
     /**
@@ -70,6 +71,7 @@ class GameDao {
             it[Games.hasPurchasedThisTurn] = false
             it[Games.lobbyCode] = lobbyCode
             it[Games.maxPlayers] = maxPlayers
+            it[Games.rerolledThisTurn] = false
         }.value
     }
 
@@ -166,6 +168,28 @@ class GameDao {
             (Games.id eq id) and (Games.turnPhase eq expected)
         }) {
             it[Games.turnPhase] = next
+        } > 0
+    }
+
+    /**
+     * Updates the rerolled_this_turn flag for a game.
+     */
+    fun updateRerolledThisTurn(id: Int, rerolledThisTurn: Boolean): Unit = transaction {
+        val updatedRows = Games.update({ Games.id eq id }) {
+            it[Games.rerolledThisTurn] = rerolledThisTurn
+        }
+        if (updatedRows == 0) throw GameNotFoundException("Game $id not found")
+    }
+
+    /**
+     * Atomically marks the current turn as having used the reroll (only if not already used).
+     * Returns true if we successfully set it from false -> true, false if it was already true.
+     */
+    fun tryMarkRerolledThisTurn(id: Int): Boolean = transaction {
+        Games.update({
+            (Games.id eq id) and (Games.rerolledThisTurn eq false)
+        }) {
+            it[Games.rerolledThisTurn] = true
         } > 0
     }
 
