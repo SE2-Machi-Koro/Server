@@ -297,7 +297,7 @@ class GameWebSocketBroadcastIntegrationTest {
         whenever(lobbyService.getLobbyRoster(gameId)).thenReturn(emptyList())
         whenever(lobbyService.startGame(gameId, host.userId)).thenReturn(startedState)
         whenever(gamePhaseService.endTurn(gameId)).thenReturn(EndTurnOutcome.Continue(TurnPhase.ROLL_DICE))
-        whenever(diceService.rollDice(any(), any())).thenReturn(RollDiceResponse(dice = listOf(4), total = 4))
+        whenever(diceService.rollDice(any(), any())).thenReturn(RollDiceResponse(result = listOf(4), total = 4))
         whenever(gameSyncService.buildSnapshot(gameId)).thenReturn(
             resolveEffectsState,
             buyOrBuildState,
