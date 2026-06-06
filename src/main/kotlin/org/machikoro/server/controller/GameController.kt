@@ -351,18 +351,6 @@ class GameController(
         }
     }
 
-    private fun broadcastStartFailure(gameTopic: String, gameId: Int, message: String, code: String) {
-        messagingTemplate.convertAndSend(
-            gameTopic,
-            WebSocketMessage(
-                type = MessageType.ERROR,
-                sender = "server",
-                payload = mapOf("event" to "START_FAILED", "code" to code, "message" to message),
-                gameId = gameId,
-            )
-        )
-    }
-
     /**
      * Broadcasts the new turn phase and the active player's user ID to all
      * subscribers of the game topic. The [activePlayerId] identifies the user
