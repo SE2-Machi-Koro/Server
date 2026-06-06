@@ -25,6 +25,7 @@ import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.LandmarkType
 import org.machikoro.server.domain.models.PlayerLandmarkModel
 import org.machikoro.server.exception.CustomWebSocketException
+import org.mockito.kotlin.any
 
 class EarningsServiceImplTest {
 
@@ -428,6 +429,73 @@ class EarningsServiceImplTest {
     }
 
     @Test
+    fun `shopping mall does not trigger bonus for red cup cards for active player`() {
+        val players = listOf(
+            player(1, 5),
+            player(2, 1)
+        )
+
+        // cafe is a CUP, RED, base income 2
+        val cafe = card(
+            cardType = CardType.CAFE,
+            color = CardColor.RED,
+            income = 2
+        )
+
+        // ensure the card is treated as CUP in the helper
+        val RedCupWithCupType = cafe.copy(establishmentType = EstablishmentType.CUP)
+
+        whenever(cardDao.findByActivationNumber(3)).thenReturn(listOf(RedCupWithCupType))
+        whenever(playerDao.getPlayers(1)).thenReturn(players)
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.CAFE, 1)))
+        whenever(playerCardDao.findByPlayerId(2)).thenReturn(emptyList())
+
+        // P2 has built SHOPPING_MALL -> cafe income increases by +1 (2 -> 3)
+        whenever(playerLandmarkDao.findByPlayerIdAndType(1, LandmarkType.SHOPPING_MALL))
+            .thenReturn(PlayerLandmarkModel(playerId = 1, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = true))
+
+        service.processEarnings(1, 3, 1)
+
+        // Transfer should be 0 from P2 to P1
+        verify(playerDao, never()).updateCoins(eq(1), any())
+        verify(playerDao, never()).updateCoins(eq(2), any()) 
+    }
+
+
+    @Test
+    fun `shopping mall increases coin theft for multiple red cup cards for owner correctly`() {
+        val players = listOf(
+            player(1, 10),
+            player(2, 1)
+        )
+
+        // cafe is a CUP, RED, base income 2
+        val cafe = card(
+            cardType = CardType.CAFE,
+            color = CardColor.RED,
+            income = 2
+        )
+
+        // ensure the card is treated as CUP in the helper
+        val RedCupWithCupType = cafe.copy(establishmentType = EstablishmentType.CUP)
+
+        whenever(cardDao.findByActivationNumber(3)).thenReturn(listOf(RedCupWithCupType))
+        whenever(playerDao.getPlayers(1)).thenReturn(players)
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(emptyList())
+        whenever(playerCardDao.findByPlayerId(2)).thenReturn(listOf(playerCard(CardType.CAFE, 3)))
+
+        // P2 has built SHOPPING_MALL -> cafe income increases by +1 (2 -> 3)
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.SHOPPING_MALL))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = true))
+
+        service.processEarnings(1, 3, 1)
+
+        // Transfer should be (2+1)*3 = 9 from P1 to P2
+        verify(playerDao).updateCoins(1, 1) // 10 - 9 = 1
+        verify(playerDao).updateCoins(2, 10) // 1 + 9 = 10
+    }
+
+    @Test
     fun `shopping mall increases green bread income for active player`() {
         val players = listOf(
             player(1, 3),
@@ -458,6 +526,137 @@ class EarningsServiceImplTest {
         // P1 should receive (1 + 1) = 2 from their green Bread; P2 unchanged
         verify(playerDao).updateCoins(1, 5) // 3 + 2 = 5
         verify(playerDao, never()).updateCoins(2, 5)
+    }
+
+    @Test
+    fun `shopping mall increases income for multiple green bread cards correctly for active player`() {
+        val players = listOf(
+            player(1, 3),
+            player(2, 3)
+        )
+
+        // create a green Bread card
+        val greenBread = card(
+            cardType = CardType.BAKERY,
+            color = CardColor.GREEN,
+            income = 1
+        )
+
+        // ensure the card is treated as Bread in the helper
+        val greenBreadWithBreadType = greenBread.copy(establishmentType = EstablishmentType.BREAD)
+
+        whenever(cardDao.findByActivationNumber(2)).thenReturn(listOf(greenBreadWithBreadType))
+        whenever(playerDao.getPlayers(1)).thenReturn(players)
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.BAKERY, 3)))
+        whenever(playerCardDao.findByPlayerId(2)).thenReturn(listOf(playerCard(CardType.BAKERY, 1)))
+
+        // Active player (P1) has built SHOPPING_MALL
+        whenever(playerLandmarkDao.findByPlayerIdAndType(1, LandmarkType.SHOPPING_MALL))
+            .thenReturn(PlayerLandmarkModel(playerId = 1, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = true))
+
+        service.processEarnings(1, 2, 1)
+
+        // P1 should receive (1 + 1)*3 = 6 from their green Bread; P2 unchanged
+        verify(playerDao).updateCoins(1, 9) // 3 + 6 = 9
+    }
+
+    @Test
+    fun `shopping mall does not affect green bread income for non-active player`() {
+        val players = listOf(
+            player(1, 3),
+            player(2, 3)
+        )
+
+        // create a green Bread card
+        val greenBread = card(
+            cardType = CardType.BAKERY,
+            color = CardColor.GREEN,
+            income = 1
+        )
+
+        // ensure the card is treated as Bread in the helper
+        val greenBreadWithBreadType = greenBread.copy(establishmentType = EstablishmentType.BREAD)
+
+        whenever(cardDao.findByActivationNumber(2)).thenReturn(listOf(greenBreadWithBreadType))
+        whenever(playerDao.getPlayers(1)).thenReturn(players)
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.BAKERY, 1)))
+        whenever(playerCardDao.findByPlayerId(2)).thenReturn(listOf(playerCard(CardType.BAKERY, 1)))
+
+        // Active player (P1) has built SHOPPING_MALL
+        whenever(playerLandmarkDao.findByPlayerIdAndType(1, LandmarkType.SHOPPING_MALL))
+            .thenReturn(PlayerLandmarkModel(playerId = 1, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = true))
+
+        service.processEarnings(1, 2, 2)
+
+        // P1 should not receive bonus from their green Bread; P2 receives +1
+        verify(playerDao, never()).updateCoins(1, 5) // 3 + 2 = 5
+        verify(playerDao).updateCoins(2, 4) //3 + 1
+    }
+
+    @Test
+    fun `initialized but not built shopping mall does not give bonuses to green cards`() {
+        val players = listOf(
+            player(1, 3),
+            player(2, 3)
+        )
+
+        // create a green Bread card
+        val greenBread = card(
+            cardType = CardType.BAKERY,
+            color = CardColor.GREEN,
+            income = 1
+        )
+
+        // ensure the card is treated as Bread in the helper
+        val greenBreadWithBreadType = greenBread.copy(establishmentType = EstablishmentType.BREAD)
+
+        whenever(cardDao.findByActivationNumber(2)).thenReturn(listOf(greenBreadWithBreadType))
+        whenever(playerDao.getPlayers(1)).thenReturn(players)
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.BAKERY, 1)))
+        whenever(playerCardDao.findByPlayerId(2)).thenReturn(listOf(playerCard(CardType.BAKERY, 1)))
+
+        // Active player (P1) has built SHOPPING_MALL
+        whenever(playerLandmarkDao.findByPlayerIdAndType(1, LandmarkType.SHOPPING_MALL))
+            .thenReturn(PlayerLandmarkModel(playerId = 1, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = false))
+
+        service.processEarnings(1, 2, 1)
+
+        // P1 should receive 1 from their green Bread (no bonus); P2 unchanged
+        verify(playerDao).updateCoins(1, 4) // 3 + 1 = 4
+        verify(playerDao, never()).updateCoins(2, 4)
+    }
+
+    @Test
+    fun `initialized but not built shopping mall does not give bonuses to red cards`() {
+        val players = listOf(
+            player(1, 5),
+            player(2, 3)
+        )
+
+        // cafe is a CUP, RED, base income 2
+        val cafe = card(
+            cardType = CardType.CAFE,
+            color = CardColor.RED,
+            income = 2
+        )
+
+        // ensure the card is treated as Bread in the helper
+        val redCafeWithCafeType = cafe.copy(establishmentType = EstablishmentType.CUP)
+
+        whenever(cardDao.findByActivationNumber(2)).thenReturn(listOf(redCafeWithCafeType))
+        whenever(playerDao.getPlayers(1)).thenReturn(players)
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.BAKERY, 1)))
+        whenever(playerCardDao.findByPlayerId(2)).thenReturn(listOf(playerCard(CardType.CAFE, 1)))
+
+        // Active player (P2) has built SHOPPING_MALL
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.SHOPPING_MALL))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = false))
+
+        service.processEarnings(1, 2, 1)
+
+        // P2 should receive 2 from their red CUP (no bonus); P1 loses 2
+        verify(playerDao).updateCoins(1, 3) // 5 - 2 = 3
+        verify(playerDao).updateCoins(2, 5) // 3 + 2 = 5
     }
 
     private fun player(id: Int, coins: Int): PlayerModel =
