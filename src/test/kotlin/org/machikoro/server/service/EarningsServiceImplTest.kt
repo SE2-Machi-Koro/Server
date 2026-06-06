@@ -10,6 +10,7 @@ import org.machikoro.server.dao.CardDao
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
+import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.domain.enums.CardColor
 import org.machikoro.server.domain.enums.PaymentSource
 import org.machikoro.server.domain.enums.TurnPhase
@@ -21,6 +22,8 @@ import org.mockito.kotlin.whenever
 import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.EstablishmentType
 import org.machikoro.server.domain.enums.GameStatus
+import org.machikoro.server.domain.enums.LandmarkType
+import org.machikoro.server.domain.models.PlayerLandmarkModel
 import org.machikoro.server.exception.CustomWebSocketException
 
 class EarningsServiceImplTest {
@@ -30,6 +33,7 @@ class EarningsServiceImplTest {
     private lateinit var cardDao: CardDao
     private lateinit var gameDao: GameDao
     private lateinit var gameStateGuard: GameStateGuard
+    private lateinit var playerLandmarkDao: PlayerLandmarkDao
     private val transactionRunner = object : GameTransactionRunner {
         override fun <T> inTransaction(action: () -> T): T = action()
     }
@@ -43,6 +47,7 @@ class EarningsServiceImplTest {
         cardDao = mock(CardDao::class.java)
         gameDao = mock(GameDao::class.java)
         gameStateGuard = mock(GameStateGuard::class.java)
+        playerLandmarkDao = mock(PlayerLandmarkDao::class.java)
 
         service = EarningsServiceImpl(
             playerDao,
@@ -51,6 +56,7 @@ class EarningsServiceImplTest {
             gameDao,
             gameStateGuard,
             transactionRunner,
+            playerLandmarkDao,
         )
     }
 
@@ -386,6 +392,72 @@ class EarningsServiceImplTest {
 
         assertEquals("NO_ACTIVE_PLAYER", ex.errorCode)
         verify(cardDao, never()).findByActivationNumber(anyInt())
+    }
+
+    @Test
+    fun `shopping mall increases red cup card coin theft for owner`() {
+        val players = listOf(
+            player(1, 5),
+            player(2, 1)
+        )
+
+        // cafe is a CUP, RED, base income 2
+        val cafe = card(
+            cardType = CardType.CAFE,
+            color = CardColor.RED,
+            income = 2
+        )
+
+        // ensure the card is treated as CUP in the helper
+        val RedCupWithCupType = cafe.copy(establishmentType = EstablishmentType.CUP)
+
+        whenever(cardDao.findByActivationNumber(3)).thenReturn(listOf(RedCupWithCupType))
+        whenever(playerDao.getPlayers(1)).thenReturn(players)
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(emptyList())
+        whenever(playerCardDao.findByPlayerId(2)).thenReturn(listOf(playerCard(CardType.CAFE, 1)))
+
+        // P2 has built SHOPPING_MALL -> cafe income increases by +1 (2 -> 3)
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.SHOPPING_MALL))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = true))
+
+        service.processEarnings(1, 3, 1)
+
+        // Transfer should be 3 from P1 to P2
+        verify(playerDao).updateCoins(1, 2) // 5 - 3 = 2
+        verify(playerDao).updateCoins(2, 4) // 1 + 3 = 4
+    }
+
+    @Test
+    fun `shopping mall increases green bread income for active player`() {
+        val players = listOf(
+            player(1, 3),
+            player(2, 3)
+        )
+
+        // create a green Bread card
+        val greenBread = card(
+            cardType = CardType.BAKERY,
+            color = CardColor.GREEN,
+            income = 1
+        )
+
+        // ensure the card is treated as Bread in the helper
+        val greenBreadWithBreadType = greenBread.copy(establishmentType = EstablishmentType.BREAD)
+
+        whenever(cardDao.findByActivationNumber(2)).thenReturn(listOf(greenBreadWithBreadType))
+        whenever(playerDao.getPlayers(1)).thenReturn(players)
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.BAKERY, 1)))
+        whenever(playerCardDao.findByPlayerId(2)).thenReturn(listOf(playerCard(CardType.BAKERY, 1)))
+
+        // Active player (P1) has built SHOPPING_MALL
+        whenever(playerLandmarkDao.findByPlayerIdAndType(1, LandmarkType.SHOPPING_MALL))
+            .thenReturn(PlayerLandmarkModel(playerId = 1, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = true))
+
+        service.processEarnings(1, 2, 1)
+
+        // P1 should receive (1 + 1) = 2 from their green Bread; P2 unchanged
+        verify(playerDao).updateCoins(1, 5) // 3 + 2 = 5
+        verify(playerDao, never()).updateCoins(2, 5)
     }
 
     private fun player(id: Int, coins: Int): PlayerModel =
