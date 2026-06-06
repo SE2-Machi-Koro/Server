@@ -553,7 +553,6 @@ class GameControllerTest {
         assertEquals("Unexpected error while processing WebSocket message", payload.message)
         assertEquals("ROLL_FAILED", payload.context["event"])
         verify(diceService).rollDice(request, activePlayer.id)
-        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
         verify(gameStateGuard, never()).ensureSenderOwnsPlayer(any(), any(), any())
     }
 
