@@ -6,6 +6,7 @@ import org.machikoro.server.auth.userPrincipal
 import org.machikoro.server.dto.LobbyLeavingOutcome
 import org.machikoro.server.dto.LobbyRosterDto
 import org.machikoro.server.dto.MessageType
+import org.machikoro.server.dto.WebSocketErrorDto
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.exception.GameNotFoundException
@@ -139,7 +140,11 @@ class LobbyWebSocketController(
                         type = MessageType.ERROR,
                         sender = "SERVER",
                         content = "Lobby code is invalid",
-                        payload = mapOf("errorCode" to "INVALID_LOBBY_CODE")
+                        payload = WebSocketErrorDto(
+                            code = "INVALID_LOBBY_CODE",
+                            message = "Lobby code is invalid",
+                            context = mapOf("event" to "LOBBY_JOIN_FAILED"),
+                        ),
                     )
                 )
             }

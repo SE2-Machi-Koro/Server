@@ -78,9 +78,45 @@ Core game message types:
 | `ROLL_DICE` | Dice were rolled. The payload includes the dice values, total, completion flag, and state snapshot. |
 | `SYNC` | Private reconnect snapshot. The payload includes `targetUserId`, `targetSessionId`, and `state`. |
 | `GAME_END` | The game has ended. The payload includes `winnerId`, `roundsPlayed`, and final `state`. |
-| `ERROR` | The command failed. The payload includes an event or error code and a message when available. |
+| `ERROR` | The command failed. The payload is a `WebSocketErrorDto` with stable `code`, `message`, and `timestamp` fields. |
 
 Lobby-specific message types include `LOBBY_CREATED`, `LOBBY_JOINED`, `LOBBY_ROSTER`, `LOBBY_LEFT`, and `HOST_LEFT`.
+
+## Error Payloads
+
+All WebSocket `ERROR` messages use the same payload shape:
+
+```json
+{
+  "code": "NOT_YOUR_TURN",
+  "message": "It is not your turn",
+  "timestamp": 1714000000000,
+  "context": {
+    "event": "ROLL_FAILED"
+  }
+}
+```
+
+Clients must parse `payload.code`, `payload.message`, and `payload.timestamp` as the stable contract. `payload.context` is endpoint-specific metadata used for UI cleanup or diagnostics.
+
+Expected codes include:
+
+| Code | Meaning |
+| --- | --- |
+| `UNAUTHENTICATED` | The WebSocket session has no authenticated principal. |
+| `INVALID_PAYLOAD` | The incoming message body does not match the required structure. |
+| `INVALID_LOBBY_CODE` | The requested lobby code is missing, malformed, or not found. |
+| `UNKNOWN_SESSION` | The game command came from an unregistered WebSocket session. |
+| `NOT_HOST` | The authenticated user attempted a host-only action. |
+| `NOT_YOUR_TURN` | The authenticated user is not the active player. |
+| `GAME_NOT_STARTED` | The game is still waiting and cannot accept the action. |
+| `GAME_FINISHED` | The game already ended. |
+| `DIRECT_PHASE_ADVANCE_FORBIDDEN` | Clients attempted to advance a turn phase directly. |
+| `ROLL_ALREADY_COMPLETED` | Dice were already rolled for the current turn. |
+| `EFFECTS_ALREADY_RESOLVED` | Income/card effects were already resolved for the current turn. |
+| `PURCHASE_ALREADY_MADE` | The active player already purchased this turn. |
+| `DUPLICATE_PURPLE_ESTABLISHMENT` | The player tried to buy a purple establishment they already own. |
+| `INTERNAL_ERROR` | An unexpected server-side failure occurred; details are logged server-side only. |
 
 ## Authoritative Turn Loop
 
@@ -99,7 +135,7 @@ Every successful action publishes a server snapshot. Clients must replace local 
 
 ## Purchase Rejections
 
-When `/app/game.purchase` is rejected after authorization succeeds, the server broadcasts an `ERROR` message on `/topic/game/{gameId}`. Clients with a pending shop action must consume `payload.event = "PURCHASE_FAILED"` as a failed purchase and clear their pending state.
+When `/app/game.purchase` is rejected after authorization succeeds, the server broadcasts an `ERROR` message on `/topic/game/{gameId}`. Clients with a pending shop action must consume `payload.context.event = "PURCHASE_FAILED"` as a failed purchase and clear their pending state.
 
 For example, buying the same purple establishment twice produces:
 
@@ -108,11 +144,14 @@ For example, buying the same purple establishment twice produces:
   "type": "ERROR",
   "sender": "server",
   "payload": {
-    "event": "PURCHASE_FAILED",
     "code": "DUPLICATE_PURPLE_ESTABLISHMENT",
     "message": "Player already owns purple establishment STADIUM",
-    "purchaseType": "ESTABLISHMENT",
-    "cardType": "STADIUM"
+    "timestamp": 1714000000000,
+    "context": {
+      "event": "PURCHASE_FAILED",
+      "purchaseType": "ESTABLISHMENT",
+      "cardType": "STADIUM"
+    }
   },
   "gameId": 42
 }
