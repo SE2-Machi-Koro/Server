@@ -76,6 +76,7 @@ class GamePhaseService(
         val nextRoundNumber = if (nextTurnIndex == 0) game.roundNumber + 1 else game.roundNumber
 
         gameDao.advanceTurn(gameId, nextTurnIndex, nextRoundNumber)
+        gameDao.updateRerolledThisTurn(gameId, false)
         return TurnPhase.ROLL_DICE
     }
 

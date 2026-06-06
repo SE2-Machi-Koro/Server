@@ -14,4 +14,5 @@ data class GameModel(
     val lastDiceRoll: Int?,
     val roundNumber: Int,
     val hasPurchasedThisTurn: Boolean,
+    val rerolledThisTurn: Boolean,
 )
