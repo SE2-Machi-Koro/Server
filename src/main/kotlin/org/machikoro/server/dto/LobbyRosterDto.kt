@@ -11,4 +11,5 @@ data class LobbyRosterPlayerDto(
     val gameId: Int,
     val turnOrder: Int,
     val coins: Int,
+    val isReady: Boolean = false,
 )
