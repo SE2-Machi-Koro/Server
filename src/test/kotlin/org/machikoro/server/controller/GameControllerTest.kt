@@ -21,6 +21,7 @@ import org.machikoro.server.dto.PurchaseType
 import org.machikoro.server.dto.RollDiceRequest
 import org.machikoro.server.dto.RollDiceResponse
 import org.machikoro.server.dto.StartGameRequest
+import org.machikoro.server.dto.WebSocketErrorDto
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.exception.GameFinishedException
@@ -144,13 +145,15 @@ class GameControllerTest {
 
         val message = captor.firstValue
         assertEquals(MessageType.ERROR, message.type)
-        @Suppress("UNCHECKED_CAST")
-        assertEquals("START_FAILED", (message.payload as Map<String, Any>)["event"])
+        val payload = message.payload as WebSocketErrorDto
+        assertEquals("UNKNOWN_SESSION", payload.code)
+        assertEquals("Unknown session - please reconnect", payload.message)
+        assertEquals("START_FAILED", payload.context["event"])
         verify(lobbyService, never()).startGame(any(), any())
     }
 
     @Test
-    fun `startGame broadcasts ERROR frame when service throws`() {
+    fun `startGame broadcasts typed ERROR frame when service rejects`() {
         val gameId = 10
         val sessionId = "session-non-host"
         whenever(connectionTracker.getUserId(sessionId)).thenReturn(99)
@@ -163,8 +166,10 @@ class GameControllerTest {
 
         val message = captor.firstValue
         assertEquals(MessageType.ERROR, message.type)
-        @Suppress("UNCHECKED_CAST")
-        assertEquals("START_FAILED", (message.payload as Map<String, Any>)["event"])
+        val payload = message.payload as WebSocketErrorDto
+        assertEquals("NOT_HOST", payload.code)
+        assertEquals("not host", payload.message)
+        assertEquals("START_FAILED", payload.context["event"])
     }
 
     // ── enterGameScreen ───────────────────────────────────────────────────────
@@ -222,11 +227,16 @@ class GameControllerTest {
         whenever(lobbyService.startGame(gameId, alice.userId))
             .thenThrow(RuntimeException("unexpected failure"))
 
-        val ex = assertThrows<RuntimeException> {
-            controller.enterGameScreen(EnterGameScreenRequest(gameId), authedAccessor())
-        }
-        assertEquals("unexpected failure", ex.message)
-        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+        controller.enterGameScreen(EnterGameScreenRequest(gameId), authedAccessor())
+
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+        val message = captor.firstValue
+        assertEquals(MessageType.ERROR, message.type)
+        val payload = message.payload as WebSocketErrorDto
+        assertEquals("INTERNAL_ERROR", payload.code)
+        assertEquals("Unexpected error while processing WebSocket message", payload.message)
+        assertEquals("ENTER_SCREEN_FAILED", payload.context["event"])
     }
 
     @Test
@@ -433,13 +443,12 @@ class GameControllerTest {
         assertEquals(MessageType.ERROR, message.type)
         assertEquals("server", message.sender)
         assertEquals(gameId, message.gameId)
-        @Suppress("UNCHECKED_CAST")
-        val payload = message.payload as Map<String, Any?>
-        assertEquals("PURCHASE_FAILED", payload["event"])
-        assertEquals("DUPLICATE_PURPLE_ESTABLISHMENT", payload["code"])
-        assertEquals("Player already owns purple establishment STADIUM", payload["message"])
-        assertEquals("ESTABLISHMENT", payload["purchaseType"])
-        assertEquals("STADIUM", payload["cardType"])
+        val payload = message.payload as WebSocketErrorDto
+        assertEquals("DUPLICATE_PURPLE_ESTABLISHMENT", payload.code)
+        assertEquals("Player already owns purple establishment STADIUM", payload.message)
+        assertEquals("PURCHASE_FAILED", payload.context["event"])
+        assertEquals("ESTABLISHMENT", payload.context["purchaseType"])
+        assertEquals("STADIUM", payload.context["cardType"])
     }
 
     @Test
@@ -477,7 +486,7 @@ class GameControllerTest {
         val gameId = 1
         val activePlayer = PlayerModel(id = 9, gameId = gameId, userId = alice.userId, turnOrder = 0, coins = 3, lastSeenAt = null)
         val request = RollDiceRequest(gameId = gameId, playerId = 999)
-        val response = RollDiceResponse(dice = listOf(3, 4), total = 7)
+        val response = RollDiceResponse(result = listOf(3, 4), total = 7)
         val snapshot = gameStateDto(gameId, turnPhase = TurnPhase.RESOLVE_EFFECTS)
         whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice)).thenReturn(activePlayer)
         whenever(diceService.rollDice(request, activePlayer.id)).thenReturn(response)
@@ -533,10 +542,16 @@ class GameControllerTest {
         whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice)).thenReturn(activePlayer)
         whenever(diceService.rollDice(request, activePlayer.id)).thenThrow(RuntimeException("dice exploded"))
 
-        val ex = assertThrows<RuntimeException> {
-            controller.rollDice(request, authedAccessor())
-        }
-        assertEquals("dice exploded", ex.message)
+        controller.rollDice(request, authedAccessor())
+
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+        val message = captor.firstValue
+        assertEquals(MessageType.ERROR, message.type)
+        val payload = message.payload as WebSocketErrorDto
+        assertEquals("INTERNAL_ERROR", payload.code)
+        assertEquals("Unexpected error while processing WebSocket message", payload.message)
+        assertEquals("ROLL_FAILED", payload.context["event"])
         verify(diceService).rollDice(request, activePlayer.id)
         verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
         verify(gameStateGuard, never()).ensureSenderOwnsPlayer(any(), any(), any())
@@ -558,14 +573,10 @@ class GameControllerTest {
         val message = captor.firstValue
         assertEquals(MessageType.ERROR, message.type)
         assertEquals("SERVER", message.sender)
-        assertEquals(
-            mapOf(
-                "event" to "ROLL_FAILED",
-                "code" to "ROLL_ALREADY_COMPLETED",
-                "message" to "Dice have already been rolled for this turn",
-            ),
-            message.payload,
-        )
+        val payload = message.payload as WebSocketErrorDto
+        assertEquals("ROLL_ALREADY_COMPLETED", payload.code)
+        assertEquals("Dice have already been rolled for this turn", payload.message)
+        assertEquals("ROLL_FAILED", payload.context["event"])
         verify(diceService).rollDice(request, activePlayer.id)
         verify(gameStateGuard, never()).ensureSenderOwnsPlayer(any(), any(), any())
     }

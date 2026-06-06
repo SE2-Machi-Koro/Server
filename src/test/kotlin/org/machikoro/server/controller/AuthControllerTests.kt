@@ -44,10 +44,10 @@ class AuthControllerTests {
         whenever(authService.register("alice", "hunter2"))
             .thenThrow(DuplicateUserException("Username 'alice' is already taken"))
 
-        val ex = assertThrows<DuplicateUserException> {
+        val exception = assertThrows<DuplicateUserException> {
             controller.register(request)
         }
-        assertEquals("Username 'alice' is already taken", ex.message)
+        assertEquals("Username 'alice' is already taken", exception.message)
     }
 
     @Test
@@ -72,10 +72,10 @@ class AuthControllerTests {
         whenever(authService.login("alice", "wrong"))
             .thenThrow(InvalidCredentialsException("Invalid username or password"))
 
-        val ex = assertThrows<InvalidCredentialsException> {
+        val exception = assertThrows<InvalidCredentialsException> {
             controller.login(request)
         }
-        assertEquals("Invalid username or password", ex.message)
+        assertEquals("Invalid username or password", exception.message)
     }
 
     @Test
@@ -110,13 +110,13 @@ class AuthControllerTests {
         whenever(authService.login("alice", "wrong"))
             .thenThrow(InvalidCredentialsException("Invalid username or password"))
 
-        val unknownUserError = assertThrows<InvalidCredentialsException> {
+        val unknownUserException = assertThrows<InvalidCredentialsException> {
             controller.login(LoginRequest("ghost", "any"))
         }
-        val wrongPasswordError = assertThrows<InvalidCredentialsException> {
+        val wrongPasswordException = assertThrows<InvalidCredentialsException> {
             controller.login(LoginRequest("alice", "wrong"))
         }
 
-        assertEquals(unknownUserError.message, wrongPasswordError.message)
+        assertEquals(unknownUserException.message, wrongPasswordException.message)
     }
 }

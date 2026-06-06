@@ -79,7 +79,7 @@ class DebugController(
     fun endGame(
         @RequestHeader("Authorization", required = false) authHeader: String?,
         @RequestBody request: EndGameRequest,
-    ): ResponseEntity<EndTurnOutcome.Won> {
+    ): ResponseEntity<Any> {
         val caller = debugService.validateAdmin(authHeader)
         val outcome = debugService.endGame(request.gameId, caller)
         // Broadcast GAME_END then clean up post-commit, mirroring GameController.endTurn's win handling.

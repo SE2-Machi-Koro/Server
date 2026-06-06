@@ -6,8 +6,6 @@ import jakarta.validation.Valid
 import org.machikoro.server.dto.LoginRequest
 import org.machikoro.server.dto.LogoutRequest
 import org.machikoro.server.dto.RegisterRequest
-import org.machikoro.server.dto.LoginResponse
-import org.machikoro.server.dto.RegisterResponse
 import org.machikoro.server.service.AuthService
 import org.machikoro.server.service.GameSyncService
 import org.slf4j.LoggerFactory
@@ -28,7 +26,7 @@ class AuthController(
 
     @PostMapping("/register")
     @Operation(summary = "Register a new user with username and password")
-    fun register(@Valid @RequestBody request: RegisterRequest): ResponseEntity<RegisterResponse> {
+    fun register(@Valid @RequestBody request: RegisterRequest): ResponseEntity<Any> {
         val response = authService.register(request.username, request.password)
         logger.info("Registered user '{}'", response.username)
         return ResponseEntity.ok(response)
@@ -36,7 +34,7 @@ class AuthController(
 
     @PostMapping("/login")
     @Operation(summary = "Authenticate and receive a session token")
-    fun login(@Valid @RequestBody request: LoginRequest): ResponseEntity<LoginResponse> {
+    fun login(@Valid @RequestBody request: LoginRequest): ResponseEntity<Any> {
         val response = authService.login(request.username, request.password)
         val sessionState = gameSyncService.resolveSessionState(response.userId)
         logger.info("Logged in user '{}'", response.username)
@@ -45,7 +43,7 @@ class AuthController(
 
     @PostMapping("/logout")
     @Operation(summary = "Invalidate the given session token")
-    fun logout(@Valid @RequestBody request: LogoutRequest): ResponseEntity<Void> {
+    fun logout(@Valid @RequestBody request: LogoutRequest): ResponseEntity<Any> {
         authService.logout(request.sessionToken)
         return ResponseEntity.ok().build()
     }

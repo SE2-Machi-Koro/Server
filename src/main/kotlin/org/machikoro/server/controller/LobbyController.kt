@@ -21,7 +21,7 @@ class LobbyController(private val lobbyService: LobbyService) {
     fun startGame(
         @PathVariable gameId: Int,
         @org.springframework.web.bind.annotation.RequestParam requestingUserId: Int,
-    ): ResponseEntity<GameStateDto> {
+    ): ResponseEntity<Any> {
         val state = lobbyService.startGame(gameId, requestingUserId)
         return ResponseEntity.ok(state)
     }

@@ -9,13 +9,13 @@ import org.springframework.test.context.TestPropertySource
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.ResultActions
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
-import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 
 /**
  * Verifies that JSR-303 (`@Valid`) violations on the auth DTOs are rejected at
- * the MVC boundary and surface as a plain-text 400 body (the contract the
- * Android client parses), via [org.machikoro.server.handler.ValidationExceptionHandler].
+ * the MVC boundary and surface as the standard REST JSON error body, via
+ * [org.machikoro.server.handler.RestExceptionHandler].
  */
 @SpringBootTestWithoutDataSource
 @AutoConfigureMockMvc
@@ -36,17 +36,21 @@ class AuthValidationTest {
         )
 
     @Test
-    fun `register rejects blank username with plain-text 400`() {
+    fun `register rejects blank username with JSON 400`() {
         postJson("/auth/register", """{"username":"","password":"hunter2"}""")
             .andExpect(status().isBadRequest)
-            .andExpect(content().string("Username must not be blank"))
+            .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+            .andExpect(jsonPath("$.message").value("Username must not be blank"))
+            .andExpect(jsonPath("$.timestamp").isNumber)
     }
 
     @Test
-    fun `register rejects blank password with plain-text 400`() {
+    fun `register rejects blank password with JSON 400`() {
         postJson("/auth/register", """{"username":"alice","password":""}""")
             .andExpect(status().isBadRequest)
-            .andExpect(content().string("Password must not be blank"))
+            .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+            .andExpect(jsonPath("$.message").value("Password must not be blank"))
+            .andExpect(jsonPath("$.timestamp").isNumber)
     }
 
     @Test
@@ -54,7 +58,9 @@ class AuthValidationTest {
         val longName = "a".repeat(51)
         postJson("/auth/register", """{"username":"$longName","password":"hunter2"}""")
             .andExpect(status().isBadRequest)
-            .andExpect(content().string("Username must be at most 50 characters"))
+            .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+            .andExpect(jsonPath("$.message").value("Username must be at most 50 characters"))
+            .andExpect(jsonPath("$.timestamp").isNumber)
     }
 
     @Test
@@ -62,20 +68,26 @@ class AuthValidationTest {
         val longPass = "x".repeat(73)
         postJson("/auth/register", """{"username":"alice","password":"$longPass"}""")
             .andExpect(status().isBadRequest)
-            .andExpect(content().string("Password must be at most 72 characters"))
+            .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+            .andExpect(jsonPath("$.message").value("Password must be at most 72 characters"))
+            .andExpect(jsonPath("$.timestamp").isNumber)
     }
 
     @Test
-    fun `login rejects blank username with plain-text 400`() {
+    fun `login rejects blank username with JSON 400`() {
         postJson("/auth/login", """{"username":"","password":"hunter2"}""")
             .andExpect(status().isBadRequest)
-            .andExpect(content().string("Username must not be blank"))
+            .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+            .andExpect(jsonPath("$.message").value("Username must not be blank"))
+            .andExpect(jsonPath("$.timestamp").isNumber)
     }
 
     @Test
-    fun `logout rejects blank session token with plain-text 400`() {
+    fun `logout rejects blank session token with JSON 400`() {
         postJson("/auth/logout", """{"sessionToken":""}""")
             .andExpect(status().isBadRequest)
-            .andExpect(content().string("Session token must not be blank"))
+            .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+            .andExpect(jsonPath("$.message").value("Session token must not be blank"))
+            .andExpect(jsonPath("$.timestamp").isNumber)
     }
 }

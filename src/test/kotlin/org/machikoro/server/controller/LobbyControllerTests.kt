@@ -55,9 +55,9 @@ class LobbyControllerTests {
         val requestingUserId = 10
         whenever(lobbyService.startGame(eq(gameId), any())).thenThrow(RuntimeException("test error"))
 
-        val ex = assertThrows<RuntimeException> {
+        val exception = assertThrows<RuntimeException> {
             controller.startGame(gameId, requestingUserId)
         }
-        assertEquals("test error", ex.message)
+        assertEquals("test error", exception.message)
     }
 }
