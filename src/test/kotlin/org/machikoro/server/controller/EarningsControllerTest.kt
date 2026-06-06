@@ -10,6 +10,7 @@ import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.dto.GameStateDto
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.ResolveEffectsRequest
+import org.machikoro.server.dto.WebSocketErrorDto
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.exception.GameNotFoundException
@@ -103,8 +104,10 @@ class EarningsControllerTest {
         val message = captor.firstValue
         assertEquals(MessageType.ERROR, message.type)
         assertEquals("server", message.sender)
-        assertEquals("EFFECTS_FAILED", (message.payload as Map<*, *>)["event"])
-        assertEquals("Game 1 not found", (message.payload as Map<*, *>)["message"])
+        val payload = message.payload as WebSocketErrorDto
+        assertEquals("GAME_NOT_FOUND", payload.code)
+        assertEquals("Game 1 not found", payload.message)
+        assertEquals("EFFECTS_FAILED", payload.context["event"])
     }
 
     @Test
@@ -117,9 +120,9 @@ class EarningsControllerTest {
 
         val captor = argumentCaptor<WebSocketMessage>()
         verify(messagingTemplate).convertAndSend(eq("/topic/game/1"), captor.capture())
-        val payload = captor.firstValue.payload as Map<*, *>
-        assertEquals("EFFECTS_FAILED", payload["event"])
-        assertEquals("EFFECTS_ALREADY_RESOLVED", payload["code"])
+        val payload = captor.firstValue.payload as WebSocketErrorDto
+        assertEquals("EFFECTS_ALREADY_RESOLVED", payload.code)
+        assertEquals("EFFECTS_FAILED", payload.context["event"])
     }
 
     @Test
