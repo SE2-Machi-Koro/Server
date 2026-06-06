@@ -18,47 +18,58 @@ class DiceService(
 ) {
     private val rollLocks = ConcurrentHashMap<Int, Any>()
 
-    fun rollDice(request: RollDiceRequest, rollingPlayerId: Int): RollDiceResponse = synchronized(rollLocks.computeIfAbsent(request.gameId) { Any() }) {
-        val game = gameStateGuard.ensureGameIsRunning(request.gameId)
+    fun rollDice(request: RollDiceRequest, rollingPlayerId: Int): RollDiceResponse =
+        synchronized(rollLocks.computeIfAbsent(request.gameId) { Any() }) {
+            val game = gameStateGuard.ensureGameIsRunning(request.gameId)
 
-        if (game.turnPhase != TurnPhase.ROLL_DICE || game.lastDiceRoll != null) {
-            throw CustomWebSocketException("ROLL_ALREADY_COMPLETED", "Dice have already been rolled for this turn")
-        }
-
-        val requestedDiceCount = request.diceCount ?: request.payload?.diceCount ?: 1
-        if (requestedDiceCount !in 1..2) {
-            throw CustomWebSocketException("INVALID_DICE_COUNT", "diceCount must be 1 or 2")
-        }
-
-        val rollTwoDice = request.rollTwoDice ||
-                requestedDiceCount == TWO_DICE_COUNT ||
-                request.payload?.rollTwoDice == true
-
-        if (rollTwoDice) {
-            val hasTrainStation = playerLandmarkDao
-                .findByPlayerIdAndType(rollingPlayerId, LandmarkType.TRAIN_STATION)
-                ?.isBuilt ?: false
-
-            if (!hasTrainStation) {
-                throw CustomWebSocketException("NO_TRAIN_STATION", "You need a Train Station to roll two dice!")
+            if (game.turnPhase != TurnPhase.ROLL_DICE || game.lastDiceRoll != null) {
+                throw CustomWebSocketException("ROLL_ALREADY_COMPLETED", "Dice have already been rolled for this turn")
             }
+
+            val diceCount = resolveDiceCount(request)
+            validateDiceCount(diceCount)
+
+            if (diceCount == TWO_DICE_COUNT) {
+                requireTrainStation(rollingPlayerId)
+            }
+
+            val dice = rollDice(diceCount)
+            val total = dice.sum()
+
+            if (!gameDao.tryRecordDiceRoll(request.gameId, total)) {
+                throw CustomWebSocketException("ROLL_ALREADY_COMPLETED", "Dice have already been rolled for this turn")
+            }
+
+            RollDiceResponse(result = dice, total = total)
         }
 
-        val dice = if (rollTwoDice) {
-            listOf((1..6).random(), (1..6).random())
-        } else {
-            listOf((1..6).random())
-        }
-        val total = dice.sum()
-
-        if (!gameDao.tryRecordDiceRoll(request.gameId, total)) {
-            throw CustomWebSocketException("ROLL_ALREADY_COMPLETED", "Dice have already been rolled for this turn")
-        }
-
-        return RollDiceResponse(dice = dice, total = total)
+    private fun resolveDiceCount(request: RollDiceRequest): Int {
+        if (request.diceCount != null) return request.diceCount
+        if (request.payload?.diceCount != null) return request.payload.diceCount
+        if (request.rollTwoDice || request.payload?.rollTwoDice == true) return TWO_DICE_COUNT
+        return ONE_DICE_COUNT
     }
 
+    private fun validateDiceCount(diceCount: Int) {
+        if (diceCount !in 1..2) {
+            throw CustomWebSocketException("INVALID_DICE_COUNT", "diceCount must be 1 or 2")
+        }
+    }
+
+    private fun requireTrainStation(playerId: Int) {
+        val hasTrainStation = playerLandmarkDao
+            .findByPlayerIdAndType(playerId, LandmarkType.TRAIN_STATION)
+            ?.isBuilt ?: false
+
+        if (!hasTrainStation) {
+            throw CustomWebSocketException("NO_TRAIN_STATION", "You need a Train Station to roll two dice!")
+        }
+    }
+
+    private fun rollDice(count: Int): List<Int> = List(count) { (1..6).random() }
+
     private companion object {
+        const val ONE_DICE_COUNT = 1
         const val TWO_DICE_COUNT = 2
     }
 }
