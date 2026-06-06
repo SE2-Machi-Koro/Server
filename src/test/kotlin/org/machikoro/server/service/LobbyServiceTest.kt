@@ -649,6 +649,118 @@ class LobbyServiceTest {
         verify(gameDao, never()).delete(any())
     }
 
+    // === toggleReady() ===
+
+    @Test
+    fun `toggleReady throws GameNotFoundException when game does not exist`() {
+        whenever(gameDao.findById(99)).thenReturn(null)
+
+        assertThrows<GameNotFoundException> {
+            lobbyService.toggleReady(99, 10, true)
+        }
+
+        verify(playerDao, never()).findByGameIdAndUserId(any(), any())
+    }
+
+    @Test
+    fun `toggleReady throws PlayerNotFoundException when player is not in the game`() {
+        val gameId = 1
+        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING))
+        whenever(playerDao.findByGameIdAndUserId(gameId, 99)).thenReturn(null)
+
+        assertThrows<PlayerNotFoundException> {
+            lobbyService.toggleReady(gameId, 99, true)
+        }
+    }
+
+    @Test
+    fun `toggleReady marks player ready and getLobbyRoster reflects it`() {
+        val gameId = 1
+        val userId = 10
+        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING))
+        whenever(playerDao.findByGameIdAndUserId(gameId, userId))
+            .thenReturn(player(userId).copy(gameId = gameId, userId = userId))
+        whenever(playerDao.getLobbyRoster(gameId))
+            .thenReturn(listOf(rosterEntry(userId, "alice", gameId)))
+
+        lobbyService.toggleReady(gameId, userId, true)
+
+        assertEquals(true, lobbyService.getLobbyRoster(gameId).single().isReady)
+    }
+
+    @Test
+    fun `toggleReady marks player not ready after toggling back`() {
+        val gameId = 1
+        val userId = 10
+        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING))
+        whenever(playerDao.findByGameIdAndUserId(gameId, userId))
+            .thenReturn(player(userId).copy(gameId = gameId, userId = userId))
+        whenever(playerDao.getLobbyRoster(gameId))
+            .thenReturn(listOf(rosterEntry(userId, "alice", gameId)))
+
+        lobbyService.toggleReady(gameId, userId, true)
+        lobbyService.toggleReady(gameId, userId, false)
+
+        assertEquals(false, lobbyService.getLobbyRoster(gameId).single().isReady)
+    }
+
+    @Test
+    fun `getLobbyRoster returns isReady true only for players in the ready set`() {
+        val gameId = 1
+        val readyUserId = 10
+        val notReadyUserId = 20
+        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING))
+        whenever(playerDao.findByGameIdAndUserId(gameId, readyUserId))
+            .thenReturn(player(readyUserId).copy(gameId = gameId, userId = readyUserId))
+        whenever(playerDao.getLobbyRoster(gameId)).thenReturn(listOf(
+            rosterEntry(readyUserId, "alice", gameId),
+            rosterEntry(notReadyUserId, "bob", gameId),
+        ))
+
+        lobbyService.toggleReady(gameId, readyUserId, true)
+        val roster = lobbyService.getLobbyRoster(gameId)
+
+        assertEquals(true, roster.find { it.userId == readyUserId }!!.isReady)
+        assertEquals(false, roster.find { it.userId == notReadyUserId }!!.isReady)
+    }
+
+    @Test
+    fun `leaveLobby clears ready state when lobby is deleted`() {
+        val gameId = 1
+        val userId = 10
+        whenever(gameDao.findById(gameId))
+            .thenReturn(game(gameId, GameStatus.WAITING).copy(hostUserId = userId))
+        whenever(playerDao.findByGameIdAndUserId(gameId, userId))
+            .thenReturn(player(5).copy(gameId = gameId, userId = userId))
+        whenever(playerDao.getLobbyRoster(gameId))
+            .thenReturn(listOf(rosterEntry(userId, "alice", gameId)))
+
+        lobbyService.toggleReady(gameId, userId, true)
+        assertEquals(true, lobbyService.getLobbyRoster(gameId).single().isReady)
+
+        // Host leaves → lobby deleted → ready state must be gone
+        lobbyService.leaveLobby(gameId, userId)
+        assertEquals(false, lobbyService.getLobbyRoster(gameId).single().isReady)
+    }
+
+    @Test
+    fun `purgeAllGames clears all ready state`() {
+        val gameId = 1
+        val userId = 10
+        whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING))
+        whenever(playerDao.findByGameIdAndUserId(gameId, userId))
+            .thenReturn(player(userId).copy(gameId = gameId, userId = userId))
+        whenever(playerDao.getLobbyRoster(gameId))
+            .thenReturn(listOf(rosterEntry(userId, "alice", gameId)))
+        whenever(gameDao.findAll()).thenReturn(listOf(game(gameId, GameStatus.WAITING)))
+
+        lobbyService.toggleReady(gameId, userId, true)
+        assertEquals(true, lobbyService.getLobbyRoster(gameId).single().isReady)
+
+        lobbyService.purgeAllGames()
+        assertEquals(false, lobbyService.getLobbyRoster(gameId).single().isReady)
+    }
+
     // === startGame() — playerUsernames ===
 
     @Test
