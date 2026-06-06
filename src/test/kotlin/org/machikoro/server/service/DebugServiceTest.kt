@@ -60,6 +60,7 @@ class DebugServiceTest {
         lastDiceRoll = null,
         hasPurchasedThisTurn = false,
         roundNumber = 1,
+        rerolledThisTurn = false
     )
 
     private fun player(id: Int, gameId: Int = 10, userId: Int = id) =

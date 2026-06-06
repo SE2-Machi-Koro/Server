@@ -547,6 +547,7 @@ class GameWebSocketBroadcastIntegrationTest {
             lastDiceRoll = null,
             roundNumber = 1,
             hasPurchasedThisTurn = false,
+            rerolledThisTurn = false,
         )
 
     private fun player(playerId: Int, gameId: Int, userId: Int, turnOrder: Int): PlayerModel =

@@ -47,7 +47,8 @@ class DiceServiceTests {
         roundNumber = 1,
         lobbyCode = "ABC123",
         hasPurchasedThisTurn = false,
-        maxPlayers = 4
+        maxPlayers = 4,
+        rerolledThisTurn = false
     )
 
     @Test
