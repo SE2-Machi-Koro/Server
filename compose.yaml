@@ -20,6 +20,14 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
 
   backend:
     container_name: 'machikoro-server'
@@ -48,6 +56,16 @@ services:
       # Admin seeding — set DEBUG_ENABLED=true and ADMIN_PASSWORD in .env to seed admin accounts
       - 'DEBUG_ENABLED=${DEBUG_ENABLED:-false}'
       - 'ADMIN_PASSWORD=${ADMIN_PASSWORD:-}'
+      # Make the JVM respect the container memory limit (heap = 75% of 512M ≈ 384M)
+      - 'JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=75.0'
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
     depends_on:
       postgres:
         condition: service_healthy

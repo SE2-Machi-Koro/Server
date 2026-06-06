@@ -20,6 +20,14 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
 
   pgAdmin:
     container_name: 'machikoro-pgadmin'
@@ -34,6 +42,11 @@ services:
       - postgres
     volumes:
       - pgadmin_data:/var/lib/pgadmin
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
 
 volumes:
   postgres_data:
