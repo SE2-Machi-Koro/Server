@@ -24,7 +24,6 @@ import org.machikoro.server.dto.StartGameRequest
 import org.machikoro.server.dto.WebSocketErrorDto
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.CustomWebSocketException
-import org.machikoro.server.exception.GameFinishedException
 import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.exception.NotHostException
 import org.machikoro.server.service.DiceService

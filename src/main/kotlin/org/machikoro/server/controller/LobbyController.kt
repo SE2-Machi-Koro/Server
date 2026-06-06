@@ -1,6 +1,5 @@
 package org.machikoro.server.controller
 
-import org.machikoro.server.dto.GameStateDto
 import org.machikoro.server.service.LobbyService
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.PathVariable
