@@ -352,6 +352,78 @@ class GameController(
     }
 
     /**
+     * Allows the active player to reroll the dice once per turn if they have a built Radio Tower.
+     *
+     * Message sent to /app/game.rerollDice (payload uses RollDiceRequest for diceCount/rollTwoDice)
+     */
+    @MessageMapping("/game.rerollDice")
+    @AsyncListener(operation = AsyncOperation(
+        channelName = "/game.rerollDice",
+        description = "Rerolls dice for the active player (Radio Tower) and broadcasts to the game topic.",
+        payloadType = RollDiceRequest::class,
+    ))
+    fun rerollDice(@Payload request: RollDiceRequest, headerAccessor: SimpMessageHeaderAccessor) {
+        val rollingPlayer = requireActivePlayer(request.gameId, headerAccessor)
+        val gameTopic = "/topic/game/${request.gameId}"
+        try {
+            val result = diceService.rerollDice(request, rollingPlayer.id)
+            val state = gameSyncService.buildSnapshot(request.gameId)
+
+            messagingTemplate.convertAndSend(
+                gameTopic,
+                WebSocketMessage(
+                    type = MessageType.ROLL_DICE,
+                    sender = "SERVER",
+                    content = "Player ${rollingPlayer.id} rerolled: ${result.total}",
+                    payload = mapOf(
+                        "event" to "DICE_REROLLED",
+                        "turnPhase" to state.game.turnPhase.name,
+                        "activePlayerId" to state.activePlayerId,
+                        "playerId" to rollingPlayer.id,
+                        "result" to result.result,
+                        "total" to result.total,
+                        "completed" to result.completed,
+                        "timestamp" to System.currentTimeMillis(),
+                        "state" to state,
+                    ),
+                    gameId = request.gameId,
+                )
+            )
+
+            messagingTemplate.convertAndSend(
+                gameTopic,
+                WebSocketMessage(
+                    type = MessageType.GAME_ACTION,
+                    sender = "server",
+                    payload = buildGameActionPayload(
+                        state = state,
+                        event = "DICE_REROLLED",
+                        "playerId" to rollingPlayer.id,
+                        "result" to result.result,
+                        "total" to result.total,
+                        "completed" to result.completed,
+                    ),
+                    gameId = request.gameId,
+                )
+            )
+        } catch (e: CustomWebSocketException) {
+            logger.warn("Reroll rejected for game {} [{}]: {}", request.gameId, e.errorCode, e.message)
+            broadcastGameTopicError(
+                gameId = request.gameId,
+                sender = "SERVER",
+                error = WebSocketErrorDto.from(e, mapOf("event" to "REROLL_FAILED")),
+            )
+        } catch (e: Exception) {
+            logger.error("Failed to reroll dice for game ${request.gameId}", e)
+            broadcastGameTopicError(
+                gameId = request.gameId,
+                sender = "SERVER",
+                error = WebSocketErrorDto.internal(mapOf("event" to "REROLL_FAILED")),
+            )
+        }
+    }
+
+    /**
      * Broadcasts the new turn phase and the active player's user ID to all
      * subscribers of the game topic. The [activePlayerId] identifies the user
      * whose turn it is so clients can compare it against their own user ID.
