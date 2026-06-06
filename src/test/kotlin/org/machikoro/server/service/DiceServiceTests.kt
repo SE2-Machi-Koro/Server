@@ -57,9 +57,9 @@ class DiceServiceTests {
         val request = RollDiceRequest(gameId = 1)
         val result = diceService.rollDice(request, rollingPlayerId = 2)
 
-        assertEquals(1, result.dice.size)
+        assertEquals(1, result.result.size)
         assert(result.total in 1..6)
-        assertEquals(result.dice.sum(), result.total)
+        assertEquals(result.result.sum(), result.total)
     }
 
     @Test
@@ -185,9 +185,9 @@ class DiceServiceTests {
         val request = RollDiceRequest(gameId = 1, playerId = 2, rollTwoDice = true)
         val result = diceService.rollDice(request, rollingPlayerId = 2)
 
-        assertEquals(2, result.dice.size)
+        assertEquals(2, result.result.size)
         assert(result.total in 2..12)
-        assertEquals(result.dice.sum(), result.total)
+        assertEquals(result.result.sum(), result.total)
     }
 
     @Test
@@ -199,9 +199,9 @@ class DiceServiceTests {
         val request = RollDiceRequest(gameId = 1, payload = RollDicePayload(gameId = 1, diceCount = 2))
         val result = diceService.rollDice(request, rollingPlayerId = 2)
 
-        assertEquals(2, result.dice.size)
+        assertEquals(2, result.result.size)
         assert(result.total in 2..12)
-        assertEquals(result.dice.sum(), result.total)
+        assertEquals(result.result.sum(), result.total)
     }
 
     @Test
@@ -213,9 +213,9 @@ class DiceServiceTests {
         val request = RollDiceRequest(gameId = 1, diceCount = 2)
         val result = diceService.rollDice(request, rollingPlayerId = 2)
 
-        assertEquals(2, result.dice.size)
+        assertEquals(2, result.result.size)
         assert(result.total in 2..12)
-        assertEquals(result.dice.sum(), result.total)
+        assertEquals(result.result.sum(), result.total)
     }
 
     @Test
@@ -227,9 +227,9 @@ class DiceServiceTests {
         val request = RollDiceRequest(gameId = 1, payload = RollDicePayload(gameId = 1, rollTwoDice = true))
         val result = diceService.rollDice(request, rollingPlayerId = 2)
 
-        assertEquals(2, result.dice.size)
+        assertEquals(2, result.result.size)
         assert(result.total in 2..12)
-        assertEquals(result.dice.sum(), result.total)
+        assertEquals(result.result.sum(), result.total)
     }
 
     @Test
@@ -245,7 +245,6 @@ class DiceServiceTests {
         assertEquals("ROLL_ALREADY_COMPLETED", ex.errorCode)
         verify(gameDao).tryRecordDiceRoll(any(), any())
     }
-
 
     @Test
     fun rollDiceShouldSaveResultInGameState() {
@@ -280,5 +279,75 @@ class DiceServiceTests {
             diceService.rollDice(request, rollingPlayerId = 2)
         }
         verify(gameDao, never()).tryRecordDiceRoll(any(), any())
+    }
+
+    // === NEW TESTS ===
+
+    @Test
+    fun rollDiceShouldRejectDiceCountZero() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(defaultGame)
+
+        val request = RollDiceRequest(gameId = 1, diceCount = 0)
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            diceService.rollDice(request, rollingPlayerId = 2)
+        }
+        assertEquals("INVALID_DICE_COUNT", ex.errorCode)
+    }
+
+    @Test
+    fun rollDiceShouldRejectDiceCountThree() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(defaultGame)
+
+        val request = RollDiceRequest(gameId = 1, diceCount = 3)
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            diceService.rollDice(request, rollingPlayerId = 2)
+        }
+        assertEquals("INVALID_DICE_COUNT", ex.errorCode)
+    }
+
+    @Test
+    fun rollDiceShouldRejectNegativeDiceCount() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(defaultGame)
+
+        val request = RollDiceRequest(gameId = 1, diceCount = -1)
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            diceService.rollDice(request, rollingPlayerId = 2)
+        }
+        assertEquals("INVALID_DICE_COUNT", ex.errorCode)
+    }
+
+    @Test
+    fun rollDiceShouldRejectDiceCountTwoWithoutTrainStation() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(defaultGame)
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.TRAIN_STATION))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.TRAIN_STATION, isBuilt = false))
+
+        val request = RollDiceRequest(gameId = 1, diceCount = 2)
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            diceService.rollDice(request, rollingPlayerId = 2)
+        }
+        assertEquals("NO_TRAIN_STATION", ex.errorCode)
+    }
+
+    @Test
+    fun rollDiceShouldNotCheckTrainStationWhenDiceCountIsOne() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(defaultGame)
+
+        val request = RollDiceRequest(gameId = 1, diceCount = 1)
+        val result = diceService.rollDice(request, rollingPlayerId = 2)
+
+        assertEquals(1, result.result.size)
+        verify(playerLandmarkDao, never()).findByPlayerIdAndType(any(), any())
+    }
+
+    @Test
+    fun rollDiceShouldPreferDiceCountOverRollTwoDice() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(defaultGame)
+
+        val request = RollDiceRequest(gameId = 1, diceCount = 1, rollTwoDice = true)
+        val result = diceService.rollDice(request, rollingPlayerId = 2)
+
+        assertEquals(1, result.result.size)
+        verify(playerLandmarkDao, never()).findByPlayerIdAndType(any(), any())
     }
 }
