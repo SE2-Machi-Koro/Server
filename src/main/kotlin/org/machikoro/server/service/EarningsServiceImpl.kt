@@ -4,7 +4,10 @@ import org.machikoro.server.dao.CardDao
 import org.machikoro.server.dao.GameDao
 import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
+import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.domain.enums.CardColor
+import org.machikoro.server.domain.enums.EstablishmentType
+import org.machikoro.server.domain.enums.LandmarkType
 import org.machikoro.server.domain.enums.PaymentSource
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.CardModel
@@ -29,6 +32,7 @@ class EarningsServiceImpl(
     private val gameDao: GameDao,
     private val gameStateGuard: GameStateGuard,
     private val gameTransactionRunner: GameTransactionRunner,
+    private val playerLandmarkDao: PlayerLandmarkDao,
 ) : EarningsService {
 
     fun computeEarnings(pairs: List<Pair<Int, Int>>): Int =
@@ -47,9 +51,13 @@ class EarningsServiceImpl(
                 .mapNotNull { playerCard -> activatingCards[playerCard.cardType]?.let { playerCard to it } }
         }
 
-        processRedCards(players, activePlayerId, matchedCardsByPlayer, finalCoins)
+        val hasShoppingMallByPlayerId = players.associate { player ->
+            player.id to (playerLandmarkDao.findByPlayerIdAndType(player.id, LandmarkType.SHOPPING_MALL)?.isBuilt == true)
+        }
+
+        processRedCards(players, activePlayerId, matchedCardsByPlayer, finalCoins, hasShoppingMallByPlayerId)
         processBlueCards(players, matchedCardsByPlayer, finalCoins)
-        processGreenCards(players, activePlayerId, matchedCardsByPlayer, finalCoins)
+        processGreenCards(players, activePlayerId, matchedCardsByPlayer, finalCoins, hasShoppingMallByPlayerId)
         processPurpleCards(players, activePlayerId, matchedCardsByPlayer, finalCoins)
 
         players.forEach { player ->
@@ -67,12 +75,17 @@ class EarningsServiceImpl(
         players: List<PlayerModel>,
         activePlayerId: Int,
         matchedCardsByPlayer: Map<Int, List<Pair<PlayerCardModel, CardModel>>>,
-        finalCoins: MutableMap<Int, Int>
+        finalCoins: MutableMap<Int, Int>,
+        hasShoppingMallByPlayerId: Map<Int, Boolean>
     ) {
         players.filter { it.id != activePlayerId }.forEach { opponent ->
             val redEarned = matchedCardsByPlayer[opponent.id].orEmpty()
                 .filter { (_, card) -> card.color == CardColor.RED }
-                .sumOf { (playerCard, card) -> playerCard.quantity * card.income }
+                .sumOf { (playerCard, card) ->
+                    val extra = if (card.establishmentType == EstablishmentType.CUP && hasShoppingMallByPlayerId[opponent.id] == true)
+                        1 else 0
+                    playerCard.quantity * (card.income + extra)
+                }
 
             if (redEarned > 0) {
                 val transfer = minOf(redEarned, finalCoins.getValue(activePlayerId))
@@ -110,12 +123,17 @@ class EarningsServiceImpl(
         players: List<PlayerModel>,
         activePlayerId: Int,
         matchedCardsByPlayer: Map<Int, List<Pair<PlayerCardModel, CardModel>>>,
-        finalCoins: MutableMap<Int, Int>
+        finalCoins: MutableMap<Int, Int>,
+        hasShoppingMallByPlayerId: Map<Int, Boolean>
     ) {
         val activePlayer = players.find { it.id == activePlayerId } ?: return
         val earned = matchedCardsByPlayer[activePlayer.id].orEmpty()
             .filter { (_, card) -> card.color == CardColor.GREEN }
-            .sumOf { (playerCard, card) -> playerCard.quantity * card.income }
+            .sumOf { (playerCard, card) ->
+                val extra = if (card.establishmentType == EstablishmentType.BREAD && hasShoppingMallByPlayerId[activePlayer.id] == true)
+                    1 else 0
+                playerCard.quantity * (card.income + extra)
+            }
 
         if (earned > 0) {
             finalCoins[activePlayerId] = finalCoins.getValue(activePlayerId) + earned
