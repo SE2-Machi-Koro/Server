@@ -480,7 +480,7 @@ class GameControllerTest {
         val gameId = 1
         val activePlayer = PlayerModel(id = 9, gameId = gameId, userId = alice.userId, turnOrder = 0, coins = 3, lastSeenAt = null)
         val request = RollDiceRequest(gameId = gameId, playerId = 999)
-        val response = RollDiceResponse(dice = listOf(3, 4), total = 7)
+        val response = RollDiceResponse(result = listOf(3, 4), total = 7)
         val snapshot = gameStateDto(gameId, turnPhase = TurnPhase.RESOLVE_EFFECTS)
         whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice)).thenReturn(activePlayer)
         whenever(diceService.rollDice(request, activePlayer.id)).thenReturn(response)
