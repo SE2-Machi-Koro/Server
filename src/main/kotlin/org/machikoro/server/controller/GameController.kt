@@ -2,6 +2,8 @@ package org.machikoro.server.controller
 
 import org.machikoro.server.auth.requireUserPrincipal
 import org.machikoro.server.domain.models.PlayerModel
+import org.machikoro.server.domain.enums.DiceRoll.ROLL
+import org.machikoro.server.domain.enums.DiceRoll.REROLL
 import org.machikoro.server.dto.AdvancePhaseRequest
 import org.machikoro.server.dto.EndTurnOutcome
 import org.machikoro.server.dto.EndTurnRequest
@@ -27,6 +29,7 @@ import org.machikoro.server.service.PurchaseService
 import org.machikoro.server.service.WebSocketConnectionTracker
 import io.github.springwolf.core.asyncapi.annotations.AsyncListener
 import io.github.springwolf.core.asyncapi.annotations.AsyncOperation
+import org.machikoro.server.domain.enums.DiceRoll
 import org.slf4j.LoggerFactory
 import org.springframework.messaging.handler.annotation.MessageMapping
 import org.springframework.messaging.handler.annotation.Payload
@@ -292,63 +295,7 @@ class GameController(
         payloadType = RollDiceRequest::class,
     ))
     fun rollDice(@Payload request: RollDiceRequest, headerAccessor: SimpMessageHeaderAccessor) {
-        val rollingPlayer = requireActivePlayer(request.gameId, headerAccessor)
-        val gameTopic = "/topic/game/${request.gameId}"
-        logger.info("Roll dice request from player ${rollingPlayer.id} in game ${request.gameId}")
-        try {
-            val result = diceService.rollDice(request, rollingPlayer.id)
-            val state = gameSyncService.buildSnapshot(request.gameId)
-            messagingTemplate.convertAndSend(
-                gameTopic,
-                WebSocketMessage(
-                    type = MessageType.ROLL_DICE,
-                    sender = "SERVER",
-                    content = "Player ${rollingPlayer.id} rolled: ${result.total}",
-                    payload = mapOf(
-                        "event" to "DICE_ROLLED",
-                        "turnPhase" to state.game.turnPhase.name,
-                        "activePlayerId" to state.activePlayerId,
-                        "playerId" to rollingPlayer.id,
-                        "result" to result.result,
-                        "total" to result.total,
-                        "completed" to result.completed,
-                        "timestamp" to System.currentTimeMillis(),
-                        "state" to state,
-                    ),
-                    gameId = request.gameId,
-                )
-            )
-            messagingTemplate.convertAndSend(
-                gameTopic,
-                WebSocketMessage(
-                    type = MessageType.GAME_ACTION,
-                    sender = "server",
-                    payload = buildGameActionPayload(
-                        state = state,
-                        event = "DICE_ROLLED",
-                        "playerId" to rollingPlayer.id,
-                        "result" to result.result,
-                        "total" to result.total,
-                        "completed" to result.completed,
-                    ),
-                    gameId = request.gameId,
-                )
-            )
-        } catch (e: CustomWebSocketException) {
-            logger.warn("Roll dice rejected for game {} [{}]: {}", request.gameId, e.errorCode, e.message)
-            broadcastGameTopicError(
-                gameId = request.gameId,
-                sender = "SERVER",
-                error = WebSocketErrorDto.from(e, mapOf("event" to "ROLL_FAILED")),
-            )
-        } catch (e: Exception) {
-            logger.error("Failed to roll dice for game ${request.gameId}", e)
-            broadcastGameTopicError(
-                gameId = request.gameId,
-                sender = "SERVER",
-                error = WebSocketErrorDto.internal(mapOf("event" to "ROLL_FAILED")),
-            )
-        }
+        rollDiceLogic(request, headerAccessor, ROLL)
     }
 
     /**
@@ -363,20 +310,25 @@ class GameController(
         payloadType = RollDiceRequest::class,
     ))
     fun rerollDice(@Payload request: RollDiceRequest, headerAccessor: SimpMessageHeaderAccessor) {
+        rollDiceLogic(request, headerAccessor, REROLL)
+    }
+
+    private fun rollDiceLogic(@Payload request: RollDiceRequest, headerAccessor: SimpMessageHeaderAccessor, rollType: Enum<DiceRoll>) {
         val rollingPlayer = requireActivePlayer(request.gameId, headerAccessor)
         val gameTopic = "/topic/game/${request.gameId}"
+        logger.info("${rollType} dice request from player ${rollingPlayer.id} in game ${request.gameId}")
         try {
-            val result = diceService.rerollDice(request, rollingPlayer.id)
+            val result = diceService.rollDice(request, rollingPlayer.id)
             val state = gameSyncService.buildSnapshot(request.gameId)
-
+            val event = (if (rollType==ROLL) "DICE_ROLLED" else "DICE_REROLLED")
             messagingTemplate.convertAndSend(
                 gameTopic,
                 WebSocketMessage(
                     type = MessageType.ROLL_DICE,
                     sender = "SERVER",
-                    content = "Player ${rollingPlayer.id} rerolled: ${result.total}",
+                    content = "Player ${rollingPlayer.id} rolled: ${result.total}",
                     payload = mapOf(
-                        "event" to "DICE_REROLLED",
+                        "event" to event,
                         "turnPhase" to state.game.turnPhase.name,
                         "activePlayerId" to state.activePlayerId,
                         "playerId" to rollingPlayer.id,
@@ -389,7 +341,6 @@ class GameController(
                     gameId = request.gameId,
                 )
             )
-
             messagingTemplate.convertAndSend(
                 gameTopic,
                 WebSocketMessage(
@@ -397,7 +348,7 @@ class GameController(
                     sender = "server",
                     payload = buildGameActionPayload(
                         state = state,
-                        event = "DICE_REROLLED",
+                        event = event,
                         "playerId" to rollingPlayer.id,
                         "result" to result.result,
                         "total" to result.total,
@@ -407,18 +358,18 @@ class GameController(
                 )
             )
         } catch (e: CustomWebSocketException) {
-            logger.warn("Reroll rejected for game {} [{}]: {}", request.gameId, e.errorCode, e.message)
+            logger.warn("${rollType} dice rejected for game {} [{}]: {}", request.gameId, e.errorCode, e.message)
             broadcastGameTopicError(
                 gameId = request.gameId,
                 sender = "SERVER",
-                error = WebSocketErrorDto.from(e, mapOf("event" to "REROLL_FAILED")),
+                error = WebSocketErrorDto.from(e, mapOf("event" to "${rollType}_FAILED")),
             )
         } catch (e: Exception) {
-            logger.error("Failed to reroll dice for game ${request.gameId}", e)
+            logger.error("Failed to ${rollType} dice for game ${request.gameId}", e)
             broadcastGameTopicError(
                 gameId = request.gameId,
                 sender = "SERVER",
-                error = WebSocketErrorDto.internal(mapOf("event" to "REROLL_FAILED")),
+                error = WebSocketErrorDto.internal(mapOf("event" to "${rollType}_FAILED")),
             )
         }
     }
