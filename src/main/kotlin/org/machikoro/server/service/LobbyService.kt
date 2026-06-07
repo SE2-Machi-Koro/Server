@@ -37,8 +37,11 @@ open class LobbyService(
     private val landmarkDao: LandmarkDao,
 ) {
 
-    // ConcurrentHashMap for thread-safe lock creation and removal
+    // Per-lobby synchronization locks
     private val lobbyLocks = ConcurrentHashMap<Int, Any>()
+
+    // Tracks which userIds have toggled ready per gameId — cleared when lobby is deleted
+    private val readyPlayers = ConcurrentHashMap<Int, MutableSet<Int>>()
 
     /**
      * Runs [block] inside an Exposed transaction.
@@ -99,10 +102,26 @@ open class LobbyService(
     }
 
     /**
-     * Returns the current lobby roster for [gameId], including usernames, ordered by turn order.
+     * Returns the current lobby roster for [gameId] with per-player ready state merged in.
      */
     fun getLobbyRoster(gameId: Int): List<LobbyRosterPlayerDto> = runInTransaction {
-        playerDao.getLobbyRoster(gameId)
+        val ready = readyPlayers[gameId] ?: emptySet()
+        playerDao.getLobbyRoster(gameId).map { it.copy(isReady = it.userId in ready) }
+    }
+
+    /**
+     * Flips the ready state for [userId] in [gameId].
+     *
+     * @throws GameNotFoundException if no game with [gameId] exists.
+     * @throws PlayerNotFoundException if [userId] is not part of the lobby.
+     */
+    fun toggleReady(gameId: Int, userId: Int, isReady: Boolean) {
+        gameDao.findById(gameId) ?: throw GameNotFoundException("Game $gameId not found")
+        playerDao.findByGameIdAndUserId(gameId, userId)
+            ?: throw PlayerNotFoundException("Player $userId not found in game $gameId")
+
+        val readySet = readyPlayers.computeIfAbsent(gameId) { ConcurrentHashMap.newKeySet() }
+        if (isReady) readySet.add(userId) else readySet.remove(userId)
     }
 
     /**
@@ -163,6 +182,7 @@ open class LobbyService(
             gameDao.delete(game.id)
         }
         lobbyLocks.clear()
+        readyPlayers.clear()
         games.size
     }
 
@@ -231,6 +251,7 @@ open class LobbyService(
         playerDao.deleteByGameId(gameId)
         gameDao.delete(gameId)
         lobbyLocks.remove(gameId)
+        readyPlayers.remove(gameId)
     }
 
     /**
