@@ -158,7 +158,7 @@ class LobbyWebSocketControllerTest {
     }
 
     @Test
-    fun `joinLobby broadcasts LOBBY_JOINED to the lobby's game topic`() {
+    fun `joinLobby sends LOBBY_JOINED and LOBBY_ROSTER to joiner queue then broadcasts LOBBY_ROSTER to topic`() {
         val roster = listOf(
             LobbyRosterPlayerDto(playerId = 1, userId = 10, username = "Player1", gameId = 1, turnOrder = 0, coins = 3),
             LobbyRosterPlayerDto(playerId = 5, userId = 20, username = "Player2", gameId = 1, turnOrder = 1, coins = 3),
@@ -175,29 +175,37 @@ class LobbyWebSocketControllerTest {
 
         val destCaptor = argumentCaptor<String>()
         val msgCaptor = argumentCaptor<WebSocketMessage>()
-        // Expect two sends: LOBBY_ROSTER to the joiner's queue, then LOBBY_JOINED to the topic
-        verify(messagingTemplate, times(2)).convertAndSend(destCaptor.capture(), msgCaptor.capture())
+        // Three sends: LOBBY_JOINED to joiner queue, LOBBY_ROSTER to joiner queue, LOBBY_ROSTER to topic
+        verify(messagingTemplate, times(3)).convertAndSend(destCaptor.capture(), msgCaptor.capture())
 
-        // First send: LOBBY_ROSTER only to the joiner's session queue
+        // First send: LOBBY_JOINED to joiner's session queue — navigation trigger
         assertEquals("/queue/lobby-usersess-77", destCaptor.allValues[0])
-        val rosterMsg = msgCaptor.allValues[0]
-        assertEquals(MessageType.LOBBY_ROSTER, rosterMsg.type)
-        assertEquals("SERVER", rosterMsg.sender)
-        assertEquals(1, rosterMsg.gameId)
-        assertEquals(LobbyRosterDto(players = roster), rosterMsg.payload)
-
-        // Second send: LOBBY_JOINED to the lobby's game topic
-        assertEquals("/topic/game/1", destCaptor.allValues[1])
-        val joinMsg = msgCaptor.allValues[1]
+        val joinMsg = msgCaptor.allValues[0]
         assertEquals(MessageType.LOBBY_JOINED, joinMsg.type)
         assertEquals("SERVER", joinMsg.sender)
-        assertEquals("Player joined lobby", joinMsg.content)
+        assertEquals("You joined the lobby", joinMsg.content)
         assertEquals(1, joinMsg.gameId)
         val joinPayload = joinMsg.payload as? Map<*, *> ?: throw AssertionError("Payload is not a Map")
         assertEquals(5, joinPayload["playerId"])
         assertEquals(20, joinPayload["userId"])
         assertEquals(1, joinPayload["gameId"])
         assertEquals(3, joinPayload["coins"])
+
+        // Second send: LOBBY_ROSTER to joiner's session queue — existing players before topic subscription
+        assertEquals("/queue/lobby-usersess-77", destCaptor.allValues[1])
+        val rosterMsg = msgCaptor.allValues[1]
+        assertEquals(MessageType.LOBBY_ROSTER, rosterMsg.type)
+        assertEquals("SERVER", rosterMsg.sender)
+        assertEquals(1, rosterMsg.gameId)
+        assertEquals(LobbyRosterDto(players = roster), rosterMsg.payload)
+
+        // Third send: LOBBY_ROSTER to topic — existing members get full accurate roster with isReady = false
+        assertEquals("/topic/game/1", destCaptor.allValues[2])
+        val topicMsg = msgCaptor.allValues[2]
+        assertEquals(MessageType.LOBBY_ROSTER, topicMsg.type)
+        assertEquals("SERVER", topicMsg.sender)
+        assertEquals(1, topicMsg.gameId)
+        assertEquals(LobbyRosterDto(players = roster), topicMsg.payload)
 
         verify(lobbyService).joinLobby("ABC1234", 20)
         verify(lobbyService).getLobbyRoster(1)
@@ -619,10 +627,14 @@ class LobbyWebSocketControllerTest {
     }
 
     @Test
-    fun `joinLobby skips LOBBY_ROSTER when sessionId is null`() {
+    fun `joinLobby skips personal-queue messages when sessionId is null but still broadcasts LOBBY_ROSTER to topic`() {
+        val roster = listOf(
+            LobbyRosterPlayerDto(playerId = 5, userId = 20, username = "Player2", gameId = 1, turnOrder = 1, coins = 3),
+        )
         whenever(lobbyService.joinLobby("ABC1234", 20)).thenReturn(player())
+        whenever(lobbyService.getLobbyRoster(1)).thenReturn(roster)
 
-        // Accessor with no sessionId — LOBBY_JOINED still broadcasts, LOBBY_ROSTER is skipped
+        // Accessor with no sessionId — personal-queue messages are skipped, topic broadcast still fires
         val accessor = SimpMessageHeaderAccessor.create().apply {
             user = UserPrincipal(userId = 20, username = "Player2")
         }
@@ -634,9 +646,10 @@ class LobbyWebSocketControllerTest {
 
         val destCaptor = argumentCaptor<String>()
         val msgCaptor = argumentCaptor<WebSocketMessage>()
+        // Only the topic broadcast fires — no session queue sends
         verify(messagingTemplate).convertAndSend(destCaptor.capture(), msgCaptor.capture())
         assertEquals("/topic/game/1", destCaptor.firstValue)
-        assertEquals(MessageType.LOBBY_JOINED, msgCaptor.firstValue.type)
-        verify(lobbyService, never()).getLobbyRoster(any())
+        assertEquals(MessageType.LOBBY_ROSTER, msgCaptor.firstValue.type)
+        verify(lobbyService).getLobbyRoster(1)
     }
 }

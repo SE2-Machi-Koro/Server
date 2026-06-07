@@ -149,7 +149,7 @@ class GameWebSocketBroadcastIntegrationTest {
                 "payload" to mapOf("lobbyCode" to lobbyCode),
             ),
         )
-        assertSameGameBroadcast(hostGameQueue, guestGameQueue, MessageType.LOBBY_JOINED)
+        assertSameGameBroadcast(hostGameQueue, guestGameQueue, MessageType.LOBBY_ROSTER)
 
         sendJson(
             guestSession,
