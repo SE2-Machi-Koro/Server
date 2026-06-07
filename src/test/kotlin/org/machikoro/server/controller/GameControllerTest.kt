@@ -611,6 +611,136 @@ class GameControllerTest {
         verify(diceService, never()).rollDice(any(), any())
         verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }
+// same tests as with roll dice since they should react the same
+    @Test
+    fun `rerollDice broadcasts result with playerId, result and timestamp to correct game topic`() {
+        val gameId = 1
+        val activePlayer = PlayerModel(id = 9, gameId = gameId, userId = alice.userId, turnOrder = 0, coins = 3, lastSeenAt = null)
+        val request = RollDiceRequest(gameId = gameId, playerId = 999)
+        val response = RollDiceResponse(result = listOf(3, 4), total = 7)
+        val snapshot = gameStateDto(gameId, turnPhase = TurnPhase.RESOLVE_EFFECTS)
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice)).thenReturn(activePlayer)
+        whenever(diceService.rollDice(request, activePlayer.id)).thenReturn(response)
+        whenever(gameSyncService.buildSnapshot(gameId)).thenReturn(snapshot)
+
+        controller.rerollDice(request, authedAccessor())
+
+        verify(gameStateGuard).ensureSenderIsActivePlayer(gameId, alice)
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate, times(2)).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+
+        val message = captor.firstValue
+        assertEquals(MessageType.ROLL_DICE, message.type)
+        assertEquals("SERVER", message.sender)
+        assertEquals("Player ${activePlayer.id} rolled: 7", message.content)
+
+        @Suppress("UNCHECKED_CAST")
+        val payload = message.payload as Map<String, Any?>
+        assertEquals("DICE_REROLLED", payload["event"])
+        assertEquals("RESOLVE_EFFECTS", payload["turnPhase"])
+        assertEquals(1, payload["activePlayerId"])
+        assertEquals(activePlayer.id, payload["playerId"])
+        assertEquals(listOf(3, 4), payload["result"])
+        assertEquals(7, payload["total"])
+        assertEquals(true, payload["completed"])
+        assert(payload["timestamp"] is Long)
+        assertEquals(snapshot, payload["state"])
+        assertEquals(gameId, message.gameId)
+
+        val actionMessage = captor.secondValue
+        assertEquals(MessageType.GAME_ACTION, actionMessage.type)
+        assertEquals("server", actionMessage.sender)
+        assertEquals(gameId, actionMessage.gameId)
+        @Suppress("UNCHECKED_CAST")
+        val actionPayload = actionMessage.payload as Map<String, Any?>
+        assertEquals("DICE_REROLLED", actionPayload["event"])
+        assertEquals("RESOLVE_EFFECTS", actionPayload["turnPhase"])
+        assertEquals(1, actionPayload["activePlayerId"])
+        assertEquals(activePlayer.id, actionPayload["playerId"])
+        assertEquals(listOf(3, 4), actionPayload["result"])
+        assertEquals(7, actionPayload["total"])
+        assertEquals(true, actionPayload["completed"])
+        assertEquals(snapshot, actionPayload["state"])
+        verify(diceService).rollDice(request, activePlayer.id)
+        verify(gameStateGuard, never()).ensureSenderOwnsPlayer(any(), any(), any())
+    }
+
+    @Test
+    fun `rerollDice broadcasts error to game topic on failure`() {
+        val gameId = 1
+        val activePlayer = PlayerModel(id = 9, gameId = gameId, userId = alice.userId, turnOrder = 0, coins = 3, lastSeenAt = null)
+        val request = RollDiceRequest(gameId = gameId, playerId = null)
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice)).thenReturn(activePlayer)
+        whenever(diceService.rollDice(request, activePlayer.id)).thenThrow(RuntimeException("dice exploded"))
+
+        controller.rerollDice(request, authedAccessor())
+
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+        val message = captor.firstValue
+        assertEquals(MessageType.ERROR, message.type)
+        val payload = message.payload as WebSocketErrorDto
+        assertEquals("INTERNAL_ERROR", payload.code)
+        assertEquals("Unexpected error while processing WebSocket message", payload.message)
+        assertEquals("REROLL_FAILED", payload.context["event"])
+        verify(diceService).rollDice(request, activePlayer.id)
+        verify(gameStateGuard, never()).ensureSenderOwnsPlayer(any(), any(), any())
+    }
+
+    @Test
+    fun `rerollDice broadcasts domain error code to game topic on rejected roll`() {
+        val gameId = 1
+        val activePlayer = PlayerModel(id = 9, gameId = gameId, userId = alice.userId, turnOrder = 0, coins = 3, lastSeenAt = null)
+        val request = RollDiceRequest(gameId = gameId, playerId = null)
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice)).thenReturn(activePlayer)
+        whenever(diceService.rollDice(request, activePlayer.id))
+            .thenThrow(CustomWebSocketException("REROLL_ALREADY_COMPLETED", "Dice have already been rerolled for this turn"))
+
+        controller.rerollDice(request, authedAccessor())
+
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+        val message = captor.firstValue
+        assertEquals(MessageType.ERROR, message.type)
+        assertEquals("SERVER", message.sender)
+        val payload = message.payload as WebSocketErrorDto
+        assertEquals("REROLL_ALREADY_COMPLETED", payload.code)
+        assertEquals("Dice have already been rerolled for this turn", payload.message)
+        assertEquals("REROLL_FAILED", payload.context["event"])
+        verify(diceService).rollDice(request, activePlayer.id)
+        verify(gameStateGuard, never()).ensureSenderOwnsPlayer(any(), any(), any())
+    }
+
+    @Test
+    fun `rerollDice propagates NOT_YOUR_TURN and does not call service or broadcast`() {
+        val gameId = 1
+        val playerId = 2
+        val request = RollDiceRequest(gameId = gameId, playerId = playerId)
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice))
+            .thenThrow(CustomWebSocketException("NOT_YOUR_TURN", "It is not your turn"))
+
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.rerollDice(request, authedAccessor())
+        }
+        assertEquals("NOT_YOUR_TURN", ex.errorCode)
+        verify(diceService, never()).rollDice(any(), any())
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+    }
+
+    @Test
+    fun `rerollDice propagates GAME_NOT_STARTED and does not call service or broadcast`() {
+        val gameId = 1
+        val request = RollDiceRequest(gameId = gameId, playerId = null)
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice))
+            .thenThrow(CustomWebSocketException("GAME_NOT_STARTED", "Game $gameId has not started yet"))
+
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.rerollDice(request, authedAccessor())
+        }
+        assertEquals("GAME_NOT_STARTED", ex.errorCode)
+        verify(diceService, never()).rerollDice(any(), any())
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+    }
 
     // ── UNAUTHENTICATED at the controller boundary ────────────────────────────
 
