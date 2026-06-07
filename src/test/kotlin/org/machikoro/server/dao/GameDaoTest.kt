@@ -238,4 +238,33 @@ class GameDaoTest : AbstractDBSetup() {
             gameDao.delete(999999)
         }
     }
+
+    @Test
+    fun `updateRerolledThisTurn changes rerolled flag when game exists`() {
+        val id = gameDao.create(hostId)
+        // Initially created game has rerolledThisTurn = false
+        gameDao.updateRerolledThisTurn(id, true)
+        val game = gameDao.findById(id)!!
+        assertTrue(game.rerolledThisTurn)
+    }
+
+    @Test
+    fun `updateRerolledThisTurn throws when game does not exist`() {
+        assertThrows<GameNotFoundException> {
+            gameDao.updateRerolledThisTurn(999999, true)
+        }
+    }
+
+    @Test
+    fun `tryMarkRerolledThisTurn succeeds once and then rejects repeats`() {
+        val id = gameDao.create(hostId)
+
+        // first attempt should flip false -> true
+        assertTrue(gameDao.tryMarkRerolledThisTurn(id))
+        // subsequent attempts should fail (already true)
+        assertFalse(gameDao.tryMarkRerolledThisTurn(id))
+
+        // verify flag persisted
+        assertTrue(gameDao.findById(id)!!.rerolledThisTurn)
+    }
 }
