@@ -460,7 +460,6 @@ class DiceServiceTests {
         verify(gameDao).updateAfterRoll(1, result.total, TurnPhase.RESOLVE_EFFECTS)
     }
 
-    /* For when train station is fully implemented
     @Test
     fun rerollDiceShouldSucceedWithTwoDiceWhenRadioTowerAndTrainStationBuilt() {
         whenever(gameStateGuard.ensureGameIsRunning(1))
@@ -490,15 +489,16 @@ class DiceServiceTests {
         whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.TRAIN_STATION))
             .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.TRAIN_STATION, isBuilt = false))
 
+        whenever(gameDao.tryMarkRerolledThisTurn(1)).thenReturn(true)
         val request = RollDiceRequest(gameId = 1, playerId = 2, rollTwoDice = true)
 
         val ex = assertThrows(CustomWebSocketException::class.java) {
             diceService.rerollDice(request, rollingPlayerId = 2)
         }
         assertEquals("NO_TRAIN_STATION", ex.errorCode)
-        verify(gameDao, never()).tryMarkRerolledThisTurn(any())
+        verify(gameDao).tryMarkRerolledThisTurn(1)
     }
-*/
+
     @Test
     fun rerollDiceShouldKeepPhaseAtResolveEffects() {
         whenever(gameStateGuard.ensureGameIsRunning(1))
@@ -547,31 +547,4 @@ class DiceServiceTests {
         }
     }
 
-    @Test
-    fun rerollDiceShouldThrowWhenTryingToRollTwoDiceWithoutTrainStation() {
-        whenever(gameStateGuard.ensureGameIsRunning(1))
-            .thenReturn(defaultGame.copy(turnPhase = TurnPhase.RESOLVE_EFFECTS, lastDiceRoll = 4))
-
-        // Radio Tower present (passes the earlier radio tower check)
-        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.RADIO_TOWER))
-            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.RADIO_TOWER, isBuilt = true))
-
-        // Train Station NOT built -> should trigger requireTrainStation and throw NO_TRAIN_STATION
-        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.TRAIN_STATION))
-            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.TRAIN_STATION, isBuilt = false))
-
-        // tryMarkRerolledThisTurn will be invoked before the train-station check in current code,
-        // so let it return true to proceed to the diceCount/requireTrainStation logic.
-        whenever(gameDao.tryMarkRerolledThisTurn(1)).thenReturn(true)
-
-        val request = RollDiceRequest(gameId = 1, playerId = 2, rollTwoDice = true)
-
-        val ex = assertThrows(CustomWebSocketException::class.java) {
-            diceService.rerollDice(request, rollingPlayerId = 2)
-        }
-        assertEquals("NO_TRAIN_STATION", ex.errorCode)
-
-        // Verify the reroll attempt was recorded (current implementation marks reroll before checking train station)
-        verify(gameDao).tryMarkRerolledThisTurn(1)
-    }
 }
