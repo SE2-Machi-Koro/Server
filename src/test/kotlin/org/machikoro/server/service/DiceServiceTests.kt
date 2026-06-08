@@ -350,4 +350,82 @@ class DiceServiceTests {
         assertEquals(1, result.result.size)
         verify(playerLandmarkDao, never()).findByPlayerIdAndType(any(), any())
     }
+
+    @Test
+    fun rollTwoDiceDoublesShouldGrantExtraTurnWhenAmusementParkBuilt() {
+        // Create a DiceService subclass to deterministically return doubles
+        val diceServiceWithDoubles = object : DiceService(gameDao, playerLandmarkDao, gameStateGuard) {
+            // make this method protected/open in production so tests may override it
+            public override fun rollDice(count: Int): List<Int> = listOf(4, 4)
+        }
+
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(defaultGame)
+        // Player has Amusement Park built
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.AMUSEMENT_PARK))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.AMUSEMENT_PARK, isBuilt = true))
+        // Player has built Train Station
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.TRAIN_STATION))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.TRAIN_STATION, isBuilt = true))
+
+        // Simulate DB granting extra turn
+        whenever(gameDao.markExtraTurnIfEligible(1, 2, defaultGame.roundNumber)).thenReturn(true)
+
+        val request = RollDiceRequest(gameId = 1, rollTwoDice = true)
+        val result = diceServiceWithDoubles.rollDice(request, rollingPlayerId = 2)
+
+        assertEquals(listOf(4, 4), result.result)
+        assertEquals(8, result.total)
+        assertEquals(true, result.extraTurnGranted)
+        verify(gameDao).markExtraTurnIfEligible(1, 2, defaultGame.roundNumber)
+    }
+
+    @Test
+    fun rollTwoDiceDoublesShouldNotGrantWhenNoAmusementPark() {
+        val diceServiceWithDoubles = object : DiceService(gameDao, playerLandmarkDao, gameStateGuard) {
+            public override fun rollDice(count: Int): List<Int> = listOf(2, 2)
+        }
+
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(defaultGame)
+        // Player does NOT have Amusement Park built
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.AMUSEMENT_PARK))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.AMUSEMENT_PARK, isBuilt = false))
+        // Player has built Train Station
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.TRAIN_STATION))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.TRAIN_STATION, isBuilt = true))
+
+
+        val request = RollDiceRequest(gameId = 1, rollTwoDice = true)
+        val result = diceServiceWithDoubles.rollDice(request, rollingPlayerId = 2)
+
+        assertEquals(listOf(2, 2), result.result)
+        assertEquals(4, result.total)
+        assertEquals(false, result.extraTurnGranted)
+        verify(gameDao, never()).markExtraTurnIfEligible(any(), any(), any())
+    }
+
+    @Test
+    fun rollTwoDiceDoublesShouldNotGrantIfAlreadyGrantedThisRound() {
+        val diceServiceWithDoubles = object : DiceService(gameDao, playerLandmarkDao, gameStateGuard) {
+            public override fun rollDice(count: Int): List<Int> = listOf(6, 6)
+        }
+
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(defaultGame)
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.AMUSEMENT_PARK))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.AMUSEMENT_PARK, isBuilt = true))
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.TRAIN_STATION))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.TRAIN_STATION, isBuilt = true))
+
+
+        // Already granted (DB returns false when trying to mark again)
+        whenever(gameDao.markExtraTurnIfEligible(1, 2, defaultGame.roundNumber)).thenReturn(false)
+
+        val request = RollDiceRequest(gameId = 1, rollTwoDice = true)
+        val result = diceServiceWithDoubles.rollDice(request, rollingPlayerId = 2)
+
+        assertEquals(listOf(6, 6), result.result)
+        assertEquals(12, result.total)
+        // markExtraTurnIfEligible returned false indicating no new grant
+        assertEquals(false, result.extraTurnGranted)
+        verify(gameDao).markExtraTurnIfEligible(1, 2, defaultGame.roundNumber)
+    }
 }
