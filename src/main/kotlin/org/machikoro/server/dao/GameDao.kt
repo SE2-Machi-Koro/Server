@@ -168,11 +168,13 @@ class GameDao {
     fun markExtraTurnIfEligible(gameId: Int, playerId: Int, roundNumber: Int): Boolean = transaction {
         // Only set extra_turn_player_id and extra_turn_round_number when:
         // - extra_turn_round_number is null, or
-        // - extra_turn_round_number != roundNumber and extra_turn_palyer_id != playrID (meaning it hasn't been granted this round to this player).
+        // - extra_turn_round_number != roundNumber or
+        // - extra_turn_round_number = roundNumber and extra_turn_palyer_id != playrID (meaning it hasn't been granted this round to this player).
         Games.update({
             (Games.id eq gameId) and
                     (Games.extraTurnRoundNumber.isNull() or (
-                            (Games.extraTurnPlayerId neq playerId) and (Games.extraTurnRoundNumber neq roundNumber)))
+                            (Games.extraTurnPlayerId neq playerId) and (Games.extraTurnRoundNumber eq roundNumber))
+                            or (Games.extraTurnRoundNumber neq roundNumber ))
         }) {
             it[Games.extraTurnPlayerId] = playerId
             it[Games.extraTurnRoundNumber] = roundNumber
