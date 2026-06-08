@@ -72,10 +72,17 @@ class GamePhaseService(
         val players = playerDao.getPlayers(gameId)
         check(players.isNotEmpty()) { "Game $gameId has no players" }
 
-        val nextTurnIndex = (game.currentTurnIndex + 1) % players.size
-        val nextRoundNumber = if (nextTurnIndex == 0) game.roundNumber + 1 else game.roundNumber
+        val currentPlayer = players[game.currentTurnIndex]
+        val consumeExtra = (game.extraTurnPlayerId != null &&
+                game.extraTurnPlayerId == currentPlayer.id &&
+                game.extraTurnRoundNumber == game.roundNumber)
 
-        gameDao.advanceTurn(gameId, nextTurnIndex, nextRoundNumber)
+        val nextTurnIndex = if (consumeExtra){ game.currentTurnIndex }
+        else { (game.currentTurnIndex + 1) % players.size }
+
+        val nextRoundNumber = if (!consumeExtra && nextTurnIndex == 0) game.roundNumber + 1 else game.roundNumber
+
+        gameDao.advanceTurn(gameId, nextTurnIndex, nextRoundNumber, consumeExtraTurn = consumeExtra)
         return TurnPhase.ROLL_DICE
     }
 
