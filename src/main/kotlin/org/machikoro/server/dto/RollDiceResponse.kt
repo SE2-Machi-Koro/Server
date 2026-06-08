@@ -7,4 +7,5 @@ data class RollDiceResponse(
     val total: Int,
     val completed: Boolean = true,
     val turnPhase: TurnPhase = TurnPhase.RESOLVE_EFFECTS,
+    val extraTurnGranted: Boolean = false,
 )
