@@ -272,4 +272,129 @@ class GamePhaseServiceTest {
         ordered.verify(playerDao).deleteByGameId(gameId)
         ordered.verify(gameDao).delete(gameId)
     }
+
+    @Test
+    fun `endTurn with extra turn keeps same player and consumes grant`() {
+        val gameId = 50
+        // Player at turnIndex 0 has an extra turn for round 1
+        val gameWithExtraTurn = gameInPhase(gameId, TurnPhase.BUY_OR_BUILD, currentTurnIndex = 0, roundNumber = 1)
+            .copy(extraTurnPlayerId = 1, extraTurnRoundNumber = 1)
+
+        whenever(gameStateGuard.ensureGameIsRunning(gameId))
+            .thenReturn(gameWithExtraTurn)
+        whenever(playerDao.getPlayers(gameId)).thenReturn(
+            listOf(
+                PlayerModel(1, gameId, 10, 0, 3, lastSeenAt = 30),
+                PlayerModel(2, gameId, 11, 1, 3, lastSeenAt = 30),
+            )
+        )
+        whenever(gameDao.tryTransitionPhase(gameId, TurnPhase.BUY_OR_BUILD, TurnPhase.END_TURN))
+            .thenReturn(true)
+
+        val result = service.endTurn(gameId)
+
+        assertTrue(result is EndTurnOutcome.Continue)
+        // Should call advanceTurn with SAME turnIndex (0, not 1) and consumeExtraTurn = true
+        verify(gameDao).advanceTurn(gameId, 0, 1, true)
+    }
+
+    @Test
+    fun `endTurn with extra turn for different player rotates normally`() {
+        val gameId = 51
+        // Extra turn was granted to player at turnIndex 1, but currently it's player 0's turn
+        val gameWithExtraTurn = gameInPhase(gameId, TurnPhase.BUY_OR_BUILD, currentTurnIndex = 0, roundNumber = 2)
+            .copy(extraTurnPlayerId = 2, extraTurnRoundNumber = 2)
+
+        whenever(gameStateGuard.ensureGameIsRunning(gameId))
+            .thenReturn(gameWithExtraTurn)
+        whenever(playerDao.getPlayers(gameId)).thenReturn(
+            listOf(
+                PlayerModel(1, gameId, 10, 0, 3, lastSeenAt = 30),
+                PlayerModel(2, gameId, 11, 1, 3, lastSeenAt = 30),
+            )
+        )
+        whenever(gameDao.tryTransitionPhase(gameId, TurnPhase.BUY_OR_BUILD, TurnPhase.END_TURN))
+            .thenReturn(true)
+
+        val result = service.endTurn(gameId)
+
+        assertTrue(result is EndTurnOutcome.Continue)
+        // Extra turn is for player 2 (turnIndex 1) but it's player 1's (turnIndex 0) turn, so rotate normally
+        verify(gameDao).advanceTurn(gameId, 1, 2, false)
+    }
+
+    @Test
+    fun `endTurn with extra turn from previous round rotates normally`() {
+        val gameId = 52
+        // Extra turn was for round 1, now we're in round 2
+        val gameWithOldExtraTurn = gameInPhase(gameId, TurnPhase.BUY_OR_BUILD, currentTurnIndex = 0, roundNumber = 2)
+            .copy(extraTurnPlayerId = 1, extraTurnRoundNumber = 1)
+
+        whenever(gameStateGuard.ensureGameIsRunning(gameId))
+            .thenReturn(gameWithOldExtraTurn)
+        whenever(playerDao.getPlayers(gameId)).thenReturn(
+            listOf(
+                PlayerModel(1, gameId, 10, 0, 3, lastSeenAt = 30),
+                PlayerModel(2, gameId, 11, 1, 3, lastSeenAt = 30),
+            )
+        )
+        whenever(gameDao.tryTransitionPhase(gameId, TurnPhase.BUY_OR_BUILD, TurnPhase.END_TURN))
+            .thenReturn(true)
+
+        val result = service.endTurn(gameId)
+
+        assertTrue(result is EndTurnOutcome.Continue)
+        // Extra turn from round 1 should not carry over to round 2, normal rotation
+        verify(gameDao).advanceTurn(gameId, 1, 2, false)
+    }
+
+    @Test
+    fun `endTurn with extra turn wraps to first player correctly`() {
+        val gameId = 53
+        // Last player has extra turn for current round
+        val gameWithExtraTurn = gameInPhase(gameId, TurnPhase.BUY_OR_BUILD, currentTurnIndex = 1, roundNumber = 3)
+            .copy(extraTurnPlayerId = 2, extraTurnRoundNumber = 3)
+
+        whenever(gameStateGuard.ensureGameIsRunning(gameId))
+            .thenReturn(gameWithExtraTurn)
+        whenever(playerDao.getPlayers(gameId)).thenReturn(
+            listOf(
+                PlayerModel(1, gameId, 10, 0, 3, lastSeenAt = 30),
+                PlayerModel(2, gameId, 11, 1, 3, lastSeenAt = 30),
+            )
+        )
+        whenever(gameDao.tryTransitionPhase(gameId, TurnPhase.BUY_OR_BUILD, TurnPhase.END_TURN))
+            .thenReturn(true)
+
+        val result = service.endTurn(gameId)
+
+        assertTrue(result is EndTurnOutcome.Continue)
+        // Player 2 (turnIndex 1) has extra turn for round 3, keep same index and consume
+        verify(gameDao).advanceTurn(gameId, 1, 3, true)
+    }
+
+    @Test
+    fun `endTurn with extra turn round wraps and increments correctly after extra turn expires`() {
+        val gameId = 54
+        // Player 1 (turnIndex 0) had an extra turn last round, now it's player 2's (turnIndex 1) turn in round 2
+        val gameAfterExtraTurn = gameInPhase(gameId, TurnPhase.BUY_OR_BUILD, currentTurnIndex = 1, roundNumber = 2)
+            .copy(extraTurnPlayerId = null, extraTurnRoundNumber = null)
+
+        whenever(gameStateGuard.ensureGameIsRunning(gameId))
+            .thenReturn(gameAfterExtraTurn)
+        whenever(playerDao.getPlayers(gameId)).thenReturn(
+            listOf(
+                PlayerModel(1, gameId, 10, 0, 3, lastSeenAt = 30),
+                PlayerModel(2, gameId, 11, 1, 3, lastSeenAt = 30),
+            )
+        )
+        whenever(gameDao.tryTransitionPhase(gameId, TurnPhase.BUY_OR_BUILD, TurnPhase.END_TURN))
+            .thenReturn(true)
+
+        val result = service.endTurn(gameId)
+
+        assertTrue(result is EndTurnOutcome.Continue)
+        // Wrap to player 1 (turnIndex 0) and increment to round 3
+        verify(gameDao).advanceTurn(gameId, 0, 3, false)
+    }
 }
