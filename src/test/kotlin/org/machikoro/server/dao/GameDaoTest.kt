@@ -178,7 +178,7 @@ class GameDaoTest : AbstractDBSetup() {
         val id = gameDao.create(hostId)
         gameDao.updateAfterRoll(id, diceRoll = 4, phase = TurnPhase.RESOLVE_EFFECTS)
         gameDao.updateHasPurchasedThisTurn(id, true)
-        gameDao.advanceTurn(id, nextTurnIndex = 1, roundNumber = 2)
+        gameDao.advanceTurn(id, nextTurnIndex = 1, roundNumber = 2, consumeExtraTurn = false)
         val game = gameDao.findById(id)!!
         assertEquals(1, game.currentTurnIndex)
         assertEquals(2, game.roundNumber)
@@ -190,7 +190,7 @@ class GameDaoTest : AbstractDBSetup() {
     @Test
     fun `advanceTurn throws when game does not exist`() {
         assertThrows<GameNotFoundException> {
-            gameDao.advanceTurn(999999, nextTurnIndex = 1, roundNumber = 2)
+            gameDao.advanceTurn(999999, nextTurnIndex = 1, roundNumber = 2, consumeExtraTurn = false)
         }
     }
 

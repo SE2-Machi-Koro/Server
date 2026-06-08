@@ -135,7 +135,7 @@ class SpringContextRestartRecoveryIntegrationTest {
         firstPlayerId = players.first { it.userId == hostUserId }.id
         
         playerDao.updateCoins(firstPlayerId, 42)
-        gameDao.advanceTurn(sharedGameId, nextTurnIndex = 1, roundNumber = 5)
+        gameDao.advanceTurn(sharedGameId, nextTurnIndex = 1, roundNumber = 5, consumeExtraTurn = false)
         gameDao.updateAfterRoll(sharedGameId, diceRoll = 9, phase = TurnPhase.BUY_OR_BUILD)
         
         gameMarketplaceDao.decrementQuantity(sharedGameId, CardType.CAFE)

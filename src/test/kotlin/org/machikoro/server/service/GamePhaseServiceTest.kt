@@ -80,7 +80,7 @@ class GamePhaseServiceTest {
 
         assertEquals("TURN_ALREADY_ENDED", ex.errorCode)
         verify(gameDao).tryTransitionPhase(gameId, TurnPhase.BUY_OR_BUILD, TurnPhase.END_TURN)
-        verify(gameDao, never()).advanceTurn(any(), any(), any())
+        verify(gameDao, never()).advanceTurn(any(), any(), any(), any())
     }
 
     @Test
@@ -125,7 +125,7 @@ class GamePhaseServiceTest {
         val ordered = inOrder(gameStateGuard, gameDao)
         ordered.verify(gameStateGuard).ensureGameIsRunning(gameId)
         ordered.verify(gameDao).tryTransitionPhase(gameId, TurnPhase.BUY_OR_BUILD, TurnPhase.END_TURN)
-        ordered.verify(gameDao).advanceTurn(gameId, 1, 1)
+        ordered.verify(gameDao).advanceTurn(gameId, 1, 1, false)
     }
 
     @Test
@@ -151,7 +151,7 @@ class GamePhaseServiceTest {
         )
 
         verify(gameDao).tryTransitionPhase(gameId, TurnPhase.BUY_OR_BUILD, TurnPhase.END_TURN)
-        verify(gameDao).advanceTurn(gameId, 0, 4)
+        verify(gameDao).advanceTurn(gameId, 0, 4, false)
     }
 
     @Test
@@ -217,7 +217,7 @@ class GamePhaseServiceTest {
         assertEquals("INVALID_TURN_PHASE", ex.errorCode)
 
         verify(gameDao, never()).tryTransitionPhase(gameId, TurnPhase.BUY_OR_BUILD, TurnPhase.END_TURN)
-        verify(gameDao, never()).advanceTurn(any(), any(), any())
+        verify(gameDao, never()).advanceTurn(any(), any(), any(), any())
         verifyNoMoreInteractions(playerDao)
     }
 
@@ -233,7 +233,7 @@ class GamePhaseServiceTest {
         assertEquals("GAME_FINISHED", ex.errorCode)
 
         verify(gameDao, never()).tryTransitionPhase(any(), any(), any())
-        verify(gameDao, never()).advanceTurn(any(), any(), any())
+        verify(gameDao, never()).advanceTurn(any(), any(), any(), any())
         verifyNoMoreInteractions(playerDao)
     }
 
