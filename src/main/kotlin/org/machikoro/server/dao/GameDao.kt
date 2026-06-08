@@ -4,6 +4,8 @@ import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.isNull
+import org.jetbrains.exposed.v1.core.neq
+import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insertAndGetId
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -30,7 +32,9 @@ class GameDao {
         turnPhase = this[Games.turnPhase],
         lastDiceRoll = this[Games.lastDiceRoll],
         roundNumber = this[Games.roundNumber],
-        hasPurchasedThisTurn = this[Games.hasPurchasedThisTurn]
+        hasPurchasedThisTurn = this[Games.hasPurchasedThisTurn],
+        extraTurnPlayerId = this[Games.extraTurnPlayerId],
+        extraTurnRoundNumber = this[Games.extraTurnRoundNumber],
     )
 
     /**
@@ -158,6 +162,24 @@ class GameDao {
     }
 
     /**
+     * Grants an extra turn to playerId for the current round if not already granted
+     * to the same player in the same round. Returns true if a grant was persisted.
+     */
+    fun markExtraTurnIfEligible(gameId: Int, playerId: Int, roundNumber: Int): Boolean = transaction {
+        // Only set extra_turn_player_id and extra_turn_round_number when:
+        // - extra_turn_round_number is null, or
+        // - extra_turn_round_number != roundNumber and extra_turn_palyer_id != playrID (meaning it hasn't been granted this round to this player).
+        Games.update({
+            (Games.id eq gameId) and
+                    (Games.extraTurnRoundNumber.isNull() or (
+                            (Games.extraTurnPlayerId neq playerId) and (Games.extraTurnRoundNumber neq roundNumber)))
+        }) {
+            it[Games.extraTurnPlayerId] = playerId
+            it[Games.extraTurnRoundNumber] = roundNumber
+        } > 0
+    }
+
+    /**
      * Changes phase only when the stored phase still matches the action that
      * requested the transition.
      */
@@ -200,13 +222,17 @@ class GameDao {
      * - Resets phase to ROLL_DICE
      * - Clears last dice roll
      */
-    fun advanceTurn(id: Int, nextTurnIndex: Int, roundNumber: Int): Unit = transaction {
+    fun advanceTurn(id: Int, nextTurnIndex: Int, roundNumber: Int, consumeExtraTurn: Boolean): Unit = transaction {
         val updatedRows = Games.update({ Games.id eq id }) {
             it[Games.currentTurnIndex] = nextTurnIndex
             it[Games.roundNumber] = roundNumber
             it[Games.turnPhase] = TurnPhase.ROLL_DICE
             it[Games.lastDiceRoll] = null
             it[Games.hasPurchasedThisTurn] = false
+            if (consumeExtraTurn) {
+                it[Games.extraTurnPlayerId] = null
+                it[Games.extraTurnRoundNumber] = null
+            }
         }
         if (updatedRows == 0) throw GameNotFoundException("Game $id not found")
     }
