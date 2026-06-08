@@ -2,6 +2,8 @@ package org.machikoro.server.controller
 
 import org.machikoro.server.auth.requireUserPrincipal
 import org.machikoro.server.domain.models.PlayerModel
+import org.machikoro.server.dto.AccusationOutcome
+import org.machikoro.server.dto.AccuseRequest
 import org.machikoro.server.dto.AdvancePhaseRequest
 import org.machikoro.server.dto.EndTurnOutcome
 import org.machikoro.server.dto.EndTurnRequest
@@ -9,6 +11,7 @@ import org.machikoro.server.dto.EnterGameScreenRequest
 import org.machikoro.server.dto.GameStateDto
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.PurchaseRequest
+import org.machikoro.server.dto.ReportCheatRequest
 import org.machikoro.server.dto.RollDiceRequest
 import org.machikoro.server.dto.StartGameRequest
 import org.machikoro.server.dto.WebSocketErrorDto
@@ -16,6 +19,7 @@ import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.exception.NotHostException
+import org.machikoro.server.service.AccusationService
 import org.machikoro.server.service.DiceService
 import org.machikoro.server.service.GameEndBroadcaster
 import org.machikoro.server.service.GamePhaseService
@@ -45,6 +49,7 @@ class GameController(
     private val gameStateGuard: GameStateGuard,
     private val gameSyncService: GameSyncService,
     private val gameEndBroadcaster: GameEndBroadcaster,
+    private val accusationService: AccusationService,
 ) {
     private val logger = LoggerFactory.getLogger(GameController::class.java)
 
@@ -349,6 +354,71 @@ class GameController(
                 error = WebSocketErrorDto.internal(mapOf("event" to "ROLL_FAILED")),
             )
         }
+    }
+
+    /**
+     * Records that the active player used the Insider Trading cheat this game
+     * (issue #361). Silent — no broadcast; only the server learns, so other
+     * players must still guess. Sent to /app/game.reportCheat.
+     */
+    @MessageMapping("/game.reportCheat")
+    @AsyncListener(operation = AsyncOperation(
+        channelName = "/game.reportCheat",
+        description = "Silent self-report that the active player used the Insider Trading cheat.",
+        payloadType = ReportCheatRequest::class,
+    ))
+    fun reportCheat(@Payload request: ReportCheatRequest, headerAccessor: SimpMessageHeaderAccessor) {
+        accusationService.reportCheat(request.gameId, headerAccessor.requireUserPrincipal())
+    }
+
+    /**
+     * One player accuses another of cheating (issue #361). The server adjudicates
+     * (caught vs. wrong), penalizes, and broadcasts the outcome plus a fresh state
+     * snapshot so everyone sees the new coin totals. Invalid accusations throw and
+     * are delivered privately to the accuser via the global exception handler.
+     * Sent to /app/game.accuse.
+     */
+    @MessageMapping("/game.accuse")
+    @AsyncListener(operation = AsyncOperation(
+        channelName = "/game.accuse",
+        description = "Accuse another player of cheating. The caught cheater or wrong accuser is penalized; the result is broadcast to the game topic.",
+        payloadType = AccuseRequest::class,
+    ))
+    fun accuse(@Payload request: AccuseRequest, headerAccessor: SimpMessageHeaderAccessor) {
+        val outcome = accusationService.accuse(
+            gameId = request.gameId,
+            accuser = headerAccessor.requireUserPrincipal(),
+            accusedPlayerId = request.accusedPlayerId,
+        )
+        logger.info(
+            "Accusation in game {} by player {} against {} -> {}",
+            request.gameId, outcome.accuserPlayerId, outcome.accusedPlayerId, outcome.outcome,
+        )
+        broadcastAccusationResult(request.gameId, outcome)
+    }
+
+    /**
+     * Broadcasts an ACCUSATION_RESULT to the game topic with the outcome, the
+     * involved player IDs (PlayerModel.id), and a fresh state snapshot so coin
+     * totals update for everyone.
+     */
+    private fun broadcastAccusationResult(gameId: Int, outcome: AccusationOutcome) {
+        val state = gameSyncService.buildSnapshot(gameId)
+        messagingTemplate.convertAndSend(
+            "/topic/game/$gameId",
+            WebSocketMessage(
+                type = MessageType.ACCUSATION_RESULT,
+                sender = "server",
+                payload = linkedMapOf<String, Any?>(
+                    "outcome" to outcome.outcome.name,
+                    "accuserPlayerId" to outcome.accuserPlayerId,
+                    "accusedPlayerId" to outcome.accusedPlayerId,
+                    "penalizedPlayerId" to outcome.penalizedPlayerId,
+                    "state" to state,
+                ),
+                gameId = gameId,
+            ),
+        )
     }
 
     /**

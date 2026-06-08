@@ -158,3 +158,14 @@ object GameMarketplace : Table("game_marketplace") {
 
     override val primaryKey = PrimaryKey(gameId, cardId)
 }
+
+/**
+ * Outstanding (uncaught) Insider Trading cheats per player (issue #361).
+ * A row present = that player cheated and has not been caught yet.
+ * Removing a player removes their flag automatically.
+ */
+object CheatFlags : Table("cheat_flags") {
+    val playerId = reference("player_id", Players, onDelete = ReferenceOption.CASCADE)
+
+    override val primaryKey = PrimaryKey(playerId)
+}
