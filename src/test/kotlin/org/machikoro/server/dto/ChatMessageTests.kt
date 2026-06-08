@@ -24,7 +24,8 @@ class ChatMessageTests {
             "GAME_END",
             "LOBBY_LEFT",
             "ERROR",
-            "ROLL_DICE"
+            "ROLL_DICE",
+            "ACCUSATION_RESULT"
         )
         val actual = MessageType.entries.map { it.name }.toSet()
 
