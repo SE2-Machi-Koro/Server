@@ -151,9 +151,28 @@ class LobbyWebSocketController(
             return
         }
 
-        // Send current roster only to the joining player so they see who is already in the lobby
+        val roster = lobbyService.getLobbyRoster(player.gameId)
+
         if (sessionId != null) {
-            val roster = lobbyService.getLobbyRoster(player.gameId)
+            // Tell the joiner they successfully joined — client navigates to LobbyScreen on this event
+            messagingTemplate.convertAndSend(
+                "/queue/lobby-user$sessionId",
+                WebSocketMessage(
+                    type = MessageType.LOBBY_JOINED,
+                    sender = "SERVER",
+                    content = "You joined the lobby",
+                    gameId = player.gameId,
+                    payload = mapOf(
+                        "playerId" to player.id,
+                        "userId" to player.userId,
+                        "username" to principal.username,
+                        "gameId" to player.gameId,
+                        "coins" to player.coins
+                    )
+                )
+            )
+
+            // Send current roster so joiner sees existing players before subscribing to the topic
             messagingTemplate.convertAndSend(
                 "/queue/lobby-user$sessionId",
                 WebSocketMessage(
@@ -166,21 +185,15 @@ class LobbyWebSocketController(
             )
         }
 
-        // Broadcast join to all members already subscribed to this lobby's topic
+        // Broadcast full roster to all existing lobby members — explicit isReady = false for the new player
         messagingTemplate.convertAndSend(
             "/topic/game/${player.gameId}",
             WebSocketMessage(
-                type = MessageType.LOBBY_JOINED,
+                type = MessageType.LOBBY_ROSTER,
                 sender = "SERVER",
-                content = "Player joined lobby",
+                content = "Lobby roster updated",
                 gameId = player.gameId,
-                payload = mapOf(
-                    "playerId" to player.id,
-                    "userId" to player.userId,
-                    "username" to principal.username,
-                    "gameId" to player.gameId,
-                    "coins" to player.coins
-                )
+                payload = LobbyRosterDto(players = roster)
             )
         )
     }
