@@ -40,7 +40,14 @@ class DiceService(
                 throw CustomWebSocketException("ROLL_ALREADY_COMPLETED", "Dice have already been rolled for this turn")
             }
 
-            RollDiceResponse(result = dice, total = total)
+            // Detect doubles if rolling two dice and persist extra-turn grant if eligible
+            val extraGranted = if (diceCount == TWO_DICE_COUNT && dice.size == 2 && dice[0] == dice[1]) {
+                gameDao.markExtraTurnIfEligible(request.gameId, rollingPlayerId, game.roundNumber)
+            } else {
+                false
+            }
+
+            RollDiceResponse(result = dice, total = total, extraTurnGranted = extraGranted)
         }
 
     private fun resolveDiceCount(request: RollDiceRequest): Int {
