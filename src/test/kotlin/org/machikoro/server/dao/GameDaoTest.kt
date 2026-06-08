@@ -1,7 +1,9 @@
 package org.machikoro.server.dao
 
+import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.deleteAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.update
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
@@ -237,5 +239,80 @@ class GameDaoTest : AbstractDBSetup() {
         assertThrows<GameNotFoundException> {
             gameDao.delete(999999)
         }
+    }
+
+    @Test
+    fun `markExtraTurnIfEligible grants extra turn when none exists`() {
+        val id = gameDao.create(hostId)
+
+        // grant to player id 123 for round 1
+        val granted = gameDao.markExtraTurnIfEligible(id, playerId = 123, roundNumber = 1)
+        assertTrue(granted)
+
+        val game = gameDao.findById(id)!!
+        assertEquals(123, game.extraTurnPlayerId)
+        assertEquals(1, game.extraTurnRoundNumber)
+    }
+
+    @Test
+    fun `markExtraTurnIfEligible does not re-grant for same round`() {
+        val id = gameDao.create(hostId)
+
+        val first = gameDao.markExtraTurnIfEligible(id, playerId = 123, roundNumber = 1)
+        assertTrue(first)
+
+        // second attempt in same round should fail
+        val second = gameDao.markExtraTurnIfEligible(id, playerId = 123, roundNumber = 1)
+        assertFalse(second)
+
+        val game = gameDao.findById(id)!!
+        assertEquals(123, game.extraTurnPlayerId)
+        assertEquals(1, game.extraTurnRoundNumber)
+    }
+
+    @Test
+    fun `markExtraTurnIfEligible does grant for same round different player`() {
+        val id = gameDao.create(hostId)
+
+        val first = gameDao.markExtraTurnIfEligible(id, playerId = 123, roundNumber = 1)
+        assertTrue(first)
+
+        // second attempt in same round should fail
+        val second = gameDao.markExtraTurnIfEligible(id, playerId = 124, roundNumber = 1)
+        assertTrue(second)
+
+        val game = gameDao.findById(id)!!
+        assertEquals(124, game.extraTurnPlayerId)
+        assertEquals(1, game.extraTurnRoundNumber)
+    }
+
+    @Test
+    fun `markExtraTurnIfEligible does grant for different round same player`() {
+        val id = gameDao.create(hostId)
+
+        val first = gameDao.markExtraTurnIfEligible(id, playerId = 123, roundNumber = 1)
+        assertTrue(first)
+
+        // second attempt in same round should fail
+        val second = gameDao.markExtraTurnIfEligible(id, playerId = 123, roundNumber = 2)
+        assertTrue(second)
+
+        val game = gameDao.findById(id)!!
+        assertEquals(123, game.extraTurnPlayerId)
+        assertEquals(2, game.extraTurnRoundNumber)
+    }
+
+    @Test
+    fun `advanceTurn with consumeExtraTurn clears extra turn fields`() {
+        val id = gameDao.create(hostId)
+
+        val first = gameDao.markExtraTurnIfEligible(id, playerId = 123, roundNumber = 5)
+        assertTrue(first)
+
+        // advance and consume the extra turn
+        gameDao.advanceTurn(id, nextTurnIndex = 1, roundNumber = 5, consumeExtraTurn = true)
+        val game = gameDao.findById(id)!!
+        assertNull(game.extraTurnPlayerId)
+        assertNull(game.extraTurnRoundNumber)
     }
 }
