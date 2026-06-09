@@ -92,7 +92,7 @@ class EarningsControllerTest {
     }
 
     @Test
-    fun `resolveEffects broadcasts error when service throws`() {
+    fun `resolveEffects broadcasts domain error when service rejects game lookup`() {
         val request = ResolveEffectsRequest(gameId = 1)
         doThrow(GameNotFoundException("Game 1 not found")).whenever(earningsService).resolveEffects(1)
 
@@ -108,6 +108,21 @@ class EarningsControllerTest {
         assertEquals("GAME_NOT_FOUND", payload.code)
         assertEquals("Game 1 not found", payload.message)
         assertEquals("EFFECTS_FAILED", payload.context["event"])
+    }
+
+    @Test
+    fun `resolveEffects propagates unexpected service failure to global websocket handler`() {
+        val request = ResolveEffectsRequest(gameId = 1)
+        doThrow(IllegalStateException("database unavailable")).whenever(earningsService).resolveEffects(1)
+
+        val ex = assertThrows<IllegalStateException> {
+            controller.resolveEffects(request, authedAccessor())
+        }
+
+        assertEquals("database unavailable", ex.message)
+        verify(gameStateGuard).ensureSenderIsActivePlayer(1, alice)
+        verify(earningsService).resolveEffects(1)
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }
 
     @Test
