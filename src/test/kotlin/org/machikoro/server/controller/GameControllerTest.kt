@@ -620,7 +620,7 @@ class GameControllerTest {
         val response = RollDiceResponse(result = listOf(3, 4), total = 7)
         val snapshot = gameStateDto(gameId, turnPhase = TurnPhase.RESOLVE_EFFECTS)
         whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice)).thenReturn(activePlayer)
-        whenever(diceService.rollDice(request, activePlayer.id)).thenReturn(response)
+        whenever(diceService.rerollDice(request, activePlayer.id)).thenReturn(response)
         whenever(gameSyncService.buildSnapshot(gameId)).thenReturn(snapshot)
 
         controller.rerollDice(request, authedAccessor())
@@ -661,7 +661,7 @@ class GameControllerTest {
         assertEquals(7, actionPayload["total"])
         assertEquals(true, actionPayload["completed"])
         assertEquals(snapshot, actionPayload["state"])
-        verify(diceService).rollDice(request, activePlayer.id)
+        verify(diceService).rerollDice(request, activePlayer.id)
         verify(gameStateGuard, never()).ensureSenderOwnsPlayer(any(), any(), any())
     }
 
@@ -671,7 +671,7 @@ class GameControllerTest {
         val activePlayer = PlayerModel(id = 9, gameId = gameId, userId = alice.userId, turnOrder = 0, coins = 3, lastSeenAt = null)
         val request = RollDiceRequest(gameId = gameId, playerId = null)
         whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice)).thenReturn(activePlayer)
-        whenever(diceService.rollDice(request, activePlayer.id)).thenThrow(RuntimeException("dice exploded"))
+        whenever(diceService.rerollDice(request, activePlayer.id)).thenThrow(RuntimeException("dice exploded"))
 
         controller.rerollDice(request, authedAccessor())
 
@@ -683,7 +683,7 @@ class GameControllerTest {
         assertEquals("INTERNAL_ERROR", payload.code)
         assertEquals("Unexpected error while processing WebSocket message", payload.message)
         assertEquals("REROLL_FAILED", payload.context["event"])
-        verify(diceService).rollDice(request, activePlayer.id)
+        verify(diceService).rerollDice(request, activePlayer.id)
         verify(gameStateGuard, never()).ensureSenderOwnsPlayer(any(), any(), any())
     }
 
@@ -693,7 +693,7 @@ class GameControllerTest {
         val activePlayer = PlayerModel(id = 9, gameId = gameId, userId = alice.userId, turnOrder = 0, coins = 3, lastSeenAt = null)
         val request = RollDiceRequest(gameId = gameId, playerId = null)
         whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice)).thenReturn(activePlayer)
-        whenever(diceService.rollDice(request, activePlayer.id))
+        whenever(diceService.rerollDice(request, activePlayer.id))
             .thenThrow(CustomWebSocketException("REROLL_ALREADY_COMPLETED", "Dice have already been rerolled for this turn"))
 
         controller.rerollDice(request, authedAccessor())
@@ -707,7 +707,7 @@ class GameControllerTest {
         assertEquals("REROLL_ALREADY_COMPLETED", payload.code)
         assertEquals("Dice have already been rerolled for this turn", payload.message)
         assertEquals("REROLL_FAILED", payload.context["event"])
-        verify(diceService).rollDice(request, activePlayer.id)
+        verify(diceService).rerollDice(request, activePlayer.id)
         verify(gameStateGuard, never()).ensureSenderOwnsPlayer(any(), any(), any())
     }
 
@@ -723,7 +723,7 @@ class GameControllerTest {
             controller.rerollDice(request, authedAccessor())
         }
         assertEquals("NOT_YOUR_TURN", ex.errorCode)
-        verify(diceService, never()).rollDice(any(), any())
+        verify(diceService, never()).rerollDice(any(), any())
         verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }
 
@@ -773,8 +773,8 @@ class GameControllerTest {
 
     @Test
     fun `rollDice throws UNAUTHENTICATED when accessor has no principal`() {
-        assertUnauthenticated { controller.rollDice(RollDiceRequest(gameId = 42, playerId = 1), it) }
-        verify(diceService, never()).rollDice(any(), any())
+        assertUnauthenticated { controller.rerollDice(RollDiceRequest(gameId = 42, playerId = 1), it) }
+        verify(diceService, never()).rerollDice(any(), any())
     }
 
 }

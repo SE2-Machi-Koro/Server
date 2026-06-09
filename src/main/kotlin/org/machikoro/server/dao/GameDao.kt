@@ -231,6 +231,7 @@ class GameDao {
             it[Games.turnPhase] = TurnPhase.ROLL_DICE
             it[Games.lastDiceRoll] = null
             it[Games.hasPurchasedThisTurn] = false
+            it[Games.rerolledThisTurn] = false
         }
         if (updatedRows == 0) throw GameNotFoundException("Game $id not found")
     }

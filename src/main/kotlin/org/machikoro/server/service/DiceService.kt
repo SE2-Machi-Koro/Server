@@ -61,17 +61,17 @@ class DiceService(
                 throw CustomWebSocketException("NO_RADIO_TOWER", "You need a built Radio Tower to reroll")
             }
 
-            // Atomically mark that this turn consumed the reroll
-            if (!gameDao.tryMarkRerolledThisTurn(request.gameId)) {
-                throw CustomWebSocketException("REROLL_ALREADY_USED", "Reroll has already been used this turn")
-            }
-
             // Determine dice count from request (same resolver used for initial roll)
             val diceCount = resolveDiceCount(request)
             validateDiceCount(diceCount)
 
             if (diceCount == TWO_DICE_COUNT) {
                 requireTrainStation(rollingPlayerId)
+            }
+
+            // Atomically mark that this turn consumed the reroll
+            if (!gameDao.tryMarkRerolledThisTurn(request.gameId)) {
+                throw CustomWebSocketException("REROLL_ALREADY_USED", "Reroll has already been used this turn")
             }
 
             val dice = rollDice(diceCount)

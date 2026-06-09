@@ -313,12 +313,12 @@ class GameController(
         rollDiceLogic(request, headerAccessor, REROLL)
     }
 
-    private fun rollDiceLogic(@Payload request: RollDiceRequest, headerAccessor: SimpMessageHeaderAccessor, rollType: Enum<DiceRoll>) {
+    private fun rollDiceLogic(@Payload request: RollDiceRequest, headerAccessor: SimpMessageHeaderAccessor, rollType: DiceRoll) {
         val rollingPlayer = requireActivePlayer(request.gameId, headerAccessor)
         val gameTopic = "/topic/game/${request.gameId}"
         logger.info("${rollType} dice request from player ${rollingPlayer.id} in game ${request.gameId}")
         try {
-            val result = diceService.rollDice(request, rollingPlayer.id)
+            val result = (if (rollType==ROLL) diceService.rollDice(request, rollingPlayer.id) else diceService.rerollDice(request, rollingPlayer.id))
             val state = gameSyncService.buildSnapshot(request.gameId)
             val event = (if (rollType==ROLL) "DICE_ROLLED" else "DICE_REROLLED")
             messagingTemplate.convertAndSend(
