@@ -24,7 +24,6 @@ import org.machikoro.server.dto.StartGameRequest
 import org.machikoro.server.dto.WebSocketErrorDto
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.CustomWebSocketException
-import org.machikoro.server.exception.GameFinishedException
 import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.exception.NotHostException
 import org.machikoro.server.service.DiceService
@@ -193,26 +192,18 @@ class GameControllerTest {
     }
 
     @Test
-    fun `startGame broadcasts internal ERROR frame when service fails unexpectedly`() {
+    fun `startGame propagates unexpected service failure to global websocket handler`() {
         val gameId = 10
         val sessionId = "session-host"
         whenever(connectionTracker.getUserId(sessionId)).thenReturn(1)
         whenever(lobbyService.startGame(gameId, 1)).thenThrow(IllegalStateException("database unavailable"))
 
-        controller.startGame(StartGameRequest(gameId), headerWithSession(sessionId))
-
-        val captor = argumentCaptor<WebSocketMessage>()
-        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
-
-        val message = captor.firstValue
-        assertEquals(MessageType.ERROR, message.type)
-        assertEquals("server", message.sender)
-        assertEquals(gameId, message.gameId)
-        val payload = message.payload as WebSocketErrorDto
-        assertEquals("INTERNAL_ERROR", payload.code)
-        assertEquals("Unexpected error while processing WebSocket message", payload.message)
-        assertEquals("START_FAILED", payload.context["event"])
+        val ex = assertThrows<IllegalStateException> {
+            controller.startGame(StartGameRequest(gameId), headerWithSession(sessionId))
+        }
+        assertEquals("database unavailable", ex.message)
         verify(lobbyService).startGame(gameId, 1)
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }
 
     // ── enterGameScreen ───────────────────────────────────────────────────────
@@ -265,21 +256,16 @@ class GameControllerTest {
     }
 
     @Test
-    fun `enterGameScreen propagates unexpected exception to global handler`() {
+    fun `enterGameScreen propagates unexpected service failure to global websocket handler`() {
         val gameId = 10
         whenever(lobbyService.startGame(gameId, alice.userId))
             .thenThrow(RuntimeException("unexpected failure"))
 
-        controller.enterGameScreen(EnterGameScreenRequest(gameId), authedAccessor())
-
-        val captor = argumentCaptor<WebSocketMessage>()
-        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
-        val message = captor.firstValue
-        assertEquals(MessageType.ERROR, message.type)
-        val payload = message.payload as WebSocketErrorDto
-        assertEquals("INTERNAL_ERROR", payload.code)
-        assertEquals("Unexpected error while processing WebSocket message", payload.message)
-        assertEquals("ENTER_SCREEN_FAILED", payload.context["event"])
+        val ex = assertThrows<RuntimeException> {
+            controller.enterGameScreen(EnterGameScreenRequest(gameId), authedAccessor())
+        }
+        assertEquals("unexpected failure", ex.message)
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }
 
     @Test
@@ -607,25 +593,20 @@ class GameControllerTest {
     }
 
     @Test
-    fun `rollDice propagates unexpected failure to global handler`() {
+    fun `rollDice propagates unexpected service failure to global websocket handler`() {
         val gameId = 1
         val activePlayer = PlayerModel(id = 9, gameId = gameId, userId = alice.userId, turnOrder = 0, coins = 3, lastSeenAt = null)
         val request = RollDiceRequest(gameId = gameId, playerId = null)
         whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice)).thenReturn(activePlayer)
         whenever(diceService.rollDice(request, activePlayer.id)).thenThrow(RuntimeException("dice exploded"))
 
-        controller.rollDice(request, authedAccessor())
-
-        val captor = argumentCaptor<WebSocketMessage>()
-        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
-        val message = captor.firstValue
-        assertEquals(MessageType.ERROR, message.type)
-        val payload = message.payload as WebSocketErrorDto
-        assertEquals("INTERNAL_ERROR", payload.code)
-        assertEquals("Unexpected error while processing WebSocket message", payload.message)
-        assertEquals("ROLL_FAILED", payload.context["event"])
+        val ex = assertThrows<RuntimeException> {
+            controller.rollDice(request, authedAccessor())
+        }
+        assertEquals("dice exploded", ex.message)
         verify(diceService).rollDice(request, activePlayer.id)
         verify(gameStateGuard, never()).ensureSenderOwnsPlayer(any(), any(), any())
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }
 
     @Test

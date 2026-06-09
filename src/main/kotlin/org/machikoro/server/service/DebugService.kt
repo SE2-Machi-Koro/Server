@@ -70,6 +70,8 @@ class DebugService(
             val creds = ensureUser(username)
             try {
                 val player = lobbyService.addUserToLobby(game.id, creds.userId)
+                // Dummies are always ready so the host can start immediately
+                lobbyService.toggleReady(game.id, creds.userId, true)
                 // Broadcast to per-lobby topic, matching the real join path
                 messagingTemplate.convertAndSend(
                     "/topic/game/${player.gameId}",
@@ -84,6 +86,8 @@ class DebugService(
                             "username" to username,
                             "gameId" to player.gameId,
                             "coins" to player.coins,
+                            // Dummies are always pre-marked ready
+                            "isReady" to true,
                         )
                     )
                 )

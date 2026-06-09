@@ -4,7 +4,6 @@ import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
 import org.machikoro.server.dto.DebugSeedResponse
 import org.machikoro.server.dto.EndGameRequest
-import org.machikoro.server.dto.EndTurnOutcome
 import org.machikoro.server.dto.FillLobbyRequest
 import org.machikoro.server.dto.LoginResponse
 import org.machikoro.server.service.DebugService

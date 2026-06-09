@@ -151,9 +151,28 @@ class LobbyWebSocketController(
             return
         }
 
-        // Send current roster only to the joining player so they see who is already in the lobby
+        val roster = lobbyService.getLobbyRoster(player.gameId)
+
         if (sessionId != null) {
-            val roster = lobbyService.getLobbyRoster(player.gameId)
+            // Tell the joiner they successfully joined — client navigates to LobbyScreen on this event
+            messagingTemplate.convertAndSend(
+                "/queue/lobby-user$sessionId",
+                WebSocketMessage(
+                    type = MessageType.LOBBY_JOINED,
+                    sender = "SERVER",
+                    content = "You joined the lobby",
+                    gameId = player.gameId,
+                    payload = mapOf(
+                        "playerId" to player.id,
+                        "userId" to player.userId,
+                        "username" to principal.username,
+                        "gameId" to player.gameId,
+                        "coins" to player.coins
+                    )
+                )
+            )
+
+            // Send current roster so joiner sees existing players before subscribing to the topic
             messagingTemplate.convertAndSend(
                 "/queue/lobby-user$sessionId",
                 WebSocketMessage(
@@ -166,21 +185,69 @@ class LobbyWebSocketController(
             )
         }
 
-        // Broadcast join to all members already subscribed to this lobby's topic
+        // Broadcast full roster to all existing lobby members — explicit isReady = false for the new player
         messagingTemplate.convertAndSend(
             "/topic/game/${player.gameId}",
             WebSocketMessage(
-                type = MessageType.LOBBY_JOINED,
+                type = MessageType.LOBBY_ROSTER,
                 sender = "SERVER",
-                content = "Player joined lobby",
+                content = "Lobby roster updated",
                 gameId = player.gameId,
-                payload = mapOf(
-                    "playerId" to player.id,
-                    "userId" to player.userId,
-                    "username" to principal.username,
-                    "gameId" to player.gameId,
-                    "coins" to player.coins
-                )
+                payload = LobbyRosterDto(players = roster)
+            )
+        )
+    }
+
+    /**
+     * Handles a player's ready-state toggle in the lobby.
+     *
+     * Client sends a message to `/app/lobby.ready` with `gameId` and `isReady`
+     * in the payload. Server updates the in-memory ready set and broadcasts
+     * the full updated roster to `/topic/game/{gameId}` so every client
+     * re-renders with accurate per-player ready state.
+     */
+    @MessageMapping("/lobby.ready")
+    fun toggleReady(
+        @Payload message: WebSocketMessage,
+        headerAccessor: SimpMessageHeaderAccessor,
+    ) {
+        val principal = headerAccessor.userPrincipal()
+            ?: throw CustomWebSocketException(
+                errorCode = "UNAUTHENTICATED",
+                message = "Authenticated principal not found",
+            )
+
+        val payload = message.payload as? Map<*, *>
+            ?: throw CustomWebSocketException(
+                errorCode = "INVALID_PAYLOAD",
+                message = "lobby.ready payload must contain gameId and isReady",
+            )
+
+        val gameId = (payload["gameId"] as? Number)?.toInt()
+            ?: throw CustomWebSocketException(
+                errorCode = "MISSING_GAME_ID",
+                message = "gameId is missing or not a number",
+            )
+
+        val isReady = payload["isReady"] as? Boolean
+            ?: throw CustomWebSocketException(
+                errorCode = "MISSING_IS_READY",
+                message = "isReady is missing or not a boolean",
+            )
+
+        logger.info("User '{}' toggled ready to {} in game {}", principal.username, isReady, gameId)
+
+        lobbyService.toggleReady(gameId, principal.userId, isReady)
+
+        val roster = lobbyService.getLobbyRoster(gameId)
+        messagingTemplate.convertAndSend(
+            "/topic/game/$gameId",
+            WebSocketMessage(
+                type = MessageType.LOBBY_ROSTER,
+                sender = "SERVER",
+                content = "Lobby roster updated",
+                gameId = gameId,
+                payload = org.machikoro.server.dto.LobbyRosterDto(players = roster),
             )
         )
     }
