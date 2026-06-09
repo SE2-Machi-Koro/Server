@@ -1,6 +1,7 @@
 package org.machikoro.server.handler
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.machikoro.server.exception.CustomWebSocketException
@@ -27,7 +28,7 @@ class GlobalWebSocketExceptionHandlerTests {
 
     @Test
     fun handleGenericExceptionShouldReturnInternalErrorPayload() {
-        val exception = IllegalStateException("boom")
+        val exception = IllegalStateException("jdbc:postgresql://prod.internal password=secret")
 
         val start = System.currentTimeMillis()
         val response = handler.handleGenericException(exception)
@@ -35,6 +36,8 @@ class GlobalWebSocketExceptionHandlerTests {
 
         assertEquals("INTERNAL_ERROR", response.code)
         assertEquals("Unexpected error while processing WebSocket message", response.message)
+        assertFalse(response.message.contains("prod.internal"))
+        assertFalse(response.message.contains("password=secret"))
         assertTrue(response.timestamp in start..end)
     }
 }

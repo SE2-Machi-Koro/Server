@@ -64,6 +64,7 @@ class EarningsController(
                 )
             )
         } catch (e: CustomWebSocketException) {
+            // Known effect-resolution rejections are broadcast to the game topic so clients reset pending actions.
             logger.warn("Resolve effects rejected for game {} [{}]: {}", request.gameId, e.errorCode, e.message)
             messagingTemplate.convertAndSend(
                 gameTopic,
@@ -71,17 +72,6 @@ class EarningsController(
                     type = MessageType.ERROR,
                     sender = "server",
                     payload = WebSocketErrorDto.from(e, mapOf("event" to "EFFECTS_FAILED")),
-                    gameId = request.gameId,
-                )
-            )
-        } catch (e: Exception) {
-            logger.error("Failed to resolve effects for game ${request.gameId}", e)
-            messagingTemplate.convertAndSend(
-                gameTopic,
-                WebSocketMessage(
-                    type = MessageType.ERROR,
-                    sender = "server",
-                    payload = WebSocketErrorDto.internal(mapOf("event" to "EFFECTS_FAILED")),
                     gameId = request.gameId,
                 )
             )
