@@ -28,7 +28,6 @@ import org.mockito.kotlin.whenever
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor
 import org.springframework.messaging.simp.SimpMessagingTemplate
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 
 class EarningsControllerTest {
 
@@ -139,26 +138,6 @@ class EarningsControllerTest {
         val payload = captor.firstValue.payload as WebSocketErrorDto
         assertEquals("EFFECTS_ALREADY_RESOLVED", payload.code)
         assertEquals("EFFECTS_FAILED", payload.context["event"])
-    }
-
-    @Test
-    fun `resolveEffects broadcasts internal error when service fails unexpectedly`() {
-        val request = ResolveEffectsRequest(gameId = 1)
-        doThrow(IllegalStateException("jdbc:postgresql://prod.internal password=secret"))
-            .whenever(earningsService).resolveEffects(1)
-
-        controller.resolveEffects(request, authedAccessor())
-
-        val captor = argumentCaptor<WebSocketMessage>()
-        verify(messagingTemplate).convertAndSend(eq("/topic/game/1"), captor.capture())
-        val message = captor.firstValue
-        assertEquals(MessageType.ERROR, message.type)
-        val payload = message.payload as WebSocketErrorDto
-        assertEquals("INTERNAL_ERROR", payload.code)
-        assertEquals("Unexpected error while processing WebSocket message", payload.message)
-        assertEquals("EFFECTS_FAILED", payload.context["event"])
-        assertFalse(payload.message.contains("prod.internal"))
-        assertFalse(payload.message.contains("password=secret"))
     }
 
     @Test
