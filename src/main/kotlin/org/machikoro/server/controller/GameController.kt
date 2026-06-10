@@ -375,15 +375,19 @@ class GameController(
         )
         logger.info(
             "Accusation in game {} by player {} against {} -> {}",
-            request.gameId, outcome.accuserPlayerId, outcome.accusedPlayerId, outcome.outcome,
+            request.gameId, outcome.accuserPlayerId, outcome.accusedPlayerId,
+            if (outcome.caught) "CAUGHT" else "WRONG",
         )
         broadcastAccusationResult(request.gameId, outcome)
     }
 
     /**
-     * Broadcasts an ACCUSATION_RESULT to the game topic with the outcome, the
-     * involved player IDs (PlayerModel.id), and a fresh state snapshot so coin
-     * totals update for everyone.
+     * Broadcasts an ACCUSATION_RESULT to the game topic. The payload keys
+     * `{accuserPlayerId, accusedPlayerId, caught, penalizedPlayerId,
+     * penaltyCoins}` are the wire contract agreed in issue #361 / Client#280 —
+     * keep them in lockstep with the client parser (see the #353 post-mortem).
+     * `state` carries the usual fresh snapshot so coin totals update for
+     * everyone.
      */
     private fun broadcastAccusationResult(gameId: Int, outcome: AccusationOutcome) {
         val state = gameSyncService.buildSnapshot(gameId)
@@ -393,10 +397,11 @@ class GameController(
                 type = MessageType.ACCUSATION_RESULT,
                 sender = "server",
                 payload = linkedMapOf<String, Any?>(
-                    "outcome" to outcome.outcome.name,
                     "accuserPlayerId" to outcome.accuserPlayerId,
                     "accusedPlayerId" to outcome.accusedPlayerId,
+                    "caught" to outcome.caught,
                     "penalizedPlayerId" to outcome.penalizedPlayerId,
+                    "penaltyCoins" to outcome.penaltyCoins,
                     "state" to state,
                 ),
                 gameId = gameId,
