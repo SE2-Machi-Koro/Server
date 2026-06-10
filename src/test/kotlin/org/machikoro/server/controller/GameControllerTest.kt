@@ -12,7 +12,6 @@ import org.machikoro.server.dto.EndTurnOutcome
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.dto.AccusationOutcome
-import org.machikoro.server.dto.AccusationOutcomeType
 import org.machikoro.server.dto.AccuseRequest
 import org.machikoro.server.dto.AdvancePhaseRequest
 import org.machikoro.server.dto.EndTurnRequest
@@ -127,14 +126,15 @@ class GameControllerTest {
     }
 
     @Test
-    fun `accuse broadcasts ACCUSATION_RESULT with outcome and state`() {
+    fun `accuse broadcasts ACCUSATION_RESULT with the contract payload and state`() {
         val gameId = 1
         whenever(accusationService.accuse(gameId, alice, 2)).thenReturn(
             AccusationOutcome(
-                outcome = AccusationOutcomeType.CAUGHT,
                 accuserPlayerId = 1,
                 accusedPlayerId = 2,
+                caught = true,
                 penalizedPlayerId = 2,
+                penaltyCoins = 2,
             )
         )
         whenever(gameSyncService.buildSnapshot(gameId)).thenReturn(gameStateDto(gameId))
@@ -148,10 +148,13 @@ class GameControllerTest {
         assertEquals(gameId, message.gameId)
         @Suppress("UNCHECKED_CAST")
         val payload = message.payload as Map<String, Any?>
-        assertEquals("CAUGHT", payload["outcome"])
+        // Contract keys agreed in issue #361 / Client#280 — keep in lockstep
+        // with the client parser.
         assertEquals(1, payload["accuserPlayerId"])
         assertEquals(2, payload["accusedPlayerId"])
+        assertEquals(true, payload["caught"])
         assertEquals(2, payload["penalizedPlayerId"])
+        assertEquals(2, payload["penaltyCoins"])
     }
 
     @Test
