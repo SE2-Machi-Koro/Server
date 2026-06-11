@@ -19,6 +19,7 @@ enum class MessageType {
     LOBBY_LEFT,
     ERROR,
     ROLL_DICE,
+    ACCUSATION_RESULT,
 }
 
 @Schema(description = "Message broadcast to all clients via WebSocket")
