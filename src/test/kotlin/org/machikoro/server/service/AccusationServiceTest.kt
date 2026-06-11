@@ -58,6 +58,7 @@ class AccusationServiceTest {
         lastDiceRoll = null,
         roundNumber = roundNumber,
         hasPurchasedThisTurn = false,
+        rerolledThisTurn = false
     )
 
     // ── reportCheat ───────────────────────────────────────────────────────────

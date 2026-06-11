@@ -6,6 +6,8 @@ import org.machikoro.server.domain.enums.DiceRoll.ROLL
 import org.machikoro.server.domain.enums.DiceRoll.REROLL
 import org.machikoro.server.dto.AdvancePhaseRequest
 import org.machikoro.server.dto.EndTurnOutcome
+import org.machikoro.server.dto.AccuseRequest
+import org.machikoro.server.dto.AccusationOutcome
 import org.machikoro.server.dto.EndTurnRequest
 import org.machikoro.server.dto.EnterGameScreenRequest
 import org.machikoro.server.dto.GameStateDto

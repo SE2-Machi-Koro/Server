@@ -13,7 +13,6 @@ import org.machikoro.server.database.Users
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.exception.GameNotFoundException
-import org.mockito.ArgumentMatchers.anyInt
 
 class GameDaoTest : AbstractDBSetup() {
 
@@ -261,10 +260,10 @@ class GameDaoTest : AbstractDBSetup() {
         val id = gameDao.create(hostId)
 
         gameDao.updateAfterRoll(id, diceRoll = 4, phase = TurnPhase.RESOLVE_EFFECTS)
-        // first attempt should flip false -> true
-        assertTrue(gameDao.tryRerollThisTurn(id, anyInt()))
-        // subsequent attempts should fail (already true)
-        assertFalse(gameDao.tryRerollThisTurn(id, anyInt()))
+        // First attempt should flip false -> true
+        assertTrue(gameDao.tryRerollThisTurn(id, 5))
+        // Subsequent attempts should fail (already true)
+        assertFalse(gameDao.tryRerollThisTurn(id, 3))
 
         // verify flag persisted
         assertTrue(gameDao.findById(id)!!.rerolledThisTurn)
