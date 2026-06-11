@@ -133,16 +133,11 @@ class GameController(
                 )
             )
         } catch (e: CustomWebSocketException) {
+            // Known start rejections are broadcast to the game topic so every lobby client can clear pending state.
             logger.warn("START_GAME rejected for game {} [{}]: {}", request.gameId, e.errorCode, e.message)
             broadcastGameTopicError(
                 gameId = request.gameId,
                 error = WebSocketErrorDto.from(e, mapOf("event" to "START_FAILED")),
-            )
-        } catch (e: Exception) {
-            logger.error("START_GAME failed for gameId=${request.gameId}", e)
-            broadcastGameTopicError(
-                gameId = request.gameId,
-                error = WebSocketErrorDto.internal(mapOf("event" to "START_FAILED")),
             )
         }
     }
@@ -199,12 +194,6 @@ class GameController(
         } catch (e: NotHostException) {
             // Non-host entered screen — host will trigger initialization when they enter
             logger.debug("enterGameScreen: userId=${principal.userId} is not host of game $gameId, skipping")
-        } catch (e: Exception) {
-            logger.error("enterGameScreen failed for gameId=$gameId, userId=${principal.userId}", e)
-            broadcastGameTopicError(
-                gameId = gameId,
-                error = WebSocketErrorDto.internal(mapOf("event" to "ENTER_SCREEN_FAILED")),
-            )
         }
     }
 
@@ -358,6 +347,7 @@ class GameController(
                 )
             )
         } catch (e: CustomWebSocketException) {
+            // Known roll rejections are topic broadcasts because all clients track the same turn phase.
             logger.warn("${rollType} dice rejected for game {} [{}]: {}", request.gameId, e.errorCode, e.message)
             broadcastGameTopicError(
                 gameId = request.gameId,
