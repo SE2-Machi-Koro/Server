@@ -17,14 +17,18 @@ PostgreSQL. Designed for reliability, scalability, and developer productivity.
   e.g., landmark completion).
 - **Authoritative Turns:** Clients request roll, resolve, purchase, and end-turn actions; only the server advances legal phases.
 - **In-Game Chat:** Built-in chat system for players in the lobby and during the game.
+- **Accounts & Authentication:** REST registration, login, and logout with token-based session authentication, enforced
+  for both REST calls and STOMP WebSocket sessions.
+- **Leaderboard:** REST endpoint exposing player rankings across finished games.
 - **Data Persistence:** Uses JetBrains Exposed ORM to safely store users, games, cards, and landmarks in PostgreSQL.
 - **Quality Assured:** Comprehensive test suite with Testcontainers, JUnit5, and a strict ≥80% Jacoco coverage quality
   gate.
 
 ## Tech Stack
 
-- **Language:** Kotlin 2.2.21
+- **Language:** Kotlin 2.2.21 (JDK 21 toolchain)
 - **Framework:** Spring Boot 4.0.3
+- **Security:** Spring Security with token-based session authentication
 - **Database:** PostgreSQL 18.0
 - **Database Migrations:** Flyway - Handles database schema migrations automatically on startup, ensuring the database structure is always in sync with the codebase.
 - **ORM:** JetBrains Exposed 1.0.0 (DSL only)
@@ -60,6 +64,12 @@ flowchart TD
   models.
 - **DTOs (`dto/`):** Data Transfer Objects for client-server communication.
 - **Configuration (`config/`):** Setup for WebSockets, Spring Security, and OpenAPI.
+- **Authentication (`auth/`):** Token authentication filter for REST plus a STOMP channel interceptor and user
+  principal handling for WebSocket sessions.
+- **Exception Handling (`exception/`, `handler/`):** Domain exceptions with dedicated REST and WebSocket exception
+  handlers.
+- **Database Bootstrap (`database/`):** Exposed table definitions, datasource wiring, and reference-data seeding.
+- **Listeners (`listener/`):** WebSocket connect/disconnect event handling.
 
 ## Data Layer Concepts
 
@@ -173,9 +183,8 @@ internal `GameModel` may hold additional state used purely for server-side logic
 ### Database Initialization
 
 - **Flyway** is the authoritative source for database schema creation and migration across environments. We use Flyway to version control our database setup, ensuring consistency from local development to production.
-- Initial schema and required reference data are defined in `src/main/resources/db/migration/V1__init_schema.sql`.
-- We disable `machikoro.db.init.enabled` (Exposed-based auto-creation) by default in runtime configuration to prevent it from drifting away from migrations.
-- Tests can still override `machikoro.db.init.enabled=true` while the suite transitions to a fully migration-driven setup.
+- Migrations live in `src/main/resources/db/migration/` (`V1__init_schema.sql` defines the initial schema and reference data; later versions evolve it).
+- `machikoro.db.init.enabled` (default `true`) gates the startup runners that wire Exposed to the already-migrated datasource and seed reference data. It does **not** create or modify the schema — Flyway owns that. Tests that boot the Spring context without a database set it to `false`.
 
 1. Copy the example environment file and adjust as needed:
 
@@ -185,21 +194,25 @@ internal `GameModel` may hold additional state used purely for server-side logic
 
 2. Edit the following required variables in `.env`:
 
-   | Variable                    | Description                                                                  |
-   |-----------------------------|------------------------------------------------------------------------------|
-   | DB_USERNAME                 | PostgreSQL database username                                                 |
-   | DB_PASSWORD                 | PostgreSQL database password                                                 |
-   | DB_NAME                     | Database name                                                                |
-   | DB_PORT                     | Database port (default: 5432, local dev only)                                |
-   | SERVER_PORT                 | Port for backend server inside the container (default: 8080)                 |
-   | PUBLIC_PORT                 | Host port the backend is published on in production (AAU group 6: `53210`)   |
-   | WEBSOCKET_ALLOWED_ORIGINS   | Comma-separated list of allowed CORS origins for the WebSocket endpoint      |
-   | PGADMIN_EMAIL               | Email for pgAdmin (local dev only — see `compose-dev.yaml`)                  |
-   | PGADMIN_PASSWORD            | Password for pgAdmin (local dev only — see `compose-dev.yaml`)               |
+   | Variable                    | Description                                                                   |
+   |-----------------------------|-------------------------------------------------------------------------------|
+   | DB_HOST                     | Database hostname (`localhost` for local dev, `postgres` inside compose)     |
+   | DB_USERNAME                 | PostgreSQL database username                                                  |
+   | DB_PASSWORD                 | PostgreSQL database password                                                  |
+   | DB_NAME                     | Database name                                                                 |
+   | DB_PORT                     | Database port (default: 5432, local dev only)                                 |
+   | SERVER_PORT                 | Port for backend server inside the container (default: 8080)                  |
+   | PUBLIC_PORT                 | Host port the backend is published on in production (AAU group 6: `53210`)    |
+   | WEBSOCKET_ALLOWED_ORIGINS   | Comma-separated list of allowed CORS origins for the WebSocket endpoint       |
+   | PGADMIN_EMAIL               | Email for pgAdmin (local dev only — see `compose-dev.yaml`)                   |
+   | PGADMIN_PASSWORD            | Password for pgAdmin (local dev only — see `compose-dev.yaml`)                |
+   | DEBUG_ENABLED               | Enables the `/debug` endpoints and admin account seeding (default: `false`; keep off in production) |
+   | ADMIN_PASSWORD              | Password for the seeded admin accounts (required when `DEBUG_ENABLED=true`)   |
 
 Example `.env`:
 
 ```env
+DB_HOST=localhost
 DB_USERNAME=admin
 DB_PASSWORD=password123
 DB_NAME=machikoro
@@ -209,15 +222,20 @@ PUBLIC_PORT=53210
 WEBSOCKET_ALLOWED_ORIGINS=http://localhost:8080,http://localhost:3000
 PGADMIN_EMAIL=admin@admin.com
 PGADMIN_PASSWORD=admin
+DEBUG_ENABLED=false
+ADMIN_PASSWORD=
 ```
 
 ## Local Build & Run
 
+Prerequisites: JDK 21 (the Gradle toolchain enforces it) and Docker (used by the dev database, Testcontainers, and the
+local image build).
+
 Clone the repository and set up your environment:
 
 ```bash
-git clone <repo-url>
-cd SE2-SERVER
+git clone git@github.com:SE2-Machi-Koro/Server.git
+cd Server
 cp .env.example .env
 # Edit .env as needed
 ```
@@ -245,16 +263,24 @@ Run the server locally:
 ./gradlew bootRun
 ```
 
+Spring Boot's Docker Compose support automatically starts the dev database stack from
+[compose-dev.yaml](compose-dev.yaml) (PostgreSQL, plus pgAdmin at `http://localhost:5050`), so Docker must be running.
+
 The backend will be available at: `http://localhost:8080`
 
 ### Local Docker build
 
-For an end-to-end local run that mirrors the production container, use the compose
+For an end-to-end local run that mirrors the production container, use the smoke-test compose
 override that builds the backend image from source:
 
 ```bash
-docker compose -f compose.yaml -f compose.local-test.yaml --env-file .env.test up -d --build
+docker compose -f compose.yaml -f compose.smoke-test.yaml --env-file .env up -d --build
 ```
+
+The backend is published on the host port from `PUBLIC_PORT` in your `.env` (the override
+defaults to `58080` when unset) and the database on `SMOKE_DB_PORT` (default `55432`).
+For a fully automated build–start–verify–teardown cycle, run
+[scripts/backend-restart-recovery-smoke.sh](scripts/backend-restart-recovery-smoke.sh) instead.
 
 This local Docker path keeps the source-based fallback in the `Dockerfile`, while
 the GitHub publish workflow uses a faster CI-only path that builds the Spring Boot
@@ -294,7 +320,7 @@ The gameplay loop is action-driven: `ROLL_DICE --rollDice--> RESOLVE_EFFECTS --r
 
 - **Swagger UI (REST):** Accessible at `http://localhost:8080/swagger-ui.html`. Powered by Springdoc OpenAPI, this interface provides interactive documentation for our standard REST endpoints.
 - **Springwolf UI (AsyncAPI/WebSockets):** Accessible at `http://localhost:8080/springwolf/asyncapi-ui.html`. Powered by Springwolf, this provides interactive documentation and an event publisher for our STOMP over WebSocket channels, which are the backbone of our real-time game communications.
-- **WebSocket Endpoint:** `ws://localhost:8080/ws`
+- **WebSocket Endpoints:** `ws://localhost:8080/ws` (native STOMP) and `http://localhost:8080/ws-sockjs` (SockJS fallback)
 - **WebSocket Game Protocol:** Client subscriptions, send destinations, message envelopes, and reconnect synchronization are documented in [docs/websocket-game-protocol.md](docs/websocket-game-protocol.md).
 - **Backend Restart Recovery:** The manual restart procedure and `/app/game.sync` verification checklist are documented in [docs/backend-restart-recovery.md](docs/backend-restart-recovery.md).
 
@@ -450,4 +476,4 @@ DevTools console that no *"Failed to find a valid digest in the 'integrity' attr
 error is logged.
 
 ---
-*Last Updated: 23.05.2026*
+*Last Updated: 10.06.2026*
