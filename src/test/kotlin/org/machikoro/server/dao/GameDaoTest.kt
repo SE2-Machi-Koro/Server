@@ -13,6 +13,7 @@ import org.machikoro.server.database.Users
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.exception.GameNotFoundException
+import org.mockito.ArgumentMatchers.anyInt
 
 class GameDaoTest : AbstractDBSetup() {
 
@@ -260,9 +261,9 @@ class GameDaoTest : AbstractDBSetup() {
         val id = gameDao.create(hostId)
 
         // first attempt should flip false -> true
-        assertTrue(gameDao.tryMarkRerolledThisTurn(id))
+        assertTrue(gameDao.tryRerollThisTurn(id, anyInt()))
         // subsequent attempts should fail (already true)
-        assertFalse(gameDao.tryMarkRerolledThisTurn(id))
+        assertFalse(gameDao.tryRerollThisTurn(id, anyInt()))
 
         // verify flag persisted
         assertTrue(gameDao.findById(id)!!.rerolledThisTurn)

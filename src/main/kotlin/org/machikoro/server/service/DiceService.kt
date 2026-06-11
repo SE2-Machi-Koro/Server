@@ -69,16 +69,13 @@ class DiceService(
                 requireTrainStation(rollingPlayerId)
             }
 
-            // Atomically mark that this turn consumed the reroll
-            if (!gameDao.tryMarkRerolledThisTurn(request.gameId)) {
-                throw CustomWebSocketException("REROLL_ALREADY_USED", "Reroll has already been used this turn")
-            }
-
             val dice = rollDice(diceCount)
             val total = dice.sum()
 
-            // Persist the new dice roll and keep phase at RESOLVE_EFFECTS (still resolving)
-            gameDao.updateAfterRoll(request.gameId, total, TurnPhase.RESOLVE_EFFECTS)
+            // Atomically update: only succeeds if still in RESOLVE_EFFECTS, has roll, and hasn't rerolled yet
+            if (!gameDao.tryRerollThisTurn(request.gameId, total)) {
+                throw CustomWebSocketException("REROLL_ALREADY_USED", "Reroll could not be applied (phase changed or already rerolled)")
+            }
 
             RollDiceResponse(result = dice, total = total)
         }

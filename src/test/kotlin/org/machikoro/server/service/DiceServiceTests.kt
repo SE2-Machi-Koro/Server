@@ -15,6 +15,7 @@ import org.machikoro.server.dto.RollDicePayload
 import org.machikoro.server.dto.RollDiceRequest
 import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.exception.GameNotFoundException
+import org.mockito.ArgumentMatchers.anyInt
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -363,7 +364,7 @@ class DiceServiceTests {
         assertThrows(GameNotFoundException::class.java) {
             diceService.rerollDice(request, rollingPlayerId = 2)
         }
-        verify(gameDao, never()).tryMarkRerolledThisTurn(any())
+        verify(gameDao, never()).tryRerollThisTurn(any(), any())
     }
 
     @Test
@@ -377,7 +378,7 @@ class DiceServiceTests {
             diceService.rerollDice(request, rollingPlayerId = 2)
         }
         assertEquals("REROLL_NOT_ALLOWED", ex.errorCode)
-        verify(gameDao, never()).tryMarkRerolledThisTurn(any())
+        verify(gameDao, never()).tryRerollThisTurn(any(), any())
     }
 
     @Test
@@ -406,7 +407,7 @@ class DiceServiceTests {
             diceService.rerollDice(request, rollingPlayerId = 2)
         }
         assertEquals("NO_RADIO_TOWER", ex.errorCode)
-        verify(gameDao, never()).tryMarkRerolledThisTurn(any())
+        verify(gameDao, never()).tryRerollThisTurn(any(), any())
     }
 
     @Test
@@ -430,7 +431,7 @@ class DiceServiceTests {
             .thenReturn(defaultGame.copy(turnPhase = TurnPhase.RESOLVE_EFFECTS, lastDiceRoll = 4))
         whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.RADIO_TOWER))
             .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.RADIO_TOWER, isBuilt = true))
-        whenever(gameDao.tryMarkRerolledThisTurn(1))
+        whenever(gameDao.tryRerollThisTurn(eq(1), anyInt()))
             .thenReturn(false)
 
         val request = RollDiceRequest(gameId = 1, playerId = 2)
@@ -439,7 +440,7 @@ class DiceServiceTests {
             diceService.rerollDice(request, rollingPlayerId = 2)
         }
         assertEquals("REROLL_ALREADY_USED", ex.errorCode)
-        verify(gameDao).tryMarkRerolledThisTurn(1)
+        verify(gameDao).tryRerollThisTurn(eq(1), anyInt())
     }
 
     @Test
@@ -448,7 +449,7 @@ class DiceServiceTests {
             .thenReturn(defaultGame.copy(turnPhase = TurnPhase.RESOLVE_EFFECTS, lastDiceRoll = 4))
         whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.RADIO_TOWER))
             .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.RADIO_TOWER, isBuilt = true))
-        whenever(gameDao.tryMarkRerolledThisTurn(1)).thenReturn(true)
+        whenever(gameDao.tryRerollThisTurn(eq(1), anyInt())).thenReturn(true)
 
         val request = RollDiceRequest(gameId = 1, playerId = 2)
         val result = diceService.rerollDice(request, rollingPlayerId = 2)
@@ -456,8 +457,7 @@ class DiceServiceTests {
         assertEquals(1, result.result.size)
         assert(result.total in 1..6)
         assertEquals(result.result.sum(), result.total)
-        verify(gameDao).tryMarkRerolledThisTurn(1)
-        verify(gameDao).updateAfterRoll(1, result.total, TurnPhase.RESOLVE_EFFECTS)
+        verify(gameDao).tryRerollThisTurn(eq(1), anyInt())
     }
 
     @Test
@@ -468,7 +468,7 @@ class DiceServiceTests {
             .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.RADIO_TOWER, isBuilt = true))
         whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.TRAIN_STATION))
             .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.TRAIN_STATION, isBuilt = true))
-        whenever(gameDao.tryMarkRerolledThisTurn(1)).thenReturn(true)
+        whenever(gameDao.tryRerollThisTurn(eq(1), anyInt())).thenReturn(true)
 
         val request = RollDiceRequest(gameId = 1, playerId = 2, rollTwoDice = true)
         val result = diceService.rerollDice(request, rollingPlayerId = 2)
@@ -476,7 +476,7 @@ class DiceServiceTests {
         assertEquals(2, result.result.size)
         assert(result.total in 2..12)
         assertEquals(result.result.sum(), result.total)
-        verify(gameDao).tryMarkRerolledThisTurn(1)
+        verify(gameDao).tryRerollThisTurn(eq(1), anyInt())
         verify(gameDao).updateAfterRoll(1, result.total, TurnPhase.RESOLVE_EFFECTS)
     }
 
@@ -489,14 +489,14 @@ class DiceServiceTests {
         whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.TRAIN_STATION))
             .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.TRAIN_STATION, isBuilt = false))
 
-        whenever(gameDao.tryMarkRerolledThisTurn(1)).thenReturn(true)
+        whenever(gameDao.tryRerollThisTurn(eq(1), anyInt())).thenReturn(true)
         val request = RollDiceRequest(gameId = 1, playerId = 2, rollTwoDice = true)
 
         val ex = assertThrows(CustomWebSocketException::class.java) {
             diceService.rerollDice(request, rollingPlayerId = 2)
         }
         assertEquals("NO_TRAIN_STATION", ex.errorCode)
-        verify(gameDao).tryMarkRerolledThisTurn(1)
+        verify(gameDao).tryRerollThisTurn(eq(1), anyInt())
     }
 
     @Test
@@ -505,7 +505,7 @@ class DiceServiceTests {
             .thenReturn(defaultGame.copy(turnPhase = TurnPhase.RESOLVE_EFFECTS, lastDiceRoll = 3))
         whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.RADIO_TOWER))
             .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.RADIO_TOWER, isBuilt = true))
-        whenever(gameDao.tryMarkRerolledThisTurn(1)).thenReturn(true)
+        whenever(gameDao.tryRerollThisTurn(eq(1), anyInt())).thenReturn(true)
 
         val request = RollDiceRequest(gameId = 1, playerId = 2)
         diceService.rerollDice(request, rollingPlayerId = 2)
@@ -524,7 +524,7 @@ class DiceServiceTests {
         }
         whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.RADIO_TOWER))
             .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.RADIO_TOWER, isBuilt = true))
-        whenever(gameDao.tryMarkRerolledThisTurn(1))
+        whenever(gameDao.tryRerollThisTurn(eq(1), anyInt()))
             .thenReturn(true)
             .thenReturn(false)
 

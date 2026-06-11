@@ -3,6 +3,7 @@ package org.machikoro.server.dao
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.isNotNull
 import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insertAndGetId
@@ -182,13 +183,20 @@ class GameDao {
     }
 
     /**
-     * Atomically marks the current turn as having used the reroll (only if not already used).
-     * Returns true if we successfully set it from false -> true, false if it was already true.
+     * Atomically attempts to reroll: succeeds only if the game is still in RESOLVE_EFFECTS,
+     * has an active dice roll, and has not yet rerolled this turn.
+     *
+     * On success, sets the new dice roll and marks rerolledThisTurn = true in a single transaction.
+     * Returns true if the update succeeded, false if any condition failed.
      */
-    fun tryMarkRerolledThisTurn(id: Int): Boolean = transaction {
+    fun tryRerollThisTurn(id: Int, newDiceRoll: Int): Boolean = transaction {
         Games.update({
-            (Games.id eq id) and (Games.rerolledThisTurn eq false)
+            (Games.id eq id) and
+                    (Games.turnPhase eq TurnPhase.RESOLVE_EFFECTS) and
+                    (Games.lastDiceRoll.isNotNull()) and
+                    (Games.rerolledThisTurn eq false)
         }) {
+            it[Games.lastDiceRoll] = newDiceRoll
             it[Games.rerolledThisTurn] = true
         } > 0
     }
