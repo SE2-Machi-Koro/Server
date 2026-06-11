@@ -354,14 +354,14 @@ class GameController(
                 sender = "SERVER",
                 error = WebSocketErrorDto.from(e, mapOf("event" to "${rollType}_FAILED")),
             )
-        } catch (e: Exception) {
+        } /*catch (e: Exception) {
             logger.error("Failed to ${rollType} dice for game ${request.gameId}", e)
             broadcastGameTopicError(
                 gameId = request.gameId,
                 sender = "SERVER",
                 error = WebSocketErrorDto.internal(mapOf("event" to "${rollType}_FAILED")),
             )
-        }
+        }*/
     }
 
     /**

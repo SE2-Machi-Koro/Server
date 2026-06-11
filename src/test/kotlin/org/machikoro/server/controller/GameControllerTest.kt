@@ -719,25 +719,21 @@ class GameControllerTest {
     }
 
     @Test
-    fun `rerollDice broadcasts error to game topic on failure`() {
+    fun `rerollDice propagates unexpected service failure to global websocket handler`() {
         val gameId = 1
         val activePlayer = PlayerModel(id = 9, gameId = gameId, userId = alice.userId, turnOrder = 0, coins = 3, lastSeenAt = null)
         val request = RollDiceRequest(gameId = gameId, playerId = null)
         whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice)).thenReturn(activePlayer)
         whenever(diceService.rerollDice(request, activePlayer.id)).thenThrow(RuntimeException("dice exploded"))
 
-        controller.rerollDice(request, authedAccessor())
+        val ex = assertThrows<RuntimeException> {
+            controller.rerollDice(request, authedAccessor())
+        }
 
-        val captor = argumentCaptor<WebSocketMessage>()
-        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
-        val message = captor.firstValue
-        assertEquals(MessageType.ERROR, message.type)
-        val payload = message.payload as WebSocketErrorDto
-        assertEquals("INTERNAL_ERROR", payload.code)
-        assertEquals("Unexpected error while processing WebSocket message", payload.message)
-        assertEquals("REROLL_FAILED", payload.context["event"])
+        assertEquals("dice exploded", ex.message)
         verify(diceService).rerollDice(request, activePlayer.id)
         verify(gameStateGuard, never()).ensureSenderOwnsPlayer(any(), any(), any())
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }
 
     @Test
