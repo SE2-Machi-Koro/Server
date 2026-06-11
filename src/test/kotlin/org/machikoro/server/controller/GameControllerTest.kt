@@ -11,6 +11,8 @@ import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.dto.EndTurnOutcome
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
+import org.machikoro.server.dto.AccusationOutcome
+import org.machikoro.server.dto.AccuseRequest
 import org.machikoro.server.dto.AdvancePhaseRequest
 import org.machikoro.server.dto.EndTurnRequest
 import org.machikoro.server.dto.EnterGameScreenRequest
@@ -18,6 +20,7 @@ import org.machikoro.server.dto.GameStateDto
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.PurchaseRequest
 import org.machikoro.server.dto.PurchaseType
+import org.machikoro.server.dto.ReportCheatRequest
 import org.machikoro.server.dto.RollDiceRequest
 import org.machikoro.server.dto.RollDiceResponse
 import org.machikoro.server.dto.StartGameRequest
@@ -26,6 +29,7 @@ import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.exception.GameStartedException
 import org.machikoro.server.exception.NotHostException
+import org.machikoro.server.service.AccusationService
 import org.machikoro.server.service.DiceService
 import org.machikoro.server.service.GameEndBroadcaster
 import org.machikoro.server.service.GamePhaseService
@@ -42,6 +46,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
+import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor
 import org.springframework.messaging.simp.SimpMessagingTemplate
@@ -57,10 +62,12 @@ class GameControllerTest {
     private val gameStateGuard = mock<GameStateGuard>()
     private val gameSyncService = mock<GameSyncService>()
     private val gameEndBroadcaster = mock<GameEndBroadcaster>()
+    private val accusationService = mock<AccusationService>()
     private val controller = GameController(
         gamePhaseService, messagingTemplate,
         purchaseService, diceService, lobbyService, connectionTracker,
         gameStateGuard, gameSyncService, gameEndBroadcaster,
+        accusationService,
     )
 
     private val alice = UserPrincipal(userId = 1, username = "alice")
@@ -98,6 +105,77 @@ class GameControllerTest {
         accessor.sessionId = sessionId
         accessor.sessionAttributes = mutableMapOf()
         return accessor
+    }
+
+    // ── reportCheat / accuse (#361) ─────────────────────────────────────────────
+
+    @Test
+    fun `reportCheat delegates to AccusationService and does not broadcast`() {
+        controller.reportCheat(ReportCheatRequest(1), authedAccessor())
+
+        verify(accusationService).reportCheat(1, alice)
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+    }
+
+    @Test
+    fun `reportCheat throws UNAUTHENTICATED without a principal`() {
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.reportCheat(ReportCheatRequest(1), SimpMessageHeaderAccessor.create())
+        }
+        assertEquals("UNAUTHENTICATED", ex.errorCode)
+        verifyNoInteractions(accusationService)
+    }
+
+    @Test
+    fun `accuse broadcasts ACCUSATION_RESULT with the contract payload and state`() {
+        val gameId = 1
+        whenever(accusationService.accuse(gameId, alice, 2)).thenReturn(
+            AccusationOutcome(
+                accuserPlayerId = 1,
+                accusedPlayerId = 2,
+                caught = true,
+                penalizedPlayerId = 2,
+                penaltyCoins = 2,
+            )
+        )
+        whenever(gameSyncService.buildSnapshot(gameId)).thenReturn(gameStateDto(gameId))
+
+        controller.accuse(AccuseRequest(gameId, 2), authedAccessor())
+
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+        val message = captor.firstValue
+        assertEquals(MessageType.ACCUSATION_RESULT, message.type)
+        assertEquals(gameId, message.gameId)
+        @Suppress("UNCHECKED_CAST")
+        val payload = message.payload as Map<String, Any?>
+        // Contract keys agreed in issue #361 / Client#280 — keep in lockstep
+        // with the client parser.
+        assertEquals(1, payload["accuserPlayerId"])
+        assertEquals(2, payload["accusedPlayerId"])
+        assertEquals(true, payload["caught"])
+        assertEquals(2, payload["penalizedPlayerId"])
+        assertEquals(2, payload["penaltyCoins"])
+    }
+
+    @Test
+    fun `accuse propagates rejection and does not broadcast`() {
+        whenever(accusationService.accuse(any(), any(), any()))
+            .thenThrow(CustomWebSocketException("INVALID_ACCUSATION", "You cannot accuse yourself"))
+
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.accuse(AccuseRequest(1, 1), authedAccessor())
+        }
+        assertEquals("INVALID_ACCUSATION", ex.errorCode)
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+    }
+
+    @Test
+    fun `accuse throws UNAUTHENTICATED without a principal`() {
+        assertThrows<CustomWebSocketException> {
+            controller.accuse(AccuseRequest(1, 2), SimpMessageHeaderAccessor.create())
+        }
+        verifyNoInteractions(accusationService)
     }
 
     // ── startGame ─────────────────────────────────────────────────────────────

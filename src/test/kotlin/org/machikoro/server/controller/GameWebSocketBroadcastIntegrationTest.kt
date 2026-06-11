@@ -21,6 +21,7 @@ import org.machikoro.server.dto.PurchaseType
 import org.machikoro.server.dto.RollDiceResponse
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.CustomWebSocketException
+import org.machikoro.server.service.AccusationService
 import org.machikoro.server.service.DiceService
 import org.machikoro.server.service.GamePhaseService
 import org.machikoro.server.service.GameStateGuard
@@ -103,6 +104,11 @@ class GameWebSocketBroadcastIntegrationTest {
 
     @MockitoBean
     private lateinit var earningsService: EarningsService
+
+    // GameController now depends on AccusationService (#361); mock it so the
+    // DataSource-excluded context still loads.
+    @MockitoBean
+    private lateinit var accusationService: AccusationService
 
     @AfterEach
     fun disconnectSessions() {
