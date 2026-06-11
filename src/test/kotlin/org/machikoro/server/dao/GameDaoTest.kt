@@ -260,6 +260,7 @@ class GameDaoTest : AbstractDBSetup() {
     fun `tryMarkRerolledThisTurn succeeds once and then rejects repeats`() {
         val id = gameDao.create(hostId)
 
+        gameDao.updateAfterRoll(id, diceRoll = 4, phase = TurnPhase.RESOLVE_EFFECTS)
         // first attempt should flip false -> true
         assertTrue(gameDao.tryRerollThisTurn(id, anyInt()))
         // subsequent attempts should fail (already true)
