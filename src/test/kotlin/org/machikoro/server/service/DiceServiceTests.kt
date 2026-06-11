@@ -477,7 +477,6 @@ class DiceServiceTests {
         assert(result.total in 2..12)
         assertEquals(result.result.sum(), result.total)
         verify(gameDao).tryRerollThisTurn(eq(1), anyInt())
-        verify(gameDao).updateAfterRoll(1, result.total, TurnPhase.RESOLVE_EFFECTS)
     }
 
     @Test
@@ -496,7 +495,7 @@ class DiceServiceTests {
             diceService.rerollDice(request, rollingPlayerId = 2)
         }
         assertEquals("NO_TRAIN_STATION", ex.errorCode)
-        verify(gameDao).tryRerollThisTurn(eq(1), anyInt())
+        verify(gameDao, never()).tryRerollThisTurn(eq(1), anyInt())
     }
 
     @Test
@@ -509,8 +508,8 @@ class DiceServiceTests {
 
         val request = RollDiceRequest(gameId = 1, playerId = 2)
         diceService.rerollDice(request, rollingPlayerId = 2)
-
-        verify(gameDao).updateAfterRoll(eq(1), any(), eq(TurnPhase.RESOLVE_EFFECTS))
+        verify(gameDao).tryRerollThisTurn(eq(1), anyInt())
+        assertEquals(TurnPhase.RESOLVE_EFFECTS, gameStateGuard.ensureGameIsRunning(1).turnPhase)
     }
 
     @Test
