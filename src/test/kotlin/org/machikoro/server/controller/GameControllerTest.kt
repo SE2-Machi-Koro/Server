@@ -900,6 +900,12 @@ class GameControllerTest {
 
     @Test
     fun `rollDice throws UNAUTHENTICATED when accessor has no principal`() {
+        assertUnauthenticated { controller.rollDice(RollDiceRequest(gameId = 42, playerId = 1), it) }
+        verify(diceService, never()).rollDice(any(), any())
+    }
+
+    @Test
+    fun `rerollDice throws UNAUTHENTICATED when accessor has no principal`() {
         assertUnauthenticated { controller.rerollDice(RollDiceRequest(gameId = 42, playerId = 1), it) }
         verify(diceService, never()).rerollDice(any(), any())
     }
