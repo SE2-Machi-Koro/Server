@@ -3,6 +3,7 @@ package org.machikoro.server.dao
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.isNotNull
 import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.core.neq
 import org.jetbrains.exposed.v1.core.or
@@ -181,6 +182,17 @@ class GameDao {
         } > 0
     }
 
+    fun removeExtraTurnMark(gameId: Int, playerId: Int, roundNumber: Int): Boolean = transaction {
+        Games.update({
+            (Games.id eq gameId) and
+                    (Games.extraTurnRoundNumber.isNotNull() or (
+                            (Games.extraTurnPlayerId eq playerId) and (Games.extraTurnRoundNumber eq roundNumber)))
+        }) {
+            it[Games.extraTurnPlayerId] = null
+            it[Games.extraTurnRoundNumber] = null
+        } > 0
+    }
+
     /**
      * Changes phase only when the stored phase still matches the action that
      * requested the transition.
@@ -224,17 +236,13 @@ class GameDao {
      * - Resets phase to ROLL_DICE
      * - Clears last dice roll
      */
-    fun advanceTurn(id: Int, nextTurnIndex: Int, roundNumber: Int, consumeExtraTurn: Boolean): Unit = transaction {
+    fun advanceTurn(id: Int, nextTurnIndex: Int, roundNumber: Int): Unit = transaction {
         val updatedRows = Games.update({ Games.id eq id }) {
             it[Games.currentTurnIndex] = nextTurnIndex
             it[Games.roundNumber] = roundNumber
             it[Games.turnPhase] = TurnPhase.ROLL_DICE
             it[Games.lastDiceRoll] = null
             it[Games.hasPurchasedThisTurn] = false
-            if (consumeExtraTurn) {
-                it[Games.extraTurnPlayerId] = null
-                it[Games.extraTurnRoundNumber] = null
-            }
         }
         if (updatedRows == 0) throw GameNotFoundException("Game $id not found")
     }

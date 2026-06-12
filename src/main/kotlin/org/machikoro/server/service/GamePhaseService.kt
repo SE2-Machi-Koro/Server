@@ -82,7 +82,7 @@ class GamePhaseService(
 
         val nextRoundNumber = if (!consumeExtra && nextTurnIndex == 0) game.roundNumber + 1 else game.roundNumber
 
-        gameDao.advanceTurn(gameId, nextTurnIndex, nextRoundNumber, consumeExtraTurn = consumeExtra)
+        gameDao.advanceTurn(gameId, nextTurnIndex, nextRoundNumber)
         return TurnPhase.ROLL_DICE
     }
 

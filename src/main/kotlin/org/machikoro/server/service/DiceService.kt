@@ -46,6 +46,9 @@ class DiceService(
             } else {
                 false
             }
+            if(!extraGranted) {
+                gameDao.removeExtraTurnMark(request.gameId, rollingPlayerId, game.roundNumber) // Ensure no lingering extra turn if not granted
+            }
 
             RollDiceResponse(result = dice, total = total, extraTurnGranted = extraGranted)
         }
