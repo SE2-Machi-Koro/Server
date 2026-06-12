@@ -87,7 +87,16 @@ class DiceService(
                 throw CustomWebSocketException("REROLL_ALREADY_USED", "Reroll could not be applied (phase changed or already rerolled)")
             }
 
-            RollDiceResponse(result = dice, total = total)
+            // Re-evaluate Amusement Park based on the rerolled result, overriding any grant from the initial roll
+            val extraGranted = if (diceCount == TWO_DICE_COUNT && dice.size == 2 && dice[0] == dice[1] && hasAmusementPark(rollingPlayerId)) {
+                gameDao.markExtraTurnIfEligible(request.gameId, rollingPlayerId, game.roundNumber)
+                true
+            } else {
+                gameDao.removeExtraTurnMark(request.gameId, rollingPlayerId, game.roundNumber)
+                false
+            }
+
+            RollDiceResponse(result = dice, total = total, extraTurnGranted = extraGranted)
         }
 
     private fun resolveDiceCount(request: RollDiceRequest): Int {

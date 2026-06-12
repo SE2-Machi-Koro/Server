@@ -622,4 +622,91 @@ class DiceServiceTests {
         }
     }
 
+    @Test
+    fun rerollDiceDoublesWithAmusementParkShouldGrantExtraTurn() {
+        // Subclass overrides rollDice to deterministically return doubles
+        val diceServiceWithDoubles = object : DiceService(gameDao, playerLandmarkDao, gameStateGuard) {
+            public override fun rollDice(count: Int): List<Int> = listOf(3, 3)
+        }
+
+        whenever(gameStateGuard.ensureGameIsRunning(1))
+            .thenReturn(defaultGame.copy(turnPhase = TurnPhase.RESOLVE_EFFECTS, lastDiceRoll = 5))
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.RADIO_TOWER))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.RADIO_TOWER, isBuilt = true))
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.TRAIN_STATION))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.TRAIN_STATION, isBuilt = true))
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.AMUSEMENT_PARK))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.AMUSEMENT_PARK, isBuilt = true))
+        whenever(gameDao.tryRerollThisTurn(eq(1), anyInt())).thenReturn(true)
+        whenever(gameDao.markExtraTurnIfEligible(1, 2, defaultGame.roundNumber)).thenReturn(true)
+
+        val request = RollDiceRequest(gameId = 1, playerId = 2, rollTwoDice = true)
+        val result = diceServiceWithDoubles.rerollDice(request, rollingPlayerId = 2)
+
+        assertEquals(listOf(3, 3), result.result)
+        assertEquals(true, result.extraTurnGranted)
+        verify(gameDao).markExtraTurnIfEligible(1, 2, defaultGame.roundNumber)
+        verify(gameDao, never()).removeExtraTurnMark(any(), any(), any())
+    }
+
+    @Test
+    fun rerollDiceNonDoublesAfterInitialDoublesShouldClearExtraTurnGrant() {
+        // Subclass overrides rollDice to deterministically return non-doubles
+        val diceServiceNoDoubles = object : DiceService(gameDao, playerLandmarkDao, gameStateGuard) {
+            public override fun rollDice(count: Int): List<Int> = listOf(2, 5)
+        }
+
+        // Initial roll was doubles so extra turn mark is already set
+        whenever(gameStateGuard.ensureGameIsRunning(1))
+            .thenReturn(defaultGame.copy(
+                turnPhase = TurnPhase.RESOLVE_EFFECTS,
+                lastDiceRoll = 8,
+                extraTurnPlayerId = 2,
+                extraTurnRoundNumber = 1,
+            ))
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.RADIO_TOWER))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.RADIO_TOWER, isBuilt = true))
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.TRAIN_STATION))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.TRAIN_STATION, isBuilt = true))
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.AMUSEMENT_PARK))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.AMUSEMENT_PARK, isBuilt = true))
+        whenever(gameDao.tryRerollThisTurn(eq(1), anyInt())).thenReturn(true)
+        whenever(gameDao.removeExtraTurnMark(1, 2, defaultGame.roundNumber)).thenReturn(true)
+
+        val request = RollDiceRequest(gameId = 1, playerId = 2, rollTwoDice = true)
+        val result = diceServiceNoDoubles.rerollDice(request, rollingPlayerId = 2)
+
+        assertEquals(listOf(2, 5), result.result)
+        assertEquals(false, result.extraTurnGranted)
+        // Must clear the grant from the initial doubles roll
+        verify(gameDao).removeExtraTurnMark(1, 2, defaultGame.roundNumber)
+        verify(gameDao, never()).markExtraTurnIfEligible(any(), any(), any())
+    }
+
+    @Test
+    fun rerollDiceDoublesWithoutAmusementParkShouldNotGrantExtraTurn() {
+        val diceServiceWithDoubles = object : DiceService(gameDao, playerLandmarkDao, gameStateGuard) {
+            public override fun rollDice(count: Int): List<Int> = listOf(5, 5)
+        }
+
+        whenever(gameStateGuard.ensureGameIsRunning(1))
+            .thenReturn(defaultGame.copy(turnPhase = TurnPhase.RESOLVE_EFFECTS, lastDiceRoll = 4))
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.RADIO_TOWER))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.RADIO_TOWER, isBuilt = true))
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.TRAIN_STATION))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.TRAIN_STATION, isBuilt = true))
+        // No Amusement Park
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.AMUSEMENT_PARK))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.AMUSEMENT_PARK, isBuilt = false))
+        whenever(gameDao.tryRerollThisTurn(eq(1), anyInt())).thenReturn(true)
+
+        val request = RollDiceRequest(gameId = 1, playerId = 2, rollTwoDice = true)
+        val result = diceServiceWithDoubles.rerollDice(request, rollingPlayerId = 2)
+
+        assertEquals(listOf(5, 5), result.result)
+        assertEquals(false, result.extraTurnGranted)
+        verify(gameDao, never()).markExtraTurnIfEligible(any(), any(), any())
+        verify(gameDao).removeExtraTurnMark(any(), any(), any())
+    }
+
 }

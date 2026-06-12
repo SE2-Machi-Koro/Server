@@ -185,10 +185,11 @@ class GameDao {
     }
 
     fun removeExtraTurnMark(gameId: Int, playerId: Int, roundNumber: Int): Boolean = transaction {
+        // Only clear the mark for the exact player/round that owns it
         Games.update({
             (Games.id eq gameId) and
-                    (Games.extraTurnRoundNumber.isNotNull() or (
-                            (Games.extraTurnPlayerId eq playerId) and (Games.extraTurnRoundNumber eq roundNumber)))
+                    (Games.extraTurnPlayerId eq playerId) and
+                    (Games.extraTurnRoundNumber eq roundNumber)
         }) {
             it[Games.extraTurnPlayerId] = null
             it[Games.extraTurnRoundNumber] = null
