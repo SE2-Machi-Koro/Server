@@ -38,6 +38,7 @@ class GameStateGuardTest {
         lastDiceRoll = null,
         roundNumber = 1,
         hasPurchasedThisTurn = false,
+        rerolledThisTurn = false
     )
 
     private fun player(id: Int, userId: Int, gameId: Int = 1, turnOrder: Int = 0) = PlayerModel(
@@ -104,7 +105,8 @@ class GameStateGuardTest {
                 roundNumber = 1,
                 lobbyCode = "",
                 hasPurchasedThisTurn = false,
-                maxPlayers = 2
+                maxPlayers = 2,
+                rerolledThisTurn = false
             )
         )
 
@@ -125,7 +127,8 @@ class GameStateGuardTest {
                 roundNumber = 1,
                 lobbyCode = "",
                 hasPurchasedThisTurn = false,
-                maxPlayers = 2
+                maxPlayers = 2,
+                rerolledThisTurn = false
             )
         )
 

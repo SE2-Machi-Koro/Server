@@ -94,6 +94,7 @@ object Games : IntIdTable("games") {
     val currentTurnIndex = integer("current_turn_index").default(0)
     val turnPhase = enumerationByName("turn_phase", 20, TurnPhase::class).default(TurnPhase.ROLL_DICE)
     val lastDiceRoll = integer("last_dice_roll").nullable()
+    val rerolledThisTurn = bool("rerolled_this_turn").default(false)
     val roundNumber = integer("round_number").default(1)
     val hasPurchasedThisTurn = bool("has_purchased_this_turn").default(false)
 }

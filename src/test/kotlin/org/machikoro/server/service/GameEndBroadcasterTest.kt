@@ -28,6 +28,7 @@ class GameEndBroadcasterTest {
             lobbyCode = "ABC", maxPlayers = 4, currentTurnIndex = 0,
             turnPhase = TurnPhase.END_TURN, lastDiceRoll = null,
             roundNumber = 5, hasPurchasedThisTurn = false,
+            rerolledThisTurn = false
         ),
         players = emptyList(),
         playerCards = emptyMap(),

@@ -140,6 +140,7 @@ class DebugEndGameBroadcastIntegrationTest {
             lastDiceRoll = null,
             roundNumber = roundsPlayed,
             hasPurchasedThisTurn = false,
+            rerolledThisTurn = false,
         )
 
         whenever(userDao.findBySessionToken(adminToken)).thenReturn(admin)

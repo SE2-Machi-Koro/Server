@@ -52,7 +52,8 @@ class LobbyWebSocketControllerTest {
         turnPhase = TurnPhase.ROLL_DICE,
         lastDiceRoll = null,
         roundNumber = 1,
-        hasPurchasedThisTurn = false
+        hasPurchasedThisTurn = false,
+        rerolledThisTurn = false
     )
 
     private fun player() = PlayerModel(

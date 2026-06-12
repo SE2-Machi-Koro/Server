@@ -50,6 +50,7 @@ class DebugControllerTest {
         lastDiceRoll = null,
         hasPurchasedThisTurn = false,
         roundNumber = 1,
+        rerolledThisTurn = false,
     )
 
     private fun gameStateDto() = GameStateDto(

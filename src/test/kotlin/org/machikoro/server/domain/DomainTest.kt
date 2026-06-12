@@ -81,7 +81,8 @@ class DomainTest {
             turnPhase = TurnPhase.ROLL_DICE,
             lastDiceRoll = null,
             hasPurchasedThisTurn = false,
-            roundNumber = 1
+            roundNumber = 1,
+            rerolledThisTurn = false
         )
 
         assertEquals(GameStatus.WAITING, game.status)
