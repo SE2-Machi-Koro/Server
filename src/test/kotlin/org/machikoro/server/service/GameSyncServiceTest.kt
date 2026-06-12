@@ -64,6 +64,7 @@ class GameSyncServiceTest {
         lastDiceRoll = null,
         roundNumber = 1,
         hasPurchasedThisTurn = false,
+        rerolledThisTurn = false
     )
 
     @Test

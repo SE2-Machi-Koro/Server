@@ -53,6 +53,43 @@ class DiceService(
             RollDiceResponse(result = dice, total = total, extraTurnGranted = extraGranted)
         }
 
+    fun rerollDice(request: RollDiceRequest, rollingPlayerId: Int): RollDiceResponse =
+        synchronized(rollLocks.computeIfAbsent(request.gameId) { Any() }) {
+            val game = gameStateGuard.ensureGameIsRunning(request.gameId)
+
+            // Reroll allowed only while resolving effects (after initial roll)
+            if (game.turnPhase != TurnPhase.RESOLVE_EFFECTS || game.lastDiceRoll == null) {
+                throw CustomWebSocketException("REROLL_NOT_ALLOWED", "You can only reroll after rolling and while effects are resolving")
+            }
+
+            // Ensure player has built Radio Tower
+            val hasRadioTower = playerLandmarkDao
+                .findByPlayerIdAndType(rollingPlayerId, LandmarkType.RADIO_TOWER)
+                ?.isBuilt ?: false
+
+            if (!hasRadioTower) {
+                throw CustomWebSocketException("NO_RADIO_TOWER", "You need a built Radio Tower to reroll")
+            }
+
+            // Determine dice count from request (same resolver used for initial roll)
+            val diceCount = resolveDiceCount(request)
+            validateDiceCount(diceCount)
+
+            if (diceCount == TWO_DICE_COUNT) {
+                requireTrainStation(rollingPlayerId)
+            }
+
+            val dice = rollDice(diceCount)
+            val total = dice.sum()
+
+            // Atomically update: only succeeds if still in RESOLVE_EFFECTS, has roll, and hasn't rerolled yet
+            if (!gameDao.tryRerollThisTurn(request.gameId, total)) {
+                throw CustomWebSocketException("REROLL_ALREADY_USED", "Reroll could not be applied (phase changed or already rerolled)")
+            }
+
+            RollDiceResponse(result = dice, total = total)
+        }
+
     private fun resolveDiceCount(request: RollDiceRequest): Int {
         if (request.diceCount != null) return request.diceCount
         if (request.payload?.diceCount != null) return request.payload.diceCount

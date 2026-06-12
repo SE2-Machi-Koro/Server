@@ -78,7 +78,8 @@ class LobbyServiceTest {
             turnPhase = org.machikoro.server.domain.enums.TurnPhase.ROLL_DICE,
             lastDiceRoll = null,
             hasPurchasedThisTurn = false,
-            roundNumber = 1
+            roundNumber = 1,
+            rerolledThisTurn = false
         )
 
     private fun player(id: Int) =

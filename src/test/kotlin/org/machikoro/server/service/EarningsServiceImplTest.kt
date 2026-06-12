@@ -261,7 +261,7 @@ class EarningsServiceImplTest {
         val game = GameModel(
             id = 1, status = GameStatus.IN_PROGRESS, hostUserId = 1, lobbyCode = "TEST",
             maxPlayers = 4, currentTurnIndex = 0, turnPhase = TurnPhase.RESOLVE_EFFECTS,
-            lastDiceRoll = 1, roundNumber = 1, hasPurchasedThisTurn = false
+            lastDiceRoll = 1, roundNumber = 1, hasPurchasedThisTurn = false, rerolledThisTurn = false
         )
 
         whenever(gameStateGuard.ensureGameIsRunning(1))
@@ -290,7 +290,7 @@ class EarningsServiceImplTest {
         val game = GameModel(
             id = 1, status = GameStatus.IN_PROGRESS, hostUserId = 1, lobbyCode = "TEST",
             maxPlayers = 4, currentTurnIndex = 0, turnPhase = TurnPhase.ROLL_DICE,
-            lastDiceRoll = null, roundNumber = 1, hasPurchasedThisTurn = false
+            lastDiceRoll = null, roundNumber = 1, hasPurchasedThisTurn = false, rerolledThisTurn = false
         )
 
         whenever(gameStateGuard.ensureGameIsRunning(1))
@@ -307,7 +307,7 @@ class EarningsServiceImplTest {
         val game = GameModel(
             id = 1, status = GameStatus.IN_PROGRESS, hostUserId = 1, lobbyCode = "TEST",
             maxPlayers = 4, currentTurnIndex = 0, turnPhase = TurnPhase.BUY_OR_BUILD,
-            lastDiceRoll = 4, roundNumber = 1, hasPurchasedThisTurn = false
+            lastDiceRoll = 4, roundNumber = 1, hasPurchasedThisTurn = false, rerolledThisTurn = false
         )
         whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(game)
 
@@ -325,7 +325,7 @@ class EarningsServiceImplTest {
         val game = GameModel(
             id = 1, status = GameStatus.IN_PROGRESS, hostUserId = 1, lobbyCode = "TEST",
             maxPlayers = 4, currentTurnIndex = 0, turnPhase = TurnPhase.END_TURN,
-            lastDiceRoll = 4, roundNumber = 1, hasPurchasedThisTurn = false
+            lastDiceRoll = 4, roundNumber = 1, hasPurchasedThisTurn = false, rerolledThisTurn = false
         )
         whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(game)
 
@@ -343,7 +343,7 @@ class EarningsServiceImplTest {
         val game = GameModel(
             id = 1, status = GameStatus.IN_PROGRESS, hostUserId = 1, lobbyCode = "TEST",
             maxPlayers = 4, currentTurnIndex = 0, turnPhase = TurnPhase.RESOLVE_EFFECTS,
-            lastDiceRoll = null, roundNumber = 1, hasPurchasedThisTurn = false
+            lastDiceRoll = null, roundNumber = 1, hasPurchasedThisTurn = false, rerolledThisTurn = false
         )
         whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(game)
 
@@ -361,7 +361,7 @@ class EarningsServiceImplTest {
         val game = GameModel(
             id = 1, status = GameStatus.IN_PROGRESS, hostUserId = 1, lobbyCode = "TEST",
             maxPlayers = 4, currentTurnIndex = 0, turnPhase = TurnPhase.RESOLVE_EFFECTS,
-            lastDiceRoll = 4, roundNumber = 1, hasPurchasedThisTurn = false
+            lastDiceRoll = 4, roundNumber = 1, hasPurchasedThisTurn = false, rerolledThisTurn = false
         )
         whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(game)
         whenever(gameDao.tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD))
@@ -380,7 +380,7 @@ class EarningsServiceImplTest {
         val game = GameModel(
             id = 1, status = GameStatus.IN_PROGRESS, hostUserId = 1, lobbyCode = "TEST",
             maxPlayers = 4, currentTurnIndex = 1, turnPhase = TurnPhase.RESOLVE_EFFECTS,
-            lastDiceRoll = 4, roundNumber = 1, hasPurchasedThisTurn = false
+            lastDiceRoll = 4, roundNumber = 1, hasPurchasedThisTurn = false, rerolledThisTurn = false
         )
         whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(game)
         whenever(gameDao.tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD))

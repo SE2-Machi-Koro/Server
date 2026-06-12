@@ -36,6 +36,7 @@ class GameDao {
         hasPurchasedThisTurn = this[Games.hasPurchasedThisTurn],
         extraTurnPlayerId = this[Games.extraTurnPlayerId],
         extraTurnRoundNumber = this[Games.extraTurnRoundNumber],
+        rerolledThisTurn = this[Games.rerolledThisTurn],
     )
 
     /**
@@ -75,6 +76,7 @@ class GameDao {
             it[Games.hasPurchasedThisTurn] = false
             it[Games.lobbyCode] = lobbyCode
             it[Games.maxPlayers] = maxPlayers
+            it[Games.rerolledThisTurn] = false
         }.value
     }
 
@@ -206,6 +208,35 @@ class GameDao {
     }
 
     /**
+     * Updates the rerolled_this_turn flag for a game.
+     */
+    fun updateRerolledThisTurn(id: Int, rerolledThisTurn: Boolean): Unit = transaction {
+        val updatedRows = Games.update({ Games.id eq id }) {
+            it[Games.rerolledThisTurn] = rerolledThisTurn
+        }
+        if (updatedRows == 0) throw GameNotFoundException("Game $id not found")
+    }
+
+    /**
+     * Atomically attempts to reroll: succeeds only if the game is still in RESOLVE_EFFECTS,
+     * has an active dice roll, and has not yet rerolled this turn.
+     *
+     * On success, sets the new dice roll and marks rerolledThisTurn = true in a single transaction.
+     * Returns true if the update succeeded, false if any condition failed.
+     */
+    fun tryRerollThisTurn(id: Int, newDiceRoll: Int): Boolean = transaction {
+        Games.update({
+            (Games.id eq id) and
+                    (Games.turnPhase eq TurnPhase.RESOLVE_EFFECTS) and
+                    (Games.lastDiceRoll.isNotNull()) and
+                    (Games.rerolledThisTurn eq false)
+        }) {
+            it[Games.lastDiceRoll] = newDiceRoll
+            it[Games.rerolledThisTurn] = true
+        } > 0
+    }
+
+    /**
      * Updates whether the active turn has already used its purchase.
      */
     fun updateHasPurchasedThisTurn(id: Int, hasPurchasedThisTurn: Boolean): Unit = transaction {
@@ -243,6 +274,7 @@ class GameDao {
             it[Games.turnPhase] = TurnPhase.ROLL_DICE
             it[Games.lastDiceRoll] = null
             it[Games.hasPurchasedThisTurn] = false
+            it[Games.rerolledThisTurn] = false
         }
         if (updatedRows == 0) throw GameNotFoundException("Game $id not found")
     }

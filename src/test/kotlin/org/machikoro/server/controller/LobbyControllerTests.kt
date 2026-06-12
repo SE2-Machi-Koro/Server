@@ -31,6 +31,7 @@ class LobbyControllerTests {
             lastDiceRoll = null,
             hasPurchasedThisTurn = false,
             roundNumber = 1,
+            rerolledThisTurn = false
         ),
         players = emptyList(),
         playerCards = emptyMap(),

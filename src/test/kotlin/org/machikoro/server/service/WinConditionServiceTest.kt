@@ -40,7 +40,8 @@ class WinConditionServiceTest {
             turnPhase = phase,
             lastDiceRoll = null,
             hasPurchasedThisTurn = false,
-            roundNumber = 1
+            roundNumber = 1,
+            rerolledThisTurn = false
         )
 
     @Test

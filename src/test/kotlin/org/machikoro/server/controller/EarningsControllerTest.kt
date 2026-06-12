@@ -54,6 +54,7 @@ class EarningsControllerTest {
             lastDiceRoll = 6,
             hasPurchasedThisTurn = false,
             roundNumber = 1,
+            rerolledThisTurn = false,
         ),
         players = listOf(
             PlayerModel(id = 1, gameId = gameId, userId = 1, turnOrder = 0, coins = 5, lastSeenAt = null),

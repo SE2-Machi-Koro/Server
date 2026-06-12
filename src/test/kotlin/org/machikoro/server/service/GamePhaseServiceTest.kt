@@ -66,6 +66,7 @@ class GamePhaseServiceTest {
         lastDiceRoll = null,
         hasPurchasedThisTurn = false,
         roundNumber = roundNumber,
+        rerolledThisTurn = false
     )
 
     @Test
