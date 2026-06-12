@@ -301,4 +301,20 @@ class GameDaoTest : AbstractDBSetup() {
         assertEquals(123, game.extraTurnPlayerId)
         assertEquals(2, game.extraTurnRoundNumber)
     }
+
+    @Test
+    fun `RermoveExtraTurnMark does sets extraTurnMarkers to null`() {
+        val id = gameDao.create(hostId)
+
+        val first = gameDao.markExtraTurnIfEligible(id, playerId = 123, roundNumber = 1)
+        assertTrue(first)
+
+        // second attempt in same round should fail
+        val second = gameDao.removeExtraTurnMark(id, playerId = 123, roundNumber = 1)
+        assertTrue(second)
+
+        val game = gameDao.findById(id)!!
+        assertEquals(null, game.extraTurnPlayerId)
+        assertEquals(null, game.extraTurnRoundNumber)
+    }
 }
