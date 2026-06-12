@@ -15,6 +15,7 @@ import org.machikoro.server.database.Users
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.exception.GameNotFoundException
+import org.mockito.kotlin.any
 
 class GameDaoTest : AbstractDBSetup() {
 
@@ -312,6 +313,19 @@ class GameDaoTest : AbstractDBSetup() {
         // second attempt in same round should fail
         val second = gameDao.removeExtraTurnMark(id, playerId = 123, roundNumber = 1)
         assertTrue(second)
+
+        val game = gameDao.findById(id)!!
+        assertEquals(null, game.extraTurnPlayerId)
+        assertEquals(null, game.extraTurnRoundNumber)
+    }
+
+    @Test
+    fun `RermoveExtraTurnMark does not empty fields and returns false if fields are empty`() {
+        val id = gameDao.create(hostId)
+
+        // second attempt in same round should fail
+        val second = gameDao.removeExtraTurnMark(id, any(), any())
+        assertFalse(second)
 
         val game = gameDao.findById(id)!!
         assertEquals(null, game.extraTurnPlayerId)
