@@ -80,7 +80,7 @@ class GamePhaseServiceTest {
 
         assertEquals("TURN_ALREADY_ENDED", ex.errorCode)
         verify(gameDao).tryTransitionPhase(gameId, TurnPhase.BUY_OR_BUILD, TurnPhase.END_TURN)
-        verify(gameDao, never()).advanceTurn(any(), any(), any(), any())
+        verify(gameDao, never()).advanceTurn(any(), any(), any())
     }
 
     @Test
@@ -125,7 +125,7 @@ class GamePhaseServiceTest {
         val ordered = inOrder(gameStateGuard, gameDao)
         ordered.verify(gameStateGuard).ensureGameIsRunning(gameId)
         ordered.verify(gameDao).tryTransitionPhase(gameId, TurnPhase.BUY_OR_BUILD, TurnPhase.END_TURN)
-        ordered.verify(gameDao).advanceTurn(gameId, 1, 1, false)
+        ordered.verify(gameDao).advanceTurn(gameId, 1, 1)
     }
 
     @Test
@@ -151,7 +151,7 @@ class GamePhaseServiceTest {
         )
 
         verify(gameDao).tryTransitionPhase(gameId, TurnPhase.BUY_OR_BUILD, TurnPhase.END_TURN)
-        verify(gameDao).advanceTurn(gameId, 0, 4, false)
+        verify(gameDao).advanceTurn(gameId, 0, 4)
     }
 
     @Test
@@ -217,7 +217,7 @@ class GamePhaseServiceTest {
         assertEquals("INVALID_TURN_PHASE", ex.errorCode)
 
         verify(gameDao, never()).tryTransitionPhase(gameId, TurnPhase.BUY_OR_BUILD, TurnPhase.END_TURN)
-        verify(gameDao, never()).advanceTurn(any(), any(), any(), any())
+        verify(gameDao, never()).advanceTurn(any(), any(), any())
         verifyNoMoreInteractions(playerDao)
     }
 
@@ -233,7 +233,7 @@ class GamePhaseServiceTest {
         assertEquals("GAME_FINISHED", ex.errorCode)
 
         verify(gameDao, never()).tryTransitionPhase(any(), any(), any())
-        verify(gameDao, never()).advanceTurn(any(), any(), any(), any())
+        verify(gameDao, never()).advanceTurn(any(), any(), any())
         verifyNoMoreInteractions(playerDao)
     }
 
@@ -295,7 +295,7 @@ class GamePhaseServiceTest {
 
         assertTrue(result is EndTurnOutcome.Continue)
         // Should call advanceTurn with SAME turnIndex (0, not 1) and consumeExtraTurn = true
-        verify(gameDao).advanceTurn(gameId, 0, 1, true)
+        verify(gameDao).advanceTurn(gameId, 0, 1)
     }
 
     @Test
@@ -320,7 +320,7 @@ class GamePhaseServiceTest {
 
         assertTrue(result is EndTurnOutcome.Continue)
         // Extra turn is for player 2 (turnIndex 1) but it's player 1's (turnIndex 0) turn, so rotate normally
-        verify(gameDao).advanceTurn(gameId, 1, 2, false)
+        verify(gameDao).advanceTurn(gameId, 1, 2)
     }
 
     @Test
@@ -345,7 +345,7 @@ class GamePhaseServiceTest {
 
         assertTrue(result is EndTurnOutcome.Continue)
         // Extra turn from round 1 should not carry over to round 2, normal rotation
-        verify(gameDao).advanceTurn(gameId, 1, 2, false)
+        verify(gameDao).advanceTurn(gameId, 1, 2)
     }
 
     @Test
@@ -370,7 +370,7 @@ class GamePhaseServiceTest {
 
         assertTrue(result is EndTurnOutcome.Continue)
         // Player 2 (turnIndex 1) has extra turn for round 3, keep same index and consume
-        verify(gameDao).advanceTurn(gameId, 1, 3, true)
+        verify(gameDao).advanceTurn(gameId, 1, 3)
     }
 
     @Test
@@ -395,6 +395,6 @@ class GamePhaseServiceTest {
 
         assertTrue(result is EndTurnOutcome.Continue)
         // Wrap to player 1 (turnIndex 0) and increment to round 3
-        verify(gameDao).advanceTurn(gameId, 0, 3, false)
+        verify(gameDao).advanceTurn(gameId, 0, 3)
     }
 }

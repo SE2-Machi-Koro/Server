@@ -108,7 +108,7 @@ class GameSyncServiceIntegrationTest : AbstractDBSetup() {
         // advanceTurn resets turnPhase to ROLL_DICE, clears lastDiceRoll, and
         // clears hasPurchasedThisTurn — so apply it FIRST, then layer the
         // roll / phase / purchase state on top.
-        gameDao.advanceTurn(gameId, nextTurnIndex = 1, roundNumber = 3, consumeExtraTurn = true)
+        gameDao.advanceTurn(gameId, nextTurnIndex = 1, roundNumber = 3)
         gameDao.updateAfterRoll(gameId, diceRoll = 8, phase = TurnPhase.BUY_OR_BUILD)
         gameDao.updateHasPurchasedThisTurn(gameId, hasPurchasedThisTurn = true)
 

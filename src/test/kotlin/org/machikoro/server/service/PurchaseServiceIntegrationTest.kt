@@ -141,8 +141,8 @@ class PurchaseServiceIntegrationTest : AbstractDBSetup() {
     fun `duplicate non-purple establishment purchase increases owned quantity`() {
         purchaseService.purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.BAKERY, null)
 
-        gameDao.advanceTurn(gameId, 1, 1, false)
-        gameDao.advanceTurn(gameId, 0, 2, false)
+        gameDao.advanceTurn(gameId, 1, 1)
+        gameDao.advanceTurn(gameId, 0, 2)
         gameDao.updateTurnPhase(gameId, TurnPhase.BUY_OR_BUILD)
 
         purchaseService.purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.BAKERY, null)
@@ -187,7 +187,7 @@ class PurchaseServiceIntegrationTest : AbstractDBSetup() {
     @Test
     fun `advanceTurn resets purchase flag for next turn`() {
         purchaseService.purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.BAKERY, null)
-        gameDao.advanceTurn(gameId, nextTurnIndex = 1, roundNumber = 1, consumeExtraTurn = true)
+        gameDao.advanceTurn(gameId, nextTurnIndex = 1, roundNumber = 1)
 
         assertFalse(gameDao.findById(gameId)!!.hasPurchasedThisTurn)
     }
@@ -199,8 +199,8 @@ class PurchaseServiceIntegrationTest : AbstractDBSetup() {
         purchaseService.purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.BAKERY, null)
 
         // cycle back to active player's turn
-        gameDao.advanceTurn(gameId, nextTurnIndex = 1, roundNumber = 1, consumeExtraTurn = false)
-        gameDao.advanceTurn(gameId, nextTurnIndex = 0, roundNumber = 2, consumeExtraTurn = false)
+        gameDao.advanceTurn(gameId, nextTurnIndex = 1, roundNumber = 1)
+        gameDao.advanceTurn(gameId, nextTurnIndex = 0, roundNumber = 2)
         gameDao.updateAfterRoll(gameId, diceRoll = 2, phase = TurnPhase.RESOLVE_EFFECTS)
 
         val coinsBefore = playerDao.findById(activePlayerId)!!.coins
@@ -214,8 +214,8 @@ class PurchaseServiceIntegrationTest : AbstractDBSetup() {
     fun `inactive player coins are unaffected during active player earnings resolution`() {
         purchaseService.purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.BAKERY, null)
 
-        gameDao.advanceTurn(gameId, nextTurnIndex = 1, roundNumber = 1, consumeExtraTurn = false)
-        gameDao.advanceTurn(gameId, nextTurnIndex = 0, roundNumber = 2, consumeExtraTurn = false)
+        gameDao.advanceTurn(gameId, nextTurnIndex = 1, roundNumber = 1)
+        gameDao.advanceTurn(gameId, nextTurnIndex = 0, roundNumber = 2)
         gameDao.updateAfterRoll(gameId, diceRoll = 2, phase = TurnPhase.RESOLVE_EFFECTS)
 
         val inactiveBefore = playerDao.findById(inactivePlayerId)!!.coins
@@ -355,8 +355,8 @@ class PurchaseServiceIntegrationTest : AbstractDBSetup() {
     fun `building already built landmark is rejected without mutating state`() {
         purchaseService.purchase(gameId, PurchaseType.LANDMARK, null, LandmarkType.TRAIN_STATION)
 
-        gameDao.advanceTurn(gameId, 1, 1, false)
-        gameDao.advanceTurn(gameId, 0, 2, false)
+        gameDao.advanceTurn(gameId, 1, 1)
+        gameDao.advanceTurn(gameId, 0, 2)
         gameDao.updateTurnPhase(gameId, TurnPhase.BUY_OR_BUILD)
 
         val before = snapshot()
@@ -374,8 +374,8 @@ class PurchaseServiceIntegrationTest : AbstractDBSetup() {
         playerDao.updateCoins(activePlayerId, 20)
         purchaseService.purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.STADIUM, null)
 
-        gameDao.advanceTurn(gameId, 1, 1, false)
-        gameDao.advanceTurn(gameId, 0, 2, false)
+        gameDao.advanceTurn(gameId, 1, 1)
+        gameDao.advanceTurn(gameId, 0, 2)
         gameDao.updateTurnPhase(gameId, TurnPhase.BUY_OR_BUILD)
 
         val before = snapshot()
@@ -393,8 +393,8 @@ class PurchaseServiceIntegrationTest : AbstractDBSetup() {
         playerDao.updateCoins(activePlayerId, 20)
         purchaseService.purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.STADIUM, null)
 
-        gameDao.advanceTurn(gameId, 1, 1, false)
-        gameDao.advanceTurn(gameId, 0, 2, false)
+        gameDao.advanceTurn(gameId, 1, 1)
+        gameDao.advanceTurn(gameId, 0, 2)
         gameDao.updateTurnPhase(gameId, TurnPhase.BUY_OR_BUILD)
 
         purchaseService.purchase(gameId, PurchaseType.ESTABLISHMENT, CardType.TV_STATION, null)
