@@ -330,12 +330,13 @@ class GameDaoTest : AbstractDBSetup() {
         val game = gameDao.findById(id)!!
         assertEquals(null, game.extraTurnPlayerId)
         assertEquals(null, game.extraTurnRoundNumber)
-    fun `updateRerolledThisTurn changes rerolled flag when game exists`() {
-        val id = gameDao.create(hostId)
-        // Initially created game has rerolledThisTurn = false
-        gameDao.updateRerolledThisTurn(id, true)
-        val game = gameDao.findById(id)!!
-        assertTrue(game.rerolledThisTurn)
+        fun `updateRerolledThisTurn changes rerolled flag when game exists`() {
+            val id = gameDao.create(hostId)
+            // Initially created game has rerolledThisTurn = false
+            gameDao.updateRerolledThisTurn(id, true)
+            val game = gameDao.findById(id)!!
+            assertTrue(game.rerolledThisTurn)
+        }
     }
 
     @Test
