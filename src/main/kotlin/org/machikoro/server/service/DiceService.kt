@@ -89,7 +89,13 @@ class DiceService(
 
             // Re-evaluate Amusement Park based on the rerolled result, overriding any grant from the initial roll
             val extraGranted = if (diceCount == TWO_DICE_COUNT && dice.size == 2 && dice[0] == dice[1] && hasAmusementPark(rollingPlayerId)) {
-                gameDao.markExtraTurnIfEligible(request.gameId, rollingPlayerId, game.roundNumber)
+                val justGranted = gameDao.markExtraTurnIfEligible(request.gameId, rollingPlayerId, game.roundNumber)
+                // markExtraTurnIfEligible returns false when the grant already exists for this player+round;
+                // the pending marker is still in place so the player will get their extra turn
+                val alreadyPending = game.extraTurnPlayerId == rollingPlayerId &&
+                        game.extraTurnRoundNumber == game.roundNumber &&
+                        !game.extraTurnConsumed
+                justGranted || alreadyPending
             } else {
                 gameDao.removeExtraTurnMark(request.gameId, rollingPlayerId, game.roundNumber)
                 false

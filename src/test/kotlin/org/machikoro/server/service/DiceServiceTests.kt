@@ -649,6 +649,43 @@ class DiceServiceTests {
     }
 
     @Test
+    fun rerollDiceDoublesWithPendingGrantShouldReturnExtraTurnGrantedTrue() {
+        // Initial roll was doubles → pending grant exists; reroll also doubles → must still broadcast true
+        val diceServiceWithDoubles = object : DiceService(gameDao, playerLandmarkDao, gameStateGuard) {
+            public override fun rollDice(count: Int): List<Int> = listOf(3, 3)
+        }
+
+        // Game state already has a pending (non-consumed) extra turn from the initial roll
+        val gameWithPendingGrant = defaultGame.copy(
+            turnPhase = TurnPhase.RESOLVE_EFFECTS,
+            lastDiceRoll = 6,
+            lastDiceCount = 2,
+            extraTurnPlayerId = 2,
+            extraTurnRoundNumber = 1,
+            extraTurnConsumed = false,
+        )
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(gameWithPendingGrant)
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.RADIO_TOWER))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.RADIO_TOWER, isBuilt = true))
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.TRAIN_STATION))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.TRAIN_STATION, isBuilt = true))
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.AMUSEMENT_PARK))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.AMUSEMENT_PARK, isBuilt = true))
+        whenever(gameDao.tryRerollThisTurn(eq(1), anyInt())).thenReturn(true)
+        // DAO blocks re-grant because same player+round already has a pending grant
+        whenever(gameDao.markExtraTurnIfEligible(1, 2, 1)).thenReturn(false)
+
+        val request = RollDiceRequest(gameId = 1, playerId = 2)
+        val result = diceServiceWithDoubles.rerollDice(request, rollingPlayerId = 2)
+
+        assertEquals(listOf(3, 3), result.result)
+        // Pending grant is still in place; broadcast must reflect that
+        assertEquals(true, result.extraTurnGranted)
+        verify(gameDao).markExtraTurnIfEligible(1, 2, 1)
+        verify(gameDao, never()).removeExtraTurnMark(any(), any(), any())
+    }
+
+    @Test
     fun rerollDiceNonDoublesAfterInitialDoublesShouldClearExtraTurnGrant() {
         // Subclass overrides rollDice to deterministically return non-doubles
         val diceServiceNoDoubles = object : DiceService(gameDao, playerLandmarkDao, gameStateGuard) {
