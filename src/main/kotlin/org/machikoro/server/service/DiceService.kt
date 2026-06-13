@@ -36,11 +36,21 @@ class DiceService(
             val dice = rollDice(diceCount)
             val total = dice.sum()
 
-            if (!gameDao.tryRecordDiceRoll(request.gameId, total)) {
+            if (!gameDao.tryRecordDiceRoll(request.gameId, total, diceCount)) {
                 throw CustomWebSocketException("ROLL_ALREADY_COMPLETED", "Dice have already been rolled for this turn")
             }
 
-            RollDiceResponse(result = dice, total = total)
+            // Detect doubles if rolling two dice and has AmusementPark persist extra-turn grant if eligible
+            val extraGranted = if (diceCount == TWO_DICE_COUNT && dice.size == 2 && dice[0] == dice[1] && hasAmusementPark(rollingPlayerId)) {
+                gameDao.markExtraTurnIfEligible(request.gameId, rollingPlayerId, game.roundNumber)
+            } else {
+                false
+            }
+            if(!extraGranted) {
+                gameDao.removeExtraTurnMark(request.gameId, rollingPlayerId, game.roundNumber) // Ensure no lingering extra turn if not granted
+            }
+
+            RollDiceResponse(result = dice, total = total, extraTurnGranted = extraGranted)
         }
 
     fun rerollDice(request: RollDiceRequest, rollingPlayerId: Int): RollDiceResponse =
@@ -61,9 +71,9 @@ class DiceService(
                 throw CustomWebSocketException("NO_RADIO_TOWER", "You need a built Radio Tower to reroll")
             }
 
-            // Determine dice count from request (same resolver used for initial roll)
-            val diceCount = resolveDiceCount(request)
-            validateDiceCount(diceCount)
+            // Use server-stored count from initial roll — client value is ignored
+            val diceCount = game.lastDiceCount
+                ?: throw CustomWebSocketException("INVALID_DICE_STATE", "No dice count stored from initial roll")
 
             if (diceCount == TWO_DICE_COUNT) {
                 requireTrainStation(rollingPlayerId)
@@ -77,7 +87,21 @@ class DiceService(
                 throw CustomWebSocketException("REROLL_ALREADY_USED", "Reroll could not be applied (phase changed or already rerolled)")
             }
 
-            RollDiceResponse(result = dice, total = total)
+            // Re-evaluate Amusement Park based on the rerolled result, overriding any grant from the initial roll
+            val extraGranted = if (diceCount == TWO_DICE_COUNT && dice.size == 2 && dice[0] == dice[1] && hasAmusementPark(rollingPlayerId)) {
+                val justGranted = gameDao.markExtraTurnIfEligible(request.gameId, rollingPlayerId, game.roundNumber)
+                // markExtraTurnIfEligible returns false when the grant already exists for this player+round;
+                // the pending marker is still in place so the player will get their extra turn
+                val alreadyPending = game.extraTurnPlayerId == rollingPlayerId &&
+                        game.extraTurnRoundNumber == game.roundNumber &&
+                        !game.extraTurnConsumed
+                justGranted || alreadyPending
+            } else {
+                gameDao.removeExtraTurnMark(request.gameId, rollingPlayerId, game.roundNumber)
+                false
+            }
+
+            RollDiceResponse(result = dice, total = total, extraTurnGranted = extraGranted)
         }
 
     private fun resolveDiceCount(request: RollDiceRequest): Int {
@@ -102,8 +126,15 @@ class DiceService(
             throw CustomWebSocketException("NO_TRAIN_STATION", "You need a Train Station to roll two dice!")
         }
     }
+    private fun hasAmusementPark(playerId: Int): Boolean {
+        val hasAmusementParkBuilt = playerLandmarkDao
+            .findByPlayerIdAndType(playerId, LandmarkType.AMUSEMENT_PARK)
+            ?.isBuilt ?: false
 
-    private fun rollDice(count: Int): List<Int> = List(count) { (1..6).random() }
+        return hasAmusementParkBuilt
+    }
+
+    protected fun rollDice(count: Int): List<Int> = List(count) { (1..6).random() }
 
     private companion object {
         const val ONE_DICE_COUNT = 1

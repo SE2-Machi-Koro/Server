@@ -329,6 +329,7 @@ class GameController(
                         "result" to result.result,
                         "total" to result.total,
                         "completed" to result.completed,
+                        "extraTurnGranted" to result.extraTurnGranted,
                         "timestamp" to System.currentTimeMillis(),
                         "state" to state,
                     ),
@@ -347,6 +348,7 @@ class GameController(
                         "result" to result.result,
                         "total" to result.total,
                         "completed" to result.completed,
+                        "extraTurnGranted" to result.extraTurnGranted,
                     ),
                     gameId = request.gameId,
                 )

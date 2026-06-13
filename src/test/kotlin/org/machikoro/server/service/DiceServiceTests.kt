@@ -36,7 +36,7 @@ class DiceServiceTests {
 
     @BeforeEach
     fun permitFirstRecordedRoll() {
-        whenever(gameDao.tryRecordDiceRoll(any(), any())).thenReturn(true)
+        whenever(gameDao.tryRecordDiceRoll(any(), any(), any())).thenReturn(true)
     }
 
     private val defaultGame = GameModel(
@@ -75,7 +75,7 @@ class DiceServiceTests {
         assertThrows(GameNotFoundException::class.java) {
             diceService.rollDice(request, rollingPlayerId = 2)
         }
-        verify(gameDao, never()).tryRecordDiceRoll(any(), any())
+        verify(gameDao, never()).tryRecordDiceRoll(any(), any(), any())
     }
 
     @Test
@@ -89,7 +89,7 @@ class DiceServiceTests {
             diceService.rollDice(request, rollingPlayerId = 2)
         }
         assertEquals("GAME_FINISHED", ex.errorCode)
-        verify(gameDao, never()).tryRecordDiceRoll(any(), any())
+        verify(gameDao, never()).tryRecordDiceRoll(any(), any(), any())
     }
 
     @Test
@@ -117,7 +117,7 @@ class DiceServiceTests {
         }
 
         assertEquals("ROLL_ALREADY_COMPLETED", ex.errorCode)
-        verify(gameDao, never()).tryRecordDiceRoll(any(), any())
+        verify(gameDao, never()).tryRecordDiceRoll(any(), any(), any())
     }
 
     @Test
@@ -238,7 +238,7 @@ class DiceServiceTests {
     @Test
     fun rollDiceShouldRejectWhenAtomicRecordFails() {
         whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(defaultGame)
-        whenever(gameDao.tryRecordDiceRoll(any(), any())).thenReturn(false)
+        whenever(gameDao.tryRecordDiceRoll(any(), any(), any())).thenReturn(false)
 
         val request = RollDiceRequest(gameId = 1, playerId = 2)
         val ex = assertThrows(CustomWebSocketException::class.java) {
@@ -246,7 +246,7 @@ class DiceServiceTests {
         }
 
         assertEquals("ROLL_ALREADY_COMPLETED", ex.errorCode)
-        verify(gameDao).tryRecordDiceRoll(any(), any())
+        verify(gameDao).tryRecordDiceRoll(any(), any(), any())
     }
 
     @Test
@@ -256,7 +256,7 @@ class DiceServiceTests {
         val request = RollDiceRequest(gameId = 1, playerId = 2)
         val result = diceService.rollDice(request, rollingPlayerId = 2)
 
-        verify(gameDao).tryRecordDiceRoll(1, result.total)
+        verify(gameDao).tryRecordDiceRoll(1, result.total, 1)
         assertEquals(true, result.completed)
         assertEquals(TurnPhase.RESOLVE_EFFECTS, result.turnPhase)
     }
@@ -268,7 +268,7 @@ class DiceServiceTests {
         val request = RollDiceRequest(gameId = 1, playerId = 2)
         val result = diceService.rollDice(request, rollingPlayerId = 2)
 
-        verify(gameDao).tryRecordDiceRoll(any(), any())
+        verify(gameDao).tryRecordDiceRoll(any(), any(), any())
     }
 
     @Test
@@ -281,7 +281,7 @@ class DiceServiceTests {
         assertThrows(CustomWebSocketException::class.java) {
             diceService.rollDice(request, rollingPlayerId = 2)
         }
-        verify(gameDao, never()).tryRecordDiceRoll(any(), any())
+        verify(gameDao, never()).tryRecordDiceRoll(any(), any(), any())
     }
 
     // === NEW TESTS ===
@@ -355,6 +355,82 @@ class DiceServiceTests {
     }
 
     @Test
+    fun rollTwoDiceDoublesShouldGrantExtraTurnWhenAmusementParkBuilt() {
+        // Create a DiceService subclass to deterministically return doubles
+        val diceServiceWithDoubles = object : DiceService(gameDao, playerLandmarkDao, gameStateGuard) {
+            // make this method protected/open in production so tests may override it
+            public override fun rollDice(count: Int): List<Int> = listOf(4, 4)
+        }
+
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(defaultGame)
+        // Player has Amusement Park built
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.AMUSEMENT_PARK))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.AMUSEMENT_PARK, isBuilt = true))
+        // Player has built Train Station
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.TRAIN_STATION))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.TRAIN_STATION, isBuilt = true))
+
+        // Simulate DB granting extra turn
+        whenever(gameDao.markExtraTurnIfEligible(1, 2, defaultGame.roundNumber)).thenReturn(true)
+
+        val request = RollDiceRequest(gameId = 1, rollTwoDice = true)
+        val result = diceServiceWithDoubles.rollDice(request, rollingPlayerId = 2)
+
+        assertEquals(listOf(4, 4), result.result)
+        assertEquals(8, result.total)
+        assertEquals(true, result.extraTurnGranted)
+        verify(gameDao).markExtraTurnIfEligible(1, 2, defaultGame.roundNumber)
+    }
+
+    @Test
+    fun rollTwoDiceDoublesShouldNotGrantWhenNoAmusementPark() {
+        val diceServiceWithDoubles = object : DiceService(gameDao, playerLandmarkDao, gameStateGuard) {
+            public override fun rollDice(count: Int): List<Int> = listOf(2, 2)
+        }
+
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(defaultGame)
+        // Player does NOT have Amusement Park built
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.AMUSEMENT_PARK))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.AMUSEMENT_PARK, isBuilt = false))
+        // Player has built Train Station
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.TRAIN_STATION))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.TRAIN_STATION, isBuilt = true))
+
+
+        val request = RollDiceRequest(gameId = 1, rollTwoDice = true)
+        val result = diceServiceWithDoubles.rollDice(request, rollingPlayerId = 2)
+
+        assertEquals(listOf(2, 2), result.result)
+        assertEquals(4, result.total)
+        assertEquals(false, result.extraTurnGranted)
+        verify(gameDao, never()).markExtraTurnIfEligible(any(), any(), any())
+    }
+
+    @Test
+    fun rollTwoDiceDoublesShouldNotGrantIfAlreadyGrantedThisRound() {
+        val diceServiceWithDoubles = object : DiceService(gameDao, playerLandmarkDao, gameStateGuard) {
+            public override fun rollDice(count: Int): List<Int> = listOf(6, 6)
+        }
+
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(defaultGame)
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.AMUSEMENT_PARK))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.AMUSEMENT_PARK, isBuilt = true))
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.TRAIN_STATION))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.TRAIN_STATION, isBuilt = true))
+
+
+        // Already granted (DB returns false when trying to mark again)
+        whenever(gameDao.markExtraTurnIfEligible(1, 2, defaultGame.roundNumber)).thenReturn(false)
+
+        val request = RollDiceRequest(gameId = 1, rollTwoDice = true)
+        val result = diceServiceWithDoubles.rollDice(request, rollingPlayerId = 2)
+
+        assertEquals(listOf(6, 6), result.result)
+        assertEquals(12, result.total)
+        // markExtraTurnIfEligible returned false indicating no new grant
+        assertEquals(false, result.extraTurnGranted)
+        verify(gameDao).markExtraTurnIfEligible(1, 2, defaultGame.roundNumber)
+    }
     fun rerollDiceShouldThrowWhenGameNotFound() {
         whenever(gameStateGuard.ensureGameIsRunning(1))
             .thenThrow(GameNotFoundException("Game 1 not found"))
@@ -428,7 +504,7 @@ class DiceServiceTests {
     @Test
     fun rerollDiceShouldThrowWhenRerollAlreadyUsedThisTurn() {
         whenever(gameStateGuard.ensureGameIsRunning(1))
-            .thenReturn(defaultGame.copy(turnPhase = TurnPhase.RESOLVE_EFFECTS, lastDiceRoll = 4))
+            .thenReturn(defaultGame.copy(turnPhase = TurnPhase.RESOLVE_EFFECTS, lastDiceRoll = 4, lastDiceCount = 1))
         whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.RADIO_TOWER))
             .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.RADIO_TOWER, isBuilt = true))
         whenever(gameDao.tryRerollThisTurn(eq(1), anyInt()))
@@ -446,7 +522,7 @@ class DiceServiceTests {
     @Test
     fun rerollDiceShouldSucceedWithSingleDieWhenRadioTowerBuilt() {
         whenever(gameStateGuard.ensureGameIsRunning(1))
-            .thenReturn(defaultGame.copy(turnPhase = TurnPhase.RESOLVE_EFFECTS, lastDiceRoll = 4))
+            .thenReturn(defaultGame.copy(turnPhase = TurnPhase.RESOLVE_EFFECTS, lastDiceRoll = 4, lastDiceCount = 1))
         whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.RADIO_TOWER))
             .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.RADIO_TOWER, isBuilt = true))
         whenever(gameDao.tryRerollThisTurn(eq(1), anyInt())).thenReturn(true)
@@ -463,7 +539,7 @@ class DiceServiceTests {
     @Test
     fun rerollDiceShouldSucceedWithTwoDiceWhenRadioTowerAndTrainStationBuilt() {
         whenever(gameStateGuard.ensureGameIsRunning(1))
-            .thenReturn(defaultGame.copy(turnPhase = TurnPhase.RESOLVE_EFFECTS, lastDiceRoll = 5))
+            .thenReturn(defaultGame.copy(turnPhase = TurnPhase.RESOLVE_EFFECTS, lastDiceRoll = 5, lastDiceCount = 2))
         whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.RADIO_TOWER))
             .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.RADIO_TOWER, isBuilt = true))
         whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.TRAIN_STATION))
@@ -480,28 +556,27 @@ class DiceServiceTests {
     }
 
     @Test
-    fun rerollDiceShouldThrowWhenTryingToRollTwoDiceWithoutTrainStation() {
+    fun rerollDiceShouldUseServerSideDiceCountIgnoringClientRequest() {
+        // Initial roll was with 1 die
         whenever(gameStateGuard.ensureGameIsRunning(1))
-            .thenReturn(defaultGame.copy(turnPhase = TurnPhase.RESOLVE_EFFECTS, lastDiceRoll = 4))
+            .thenReturn(defaultGame.copy(turnPhase = TurnPhase.RESOLVE_EFFECTS, lastDiceRoll = 4, lastDiceCount = 1))
         whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.RADIO_TOWER))
             .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.RADIO_TOWER, isBuilt = true))
-        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.TRAIN_STATION))
-            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.TRAIN_STATION, isBuilt = false))
-
         whenever(gameDao.tryRerollThisTurn(eq(1), anyInt())).thenReturn(true)
-        val request = RollDiceRequest(gameId = 1, playerId = 2, rollTwoDice = true)
 
-        val ex = assertThrows(CustomWebSocketException::class.java) {
-            diceService.rerollDice(request, rollingPlayerId = 2)
-        }
-        assertEquals("NO_TRAIN_STATION", ex.errorCode)
-        verify(gameDao, never()).tryRerollThisTurn(eq(1), anyInt())
+        // Client tries to escalate to 2 dice on reroll
+        val request = RollDiceRequest(gameId = 1, playerId = 2, rollTwoDice = true)
+        val result = diceService.rerollDice(request, rollingPlayerId = 2)
+
+        // Server ignores client request, uses stored lastDiceCount = 1
+        assertEquals(1, result.result.size)
+        verify(playerLandmarkDao, never()).findByPlayerIdAndType(2, LandmarkType.TRAIN_STATION)
     }
 
     @Test
     fun rerollDiceShouldKeepPhaseAtResolveEffects() {
         whenever(gameStateGuard.ensureGameIsRunning(1))
-            .thenReturn(defaultGame.copy(turnPhase = TurnPhase.RESOLVE_EFFECTS, lastDiceRoll = 3))
+            .thenReturn(defaultGame.copy(turnPhase = TurnPhase.RESOLVE_EFFECTS, lastDiceRoll = 3, lastDiceCount = 1))
         whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.RADIO_TOWER))
             .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.RADIO_TOWER, isBuilt = true))
         whenever(gameDao.tryRerollThisTurn(eq(1), anyInt())).thenReturn(true)
@@ -519,7 +594,7 @@ class DiceServiceTests {
         whenever(gameStateGuard.ensureGameIsRunning(1)).thenAnswer {
             firstEntered.countDown()
             releaseFirst.await(1, TimeUnit.SECONDS)
-            defaultGame.copy(turnPhase = TurnPhase.RESOLVE_EFFECTS, lastDiceRoll = 4)
+            defaultGame.copy(turnPhase = TurnPhase.RESOLVE_EFFECTS, lastDiceRoll = 4, lastDiceCount = 1)
         }
         whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.RADIO_TOWER))
             .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.RADIO_TOWER, isBuilt = true))
@@ -544,6 +619,131 @@ class DiceServiceTests {
         } finally {
             executor.shutdownNow()
         }
+    }
+
+    @Test
+    fun rerollDiceDoublesWithAmusementParkShouldGrantExtraTurn() {
+        // Subclass overrides rollDice to deterministically return doubles
+        val diceServiceWithDoubles = object : DiceService(gameDao, playerLandmarkDao, gameStateGuard) {
+            public override fun rollDice(count: Int): List<Int> = listOf(3, 3)
+        }
+
+        whenever(gameStateGuard.ensureGameIsRunning(1))
+            .thenReturn(defaultGame.copy(turnPhase = TurnPhase.RESOLVE_EFFECTS, lastDiceRoll = 5, lastDiceCount = 2))
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.RADIO_TOWER))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.RADIO_TOWER, isBuilt = true))
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.TRAIN_STATION))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.TRAIN_STATION, isBuilt = true))
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.AMUSEMENT_PARK))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.AMUSEMENT_PARK, isBuilt = true))
+        whenever(gameDao.tryRerollThisTurn(eq(1), anyInt())).thenReturn(true)
+        whenever(gameDao.markExtraTurnIfEligible(1, 2, defaultGame.roundNumber)).thenReturn(true)
+
+        val request = RollDiceRequest(gameId = 1, playerId = 2)
+        val result = diceServiceWithDoubles.rerollDice(request, rollingPlayerId = 2)
+
+        assertEquals(listOf(3, 3), result.result)
+        assertEquals(true, result.extraTurnGranted)
+        verify(gameDao).markExtraTurnIfEligible(1, 2, defaultGame.roundNumber)
+        verify(gameDao, never()).removeExtraTurnMark(any(), any(), any())
+    }
+
+    @Test
+    fun rerollDiceDoublesWithPendingGrantShouldReturnExtraTurnGrantedTrue() {
+        // Initial roll was doubles → pending grant exists; reroll also doubles → must still broadcast true
+        val diceServiceWithDoubles = object : DiceService(gameDao, playerLandmarkDao, gameStateGuard) {
+            public override fun rollDice(count: Int): List<Int> = listOf(3, 3)
+        }
+
+        // Game state already has a pending (non-consumed) extra turn from the initial roll
+        val gameWithPendingGrant = defaultGame.copy(
+            turnPhase = TurnPhase.RESOLVE_EFFECTS,
+            lastDiceRoll = 6,
+            lastDiceCount = 2,
+            extraTurnPlayerId = 2,
+            extraTurnRoundNumber = 1,
+            extraTurnConsumed = false,
+        )
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(gameWithPendingGrant)
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.RADIO_TOWER))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.RADIO_TOWER, isBuilt = true))
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.TRAIN_STATION))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.TRAIN_STATION, isBuilt = true))
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.AMUSEMENT_PARK))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.AMUSEMENT_PARK, isBuilt = true))
+        whenever(gameDao.tryRerollThisTurn(eq(1), anyInt())).thenReturn(true)
+        // DAO blocks re-grant because same player+round already has a pending grant
+        whenever(gameDao.markExtraTurnIfEligible(1, 2, 1)).thenReturn(false)
+
+        val request = RollDiceRequest(gameId = 1, playerId = 2)
+        val result = diceServiceWithDoubles.rerollDice(request, rollingPlayerId = 2)
+
+        assertEquals(listOf(3, 3), result.result)
+        // Pending grant is still in place; broadcast must reflect that
+        assertEquals(true, result.extraTurnGranted)
+        verify(gameDao).markExtraTurnIfEligible(1, 2, 1)
+        verify(gameDao, never()).removeExtraTurnMark(any(), any(), any())
+    }
+
+    @Test
+    fun rerollDiceNonDoublesAfterInitialDoublesShouldClearExtraTurnGrant() {
+        // Subclass overrides rollDice to deterministically return non-doubles
+        val diceServiceNoDoubles = object : DiceService(gameDao, playerLandmarkDao, gameStateGuard) {
+            public override fun rollDice(count: Int): List<Int> = listOf(2, 5)
+        }
+
+        // Initial roll was doubles so extra turn mark is already set
+        whenever(gameStateGuard.ensureGameIsRunning(1))
+            .thenReturn(defaultGame.copy(
+                turnPhase = TurnPhase.RESOLVE_EFFECTS,
+                lastDiceRoll = 8,
+                lastDiceCount = 2,
+                extraTurnPlayerId = 2,
+                extraTurnRoundNumber = 1,
+            ))
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.RADIO_TOWER))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.RADIO_TOWER, isBuilt = true))
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.TRAIN_STATION))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.TRAIN_STATION, isBuilt = true))
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.AMUSEMENT_PARK))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.AMUSEMENT_PARK, isBuilt = true))
+        whenever(gameDao.tryRerollThisTurn(eq(1), anyInt())).thenReturn(true)
+        whenever(gameDao.removeExtraTurnMark(1, 2, defaultGame.roundNumber)).thenReturn(true)
+
+        val request = RollDiceRequest(gameId = 1, playerId = 2)
+        val result = diceServiceNoDoubles.rerollDice(request, rollingPlayerId = 2)
+
+        assertEquals(listOf(2, 5), result.result)
+        assertEquals(false, result.extraTurnGranted)
+        // Must clear the grant from the initial doubles roll
+        verify(gameDao).removeExtraTurnMark(1, 2, defaultGame.roundNumber)
+        verify(gameDao, never()).markExtraTurnIfEligible(any(), any(), any())
+    }
+
+    @Test
+    fun rerollDiceDoublesWithoutAmusementParkShouldNotGrantExtraTurn() {
+        val diceServiceWithDoubles = object : DiceService(gameDao, playerLandmarkDao, gameStateGuard) {
+            public override fun rollDice(count: Int): List<Int> = listOf(5, 5)
+        }
+
+        whenever(gameStateGuard.ensureGameIsRunning(1))
+            .thenReturn(defaultGame.copy(turnPhase = TurnPhase.RESOLVE_EFFECTS, lastDiceRoll = 4, lastDiceCount = 2))
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.RADIO_TOWER))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.RADIO_TOWER, isBuilt = true))
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.TRAIN_STATION))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.TRAIN_STATION, isBuilt = true))
+        // No Amusement Park
+        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.AMUSEMENT_PARK))
+            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.AMUSEMENT_PARK, isBuilt = false))
+        whenever(gameDao.tryRerollThisTurn(eq(1), anyInt())).thenReturn(true)
+
+        val request = RollDiceRequest(gameId = 1, playerId = 2)
+        val result = diceServiceWithDoubles.rerollDice(request, rollingPlayerId = 2)
+
+        assertEquals(listOf(5, 5), result.result)
+        assertEquals(false, result.extraTurnGranted)
+        verify(gameDao, never()).markExtraTurnIfEligible(any(), any(), any())
+        verify(gameDao).removeExtraTurnMark(any(), any(), any())
     }
 
 }

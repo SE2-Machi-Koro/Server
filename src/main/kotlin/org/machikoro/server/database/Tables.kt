@@ -94,9 +94,14 @@ object Games : IntIdTable("games") {
     val currentTurnIndex = integer("current_turn_index").default(0)
     val turnPhase = enumerationByName("turn_phase", 20, TurnPhase::class).default(TurnPhase.ROLL_DICE)
     val lastDiceRoll = integer("last_dice_roll").nullable()
+    val lastDiceCount = integer("last_dice_count").nullable()
     val rerolledThisTurn = bool("rerolled_this_turn").default(false)
     val roundNumber = integer("round_number").default(1)
     val hasPurchasedThisTurn = bool("has_purchased_this_turn").default(false)
+    val extraTurnPlayerId = integer("extra_turn_player_id").nullable()
+    val extraTurnRoundNumber = integer("extra_turn_round_number").nullable()
+    // True once the pending extra turn has been consumed; prevents re-grant in the same round
+    val extraTurnConsumed = bool("extra_turn_consumed").default(false)
 }
 
 /**

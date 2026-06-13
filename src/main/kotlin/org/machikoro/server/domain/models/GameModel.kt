@@ -12,7 +12,11 @@ data class GameModel(
     val currentTurnIndex: Int,
     val turnPhase: TurnPhase,
     val lastDiceRoll: Int?,
+    val lastDiceCount: Int? = null,
     val roundNumber: Int,
     val hasPurchasedThisTurn: Boolean,
+    val extraTurnPlayerId: Int? = null,
+    val extraTurnRoundNumber: Int? = null,
+    val extraTurnConsumed: Boolean = false,
     val rerolledThisTurn: Boolean,
 )

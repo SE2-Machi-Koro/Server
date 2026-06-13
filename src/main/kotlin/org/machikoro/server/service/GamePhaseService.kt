@@ -72,8 +72,21 @@ class GamePhaseService(
         val players = playerDao.getPlayers(gameId)
         check(players.isNotEmpty()) { "Game $gameId has no players" }
 
-        val nextTurnIndex = (game.currentTurnIndex + 1) % players.size
-        val nextRoundNumber = if (nextTurnIndex == 0) game.roundNumber + 1 else game.roundNumber
+        val currentPlayer = players[game.currentTurnIndex]
+        val consumeExtra = (game.extraTurnPlayerId != null &&
+                game.extraTurnPlayerId == currentPlayer.id &&
+                game.extraTurnRoundNumber == game.roundNumber &&
+                !game.extraTurnConsumed)
+
+        val nextTurnIndex = if (consumeExtra){ game.currentTurnIndex }
+        else { (game.currentTurnIndex + 1) % players.size }
+
+        val nextRoundNumber = if (!consumeExtra && nextTurnIndex == 0) game.roundNumber + 1 else game.roundNumber
+
+        // Clear the consumed marker atomically before advancing so it can't be consumed again
+        if (consumeExtra) {
+            gameDao.removeExtraTurnMark(gameId, currentPlayer.id, game.roundNumber)
+        }
 
         gameDao.advanceTurn(gameId, nextTurnIndex, nextRoundNumber)
         return TurnPhase.ROLL_DICE

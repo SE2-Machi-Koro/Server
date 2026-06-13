@@ -905,6 +905,60 @@ class GameControllerTest {
     }
 
     @Test
+    fun `rollDice broadcasts extraTurnGranted flag when diceService indicates grant`() {
+        val gameId = 1
+        val activePlayer = PlayerModel(id = 9, gameId = gameId, userId = alice.userId, turnOrder = 0, coins = 3, lastSeenAt = null)
+        val request = RollDiceRequest(gameId = gameId)
+        val response = RollDiceResponse(result = listOf(3, 3), total = 6, extraTurnGranted = true)
+        val snapshot = gameStateDto(gameId, turnPhase = TurnPhase.RESOLVE_EFFECTS)
+
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice)).thenReturn(activePlayer)
+        whenever(diceService.rollDice(request, activePlayer.id)).thenReturn(response)
+        whenever(gameSyncService.buildSnapshot(gameId)).thenReturn(snapshot)
+
+        controller.rollDice(request, authedAccessor())
+
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate, times(2)).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+
+        val message = captor.firstValue
+        @Suppress("UNCHECKED_CAST")
+        val payload = message.payload as Map<String, Any?>
+        assertEquals(true, payload["extraTurnGranted"])
+
+        val actionMessage = captor.secondValue
+        @Suppress("UNCHECKED_CAST")
+        val actionPayload = actionMessage.payload as Map<String, Any?>
+        assertEquals(true, actionPayload["extraTurnGranted"])
+    }
+
+    @Test
+    fun `rollDice broadcasts extraTurnGranted false when diceService indicates not granted`() {
+        val gameId = 1
+        val activePlayer = PlayerModel(id = 9, gameId = gameId, userId = alice.userId, turnOrder = 0, coins = 3, lastSeenAt = null)
+        val request = RollDiceRequest(gameId = gameId)
+        val response = RollDiceResponse(result = listOf(3, 3), total = 6, extraTurnGranted = false)
+        val snapshot = gameStateDto(gameId, turnPhase = TurnPhase.RESOLVE_EFFECTS)
+
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice)).thenReturn(activePlayer)
+        whenever(diceService.rollDice(request, activePlayer.id)).thenReturn(response)
+        whenever(gameSyncService.buildSnapshot(gameId)).thenReturn(snapshot)
+
+        controller.rollDice(request, authedAccessor())
+
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate, times(2)).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+
+        val message = captor.firstValue
+        @Suppress("UNCHECKED_CAST")
+        val payload = message.payload as Map<String, Any?>
+        assertEquals(false, payload["extraTurnGranted"])
+
+        val actionMessage = captor.secondValue
+        @Suppress("UNCHECKED_CAST")
+        val actionPayload = actionMessage.payload as Map<String, Any?>
+        assertEquals(false, actionPayload["extraTurnGranted"])
+    }
     fun `rerollDice throws UNAUTHENTICATED when accessor has no principal`() {
         assertUnauthenticated { controller.rerollDice(RollDiceRequest(gameId = 42, playerId = 1), it) }
         verify(diceService, never()).rerollDice(any(), any())

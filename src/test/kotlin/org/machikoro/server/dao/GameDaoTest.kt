@@ -1,7 +1,9 @@
 package org.machikoro.server.dao
 
+import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.deleteAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.update
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
@@ -134,8 +136,8 @@ class GameDaoTest : AbstractDBSetup() {
     fun `tryRecordDiceRoll records exactly one roll in a turn`() {
         val id = gameDao.create(hostId)
 
-        assertTrue(gameDao.tryRecordDiceRoll(id, diceRoll = 4))
-        assertFalse(gameDao.tryRecordDiceRoll(id, diceRoll = 6))
+        assertTrue(gameDao.tryRecordDiceRoll(id, diceRoll = 4, diceCount = 1))
+        assertFalse(gameDao.tryRecordDiceRoll(id, diceRoll = 6, diceCount = 1))
 
         val game = gameDao.findById(id)!!
         assertEquals(4, game.lastDiceRoll)
@@ -237,6 +239,101 @@ class GameDaoTest : AbstractDBSetup() {
         assertThrows<GameNotFoundException> {
             gameDao.delete(999999)
         }
+    }
+
+    @Test
+    fun `markExtraTurnIfEligible grants extra turn when none exists`() {
+        val id = gameDao.create(hostId)
+
+        // grant to player id 123 for round 1
+        val granted = gameDao.markExtraTurnIfEligible(id, playerId = 123, roundNumber = 1)
+        assertTrue(granted)
+
+        val game = gameDao.findById(id)!!
+        assertEquals(123, game.extraTurnPlayerId)
+        assertEquals(1, game.extraTurnRoundNumber)
+    }
+
+    @Test
+    fun `markExtraTurnIfEligible does not re-grant for same round`() {
+        val id = gameDao.create(hostId)
+
+        val first = gameDao.markExtraTurnIfEligible(id, playerId = 123, roundNumber = 1)
+        assertTrue(first)
+
+        // second attempt in same round should fail
+        val second = gameDao.markExtraTurnIfEligible(id, playerId = 123, roundNumber = 1)
+        assertFalse(second)
+
+        val game = gameDao.findById(id)!!
+        assertEquals(123, game.extraTurnPlayerId)
+        assertEquals(1, game.extraTurnRoundNumber)
+    }
+
+    @Test
+    fun `markExtraTurnIfEligible does grant for same round different player`() {
+        val id = gameDao.create(hostId)
+
+        val first = gameDao.markExtraTurnIfEligible(id, playerId = 123, roundNumber = 1)
+        assertTrue(first)
+
+        // second attempt in same round should fail
+        val second = gameDao.markExtraTurnIfEligible(id, playerId = 124, roundNumber = 1)
+        assertTrue(second)
+
+        val game = gameDao.findById(id)!!
+        assertEquals(124, game.extraTurnPlayerId)
+        assertEquals(1, game.extraTurnRoundNumber)
+    }
+
+    @Test
+    fun `markExtraTurnIfEligible does grant for different round same player`() {
+        val id = gameDao.create(hostId)
+
+        val first = gameDao.markExtraTurnIfEligible(id, playerId = 123, roundNumber = 1)
+        assertTrue(first)
+
+        // second attempt in same round should fail
+        val second = gameDao.markExtraTurnIfEligible(id, playerId = 123, roundNumber = 2)
+        assertTrue(second)
+
+        val game = gameDao.findById(id)!!
+        assertEquals(123, game.extraTurnPlayerId)
+        assertEquals(2, game.extraTurnRoundNumber)
+    }
+
+    @Test
+    fun `RermoveExtraTurnMark marks consumed and blocks re-grant in same round`() {
+        val id = gameDao.create(hostId)
+
+        val first = gameDao.markExtraTurnIfEligible(id, playerId = 123, roundNumber = 1)
+        assertTrue(first)
+
+        val removed = gameDao.removeExtraTurnMark(id, playerId = 123, roundNumber = 1)
+        assertTrue(removed)
+
+        // Player/round kept so re-grant is blocked; consumed flag set
+        val game = gameDao.findById(id)!!
+        assertEquals(123, game.extraTurnPlayerId)
+        assertEquals(1, game.extraTurnRoundNumber)
+        assertTrue(game.extraTurnConsumed)
+
+        // Re-grant for same player+round must be blocked
+        val reGrant = gameDao.markExtraTurnIfEligible(id, playerId = 123, roundNumber = 1)
+        assertFalse(reGrant)
+    }
+
+    @Test
+    fun `RermoveExtraTurnMark does not empty fields and returns false if fields are empty`() {
+        val id = gameDao.create(hostId)
+
+        // No extra turn was granted, so there is nothing to remove
+        val second = gameDao.removeExtraTurnMark(id, playerId = 123, roundNumber = 1)
+        assertFalse(second)
+
+        val game = gameDao.findById(id)!!
+        assertEquals(null, game.extraTurnPlayerId)
+        assertEquals(null, game.extraTurnRoundNumber)
     }
 
     @Test

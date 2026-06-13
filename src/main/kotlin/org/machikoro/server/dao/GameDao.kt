@@ -5,6 +5,8 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.isNotNull
 import org.jetbrains.exposed.v1.core.isNull
+import org.jetbrains.exposed.v1.core.neq
+import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insertAndGetId
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -30,8 +32,12 @@ class GameDao {
         currentTurnIndex = this[Games.currentTurnIndex],
         turnPhase = this[Games.turnPhase],
         lastDiceRoll = this[Games.lastDiceRoll],
+        lastDiceCount = this[Games.lastDiceCount],
         roundNumber = this[Games.roundNumber],
         hasPurchasedThisTurn = this[Games.hasPurchasedThisTurn],
+        extraTurnPlayerId = this[Games.extraTurnPlayerId],
+        extraTurnRoundNumber = this[Games.extraTurnRoundNumber],
+        extraTurnConsumed = this[Games.extraTurnConsumed],
         rerolledThisTurn = this[Games.rerolledThisTurn],
     )
 
@@ -149,14 +155,45 @@ class GameDao {
      * Persists the only legal transition out of ROLL_DICE. The conditional
      * update prevents two simultaneous requests from recording separate rolls.
      */
-    fun tryRecordDiceRoll(id: Int, diceRoll: Int): Boolean = transaction {
+    fun tryRecordDiceRoll(id: Int, diceRoll: Int, diceCount: Int): Boolean = transaction {
         Games.update({
             (Games.id eq id) and
                 (Games.turnPhase eq TurnPhase.ROLL_DICE) and
                 Games.lastDiceRoll.isNull()
         }) {
             it[Games.lastDiceRoll] = diceRoll
+            it[Games.lastDiceCount] = diceCount
             it[Games.turnPhase] = TurnPhase.RESOLVE_EFFECTS
+        } > 0
+    }
+
+    /**
+     * Grants an extra turn to playerId for the current round if not already granted
+     * (or already consumed) for the same player in the same round. Returns true if persisted.
+     */
+    fun markExtraTurnIfEligible(gameId: Int, playerId: Int, roundNumber: Int): Boolean = transaction {
+        // Block grant when same player + same round (pending or consumed); allow otherwise
+        Games.update({
+            (Games.id eq gameId) and
+                    (Games.extraTurnRoundNumber.isNull() or
+                            (Games.extraTurnRoundNumber neq roundNumber) or
+                            ((Games.extraTurnPlayerId neq playerId) and (Games.extraTurnRoundNumber eq roundNumber)))
+        }) {
+            it[Games.extraTurnPlayerId] = playerId
+            it[Games.extraTurnRoundNumber] = roundNumber
+            it[Games.extraTurnConsumed] = false
+        } > 0
+    }
+
+    fun removeExtraTurnMark(gameId: Int, playerId: Int, roundNumber: Int): Boolean = transaction {
+        // Mark consumed but keep player/round so re-grant is blocked for the rest of this round
+        Games.update({
+            (Games.id eq gameId) and
+                    (Games.extraTurnPlayerId eq playerId) and
+                    (Games.extraTurnRoundNumber eq roundNumber) and
+                    (Games.extraTurnConsumed eq false)
+        }) {
+            it[Games.extraTurnConsumed] = true
         } > 0
     }
 
@@ -238,6 +275,7 @@ class GameDao {
             it[Games.roundNumber] = roundNumber
             it[Games.turnPhase] = TurnPhase.ROLL_DICE
             it[Games.lastDiceRoll] = null
+            it[Games.lastDiceCount] = null
             it[Games.hasPurchasedThisTurn] = false
             it[Games.rerolledThisTurn] = false
         }
