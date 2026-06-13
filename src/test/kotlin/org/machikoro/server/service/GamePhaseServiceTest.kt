@@ -296,6 +296,7 @@ class GamePhaseServiceTest {
 
         assertTrue(result is EndTurnOutcome.Continue)
         // Should call advanceTurn with SAME turnIndex (0, not 1) and consumeExtraTurn = true
+        verify(gameDao).removeExtraTurnMark(gameId, 1, 1)
         verify(gameDao).advanceTurn(gameId, 0, 1)
     }
 
@@ -371,6 +372,7 @@ class GamePhaseServiceTest {
 
         assertTrue(result is EndTurnOutcome.Continue)
         // Player 2 (turnIndex 1) has extra turn for round 3, keep same index and consume
+        verify(gameDao).removeExtraTurnMark(gameId, 2, 3)
         verify(gameDao).advanceTurn(gameId, 1, 3)
     }
 

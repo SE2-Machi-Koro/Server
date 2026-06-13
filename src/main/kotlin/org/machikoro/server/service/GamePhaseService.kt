@@ -82,6 +82,11 @@ class GamePhaseService(
 
         val nextRoundNumber = if (!consumeExtra && nextTurnIndex == 0) game.roundNumber + 1 else game.roundNumber
 
+        // Clear the consumed marker atomically before advancing so it can't be consumed again
+        if (consumeExtra) {
+            gameDao.removeExtraTurnMark(gameId, currentPlayer.id, game.roundNumber)
+        }
+
         gameDao.advanceTurn(gameId, nextTurnIndex, nextRoundNumber)
         return TurnPhase.ROLL_DICE
     }

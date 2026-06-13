@@ -32,6 +32,7 @@ class GameDao {
         currentTurnIndex = this[Games.currentTurnIndex],
         turnPhase = this[Games.turnPhase],
         lastDiceRoll = this[Games.lastDiceRoll],
+        lastDiceCount = this[Games.lastDiceCount],
         roundNumber = this[Games.roundNumber],
         hasPurchasedThisTurn = this[Games.hasPurchasedThisTurn],
         extraTurnPlayerId = this[Games.extraTurnPlayerId],
@@ -153,13 +154,14 @@ class GameDao {
      * Persists the only legal transition out of ROLL_DICE. The conditional
      * update prevents two simultaneous requests from recording separate rolls.
      */
-    fun tryRecordDiceRoll(id: Int, diceRoll: Int): Boolean = transaction {
+    fun tryRecordDiceRoll(id: Int, diceRoll: Int, diceCount: Int): Boolean = transaction {
         Games.update({
             (Games.id eq id) and
                 (Games.turnPhase eq TurnPhase.ROLL_DICE) and
                 Games.lastDiceRoll.isNull()
         }) {
             it[Games.lastDiceRoll] = diceRoll
+            it[Games.lastDiceCount] = diceCount
             it[Games.turnPhase] = TurnPhase.RESOLVE_EFFECTS
         } > 0
     }
@@ -274,6 +276,7 @@ class GameDao {
             it[Games.roundNumber] = roundNumber
             it[Games.turnPhase] = TurnPhase.ROLL_DICE
             it[Games.lastDiceRoll] = null
+            it[Games.lastDiceCount] = null
             it[Games.hasPurchasedThisTurn] = false
             it[Games.rerolledThisTurn] = false
         }

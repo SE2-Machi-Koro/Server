@@ -136,8 +136,8 @@ class GameDaoTest : AbstractDBSetup() {
     fun `tryRecordDiceRoll records exactly one roll in a turn`() {
         val id = gameDao.create(hostId)
 
-        assertTrue(gameDao.tryRecordDiceRoll(id, diceRoll = 4))
-        assertFalse(gameDao.tryRecordDiceRoll(id, diceRoll = 6))
+        assertTrue(gameDao.tryRecordDiceRoll(id, diceRoll = 4, diceCount = 1))
+        assertFalse(gameDao.tryRecordDiceRoll(id, diceRoll = 6, diceCount = 1))
 
         val game = gameDao.findById(id)!!
         assertEquals(4, game.lastDiceRoll)
