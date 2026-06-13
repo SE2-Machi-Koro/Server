@@ -17,5 +17,6 @@ data class GameModel(
     val hasPurchasedThisTurn: Boolean,
     val extraTurnPlayerId: Int? = null,
     val extraTurnRoundNumber: Int? = null,
+    val extraTurnConsumed: Boolean = false,
     val rerolledThisTurn: Boolean,
 )

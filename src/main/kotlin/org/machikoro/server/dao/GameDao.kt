@@ -37,6 +37,7 @@ class GameDao {
         hasPurchasedThisTurn = this[Games.hasPurchasedThisTurn],
         extraTurnPlayerId = this[Games.extraTurnPlayerId],
         extraTurnRoundNumber = this[Games.extraTurnRoundNumber],
+        extraTurnConsumed = this[Games.extraTurnConsumed],
         rerolledThisTurn = this[Games.rerolledThisTurn],
     )
 
@@ -168,33 +169,31 @@ class GameDao {
 
     /**
      * Grants an extra turn to playerId for the current round if not already granted
-     * to the same player in the same round. Returns true if a grant was persisted.
+     * (or already consumed) for the same player in the same round. Returns true if persisted.
      */
     fun markExtraTurnIfEligible(gameId: Int, playerId: Int, roundNumber: Int): Boolean = transaction {
-        // Only set extra_turn_player_id and extra_turn_round_number when:
-        // - extra_turn_round_number is null, or
-        // - extra_turn_round_number != roundNumber or
-        // - extra_turn_round_number = roundNumber and extra_turn_palyer_id != playrID (meaning it hasn't been granted this round to this player).
+        // Block grant when same player + same round (pending or consumed); allow otherwise
         Games.update({
             (Games.id eq gameId) and
-                    (Games.extraTurnRoundNumber.isNull() or (
-                            (Games.extraTurnPlayerId neq playerId) and (Games.extraTurnRoundNumber eq roundNumber))
-                            or (Games.extraTurnRoundNumber neq roundNumber ))
+                    (Games.extraTurnRoundNumber.isNull() or
+                            (Games.extraTurnRoundNumber neq roundNumber) or
+                            ((Games.extraTurnPlayerId neq playerId) and (Games.extraTurnRoundNumber eq roundNumber)))
         }) {
             it[Games.extraTurnPlayerId] = playerId
             it[Games.extraTurnRoundNumber] = roundNumber
+            it[Games.extraTurnConsumed] = false
         } > 0
     }
 
     fun removeExtraTurnMark(gameId: Int, playerId: Int, roundNumber: Int): Boolean = transaction {
-        // Only clear the mark for the exact player/round that owns it
+        // Mark consumed but keep player/round so re-grant is blocked for the rest of this round
         Games.update({
             (Games.id eq gameId) and
                     (Games.extraTurnPlayerId eq playerId) and
-                    (Games.extraTurnRoundNumber eq roundNumber)
+                    (Games.extraTurnRoundNumber eq roundNumber) and
+                    (Games.extraTurnConsumed eq false)
         }) {
-            it[Games.extraTurnPlayerId] = null
-            it[Games.extraTurnRoundNumber] = null
+            it[Games.extraTurnConsumed] = true
         } > 0
     }
 

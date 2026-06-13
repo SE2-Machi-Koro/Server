@@ -303,26 +303,31 @@ class GameDaoTest : AbstractDBSetup() {
     }
 
     @Test
-    fun `RermoveExtraTurnMark does sets extraTurnMarkers to null`() {
+    fun `RermoveExtraTurnMark marks consumed and blocks re-grant in same round`() {
         val id = gameDao.create(hostId)
 
         val first = gameDao.markExtraTurnIfEligible(id, playerId = 123, roundNumber = 1)
         assertTrue(first)
 
-        // second attempt in same round should fail
-        val second = gameDao.removeExtraTurnMark(id, playerId = 123, roundNumber = 1)
-        assertTrue(second)
+        val removed = gameDao.removeExtraTurnMark(id, playerId = 123, roundNumber = 1)
+        assertTrue(removed)
 
+        // Player/round kept so re-grant is blocked; consumed flag set
         val game = gameDao.findById(id)!!
-        assertEquals(null, game.extraTurnPlayerId)
-        assertEquals(null, game.extraTurnRoundNumber)
+        assertEquals(123, game.extraTurnPlayerId)
+        assertEquals(1, game.extraTurnRoundNumber)
+        assertTrue(game.extraTurnConsumed)
+
+        // Re-grant for same player+round must be blocked
+        val reGrant = gameDao.markExtraTurnIfEligible(id, playerId = 123, roundNumber = 1)
+        assertFalse(reGrant)
     }
 
     @Test
     fun `RermoveExtraTurnMark does not empty fields and returns false if fields are empty`() {
         val id = gameDao.create(hostId)
 
-        // no extra turn was granted, so there is nothing to remove
+        // No extra turn was granted, so there is nothing to remove
         val second = gameDao.removeExtraTurnMark(id, playerId = 123, roundNumber = 1)
         assertFalse(second)
 

@@ -75,7 +75,8 @@ class GamePhaseService(
         val currentPlayer = players[game.currentTurnIndex]
         val consumeExtra = (game.extraTurnPlayerId != null &&
                 game.extraTurnPlayerId == currentPlayer.id &&
-                game.extraTurnRoundNumber == game.roundNumber)
+                game.extraTurnRoundNumber == game.roundNumber &&
+                !game.extraTurnConsumed)
 
         val nextTurnIndex = if (consumeExtra){ game.currentTurnIndex }
         else { (game.currentTurnIndex + 1) % players.size }
