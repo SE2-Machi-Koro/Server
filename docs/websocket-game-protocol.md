@@ -27,22 +27,29 @@ Clients should subscribe before sending lobby or game commands so they do not mi
 
 | Subscription | Scope | Purpose |
 | --- | --- | --- |
-| `/topic/game/{gameId}` | All players in one lobby or game | Lobby membership changes, game start, dice, phase, purchase, effects, game end, and broadcast errors |
-| `/queue/lobby-user{sessionId}` | Single WebSocket session | Lobby creation result, lobby roster after join, and lobby-specific request errors |
+| `/topic/game/{gameId}` | All players in one lobby or game | Roster updates (`LOBBY_ROSTER`), lobby leaves (`LOBBY_LEFT`, `HOST_LEFT`), game start, dice, phase, purchase, effects, game end, and broadcast errors |
+| `/queue/lobby-user{sessionId}` | Single WebSocket session | Private lobby replies: creation result, the joiner's `LOBBY_JOINED` acknowledgement, the `LOBBY_ROSTER` snapshot after join, and lobby-specific request errors |
 | `/user/queue/game-sync` | Single WebSocket session | Full `SYNC` snapshot for reconnect and explicit state refresh |
 | `/user/queue/errors` | Single WebSocket session | Domain rejections routed privately to the requesting client, including forbidden direct phase advancement |
-| `/topic/public` | Global chat only | Chat and connection announcements from `/app/chat.*` |
+| `/topic/public` | Legacy / global chat only | Chat and connection announcements from `/app/chat.*`. **Not** a source for lobby or game events — retained only for backwards compatibility. |
 
 `{sessionId}` is the STOMP session id assigned by Spring. Browser clients usually receive it from the STOMP session object after connection. The server sends private lobby replies to `/queue/lobby-user{sessionId}` and sends reconnect sync replies to the resolved broker destination `/queue/game-sync-user{sessionId}`, which clients consume by subscribing to `/user/queue/game-sync`.
 
-Game clients must not use `/topic/public` for game state. All game-state broadcasts are scoped to `/topic/game/{gameId}` or a private queue.
+Lobby events are delivered on two tiers:
+
+- **Private lobby queue** — the requester's own acknowledgements (`LOBBY_CREATED`, the joiner's `LOBBY_JOINED`), the post-join `LOBBY_ROSTER` snapshot, and lobby request errors are sent only to the requesting session on `/queue/lobby-user{sessionId}`. This requires the STOMP session id; if it is unavailable, the server currently skips these private replies.
+- **Lobby broadcast topic** — shared lobby events are received through `/topic/game/{gameId}` once the client knows the game id (from `LOBBY_CREATED` or its private `LOBBY_JOINED` reply). On a normal join the topic carries a `LOBBY_ROSTER` broadcast (not `LOBBY_JOINED`); leaves broadcast `LOBBY_LEFT` or `HOST_LEFT`.
+
+Game clients must not use `/topic/public` for game or lobby state. All game-state and lobby broadcasts are scoped to `/topic/game/{gameId}` or a private queue; `/topic/public` is legacy chat only.
+
+> Note: On the client, the `LOBBY_ROSTER` handler populates `mutablePlayers` during the lobby waiting phase — before `GAME_STARTED` — so the lobby screen reflects the current membership prior to the game's initial state snapshot.
 
 ## Send Destinations
 
 | Client sends to | Payload | Server publishes |
 | --- | --- | --- |
-| `/app/lobby.create` | `WebSocketMessage` | `LOBBY_CREATED` to `/queue/lobby-user{sessionId}` |
-| `/app/lobby.join` | `WebSocketMessage` with `payload.lobbyCode` | `LOBBY_ROSTER` to `/queue/lobby-user{sessionId}` and `LOBBY_JOINED` to `/topic/game/{gameId}` |
+| `/app/lobby.create` | `WebSocketMessage` | `LOBBY_CREATED` to the private lobby queue `/queue/lobby-user{sessionId}` |
+| `/app/lobby.join` | `WebSocketMessage` with `payload.lobbyCode` | Private `LOBBY_JOINED` acknowledgement and `LOBBY_ROSTER` snapshot to the joiner's queue `/queue/lobby-user{sessionId}`, plus a `LOBBY_ROSTER` broadcast to `/topic/game/{gameId}` for the existing members |
 | `/app/lobby.leave` | `WebSocketMessage` with `payload.gameId` | `LOBBY_LEFT` or `HOST_LEFT` to `/topic/game/{gameId}` |
 | `/app/game.start` | `StartGameRequest` | `GAME_STARTED` and a `GAME_ACTION` snapshot to `/topic/game/{gameId}` |
 | `/app/game.rollDice` | `RollDiceRequest` | `ROLL_DICE` and a `GAME_ACTION` snapshot to `/topic/game/{gameId}` |
@@ -166,7 +173,7 @@ For rejected landmark purchases the payload uses `landmarkType` instead of `card
 3. Player A receives `LOBBY_CREATED` with `gameId` and `lobbyCode`.
 4. Both players subscribe to `/topic/game/{gameId}`.
 5. Player B subscribes to `/queue/lobby-user{sessionId}` and sends `/app/lobby.join` with the lobby code.
-6. Player B receives `LOBBY_ROSTER` privately. Both players receive `LOBBY_JOINED` on `/topic/game/{gameId}`.
+6. Player B receives `LOBBY_JOINED` and `LOBBY_ROSTER` privately. Both players receive `LOBBY_ROSTER` on `/topic/game/{gameId}`.
 7. Player A sends `/app/game.start`.
 8. Both players receive `GAME_STARTED` and the initial `GAME_ACTION` snapshot on `/topic/game/{gameId}`.
 9. During the game, the active player sends `rollDice`, `resolveEffects`, an optional `purchase`, and `endTurn`. Both players consume the resulting `ROLL_DICE`, `GAME_ACTION`, or `GAME_END` messages from `/topic/game/{gameId}` and replace their local state with the included `state` snapshot.
@@ -175,12 +182,16 @@ Clients should treat the server snapshot as authoritative. Local UI state may op
 
 ## Reconnect and Explicit Sync
 
-A reconnecting player must establish a new STOMP connection with the same authenticated session token and resubscribe to:
+A reconnecting player must establish a new STOMP connection with the same authenticated session token and re-subscribe to its private and topic destinations before requesting a sync:
 
 ```text
-/topic/game/{gameId}
-/user/queue/game-sync
+/user/queue/errors              # private domain rejections
+/user/queue/game-sync           # SYNC snapshot reply
+/queue/lobby-user{sessionId}    # private lobby queue
+/topic/game/{gameId}            # any game/lobby id already known to the client
 ```
+
+The client re-subscribes to the error, sync, and lobby-queue destinations, plus every `/topic/game/{gameId}` it already knows about. `/topic/public` is **not** re-subscribed for lobby or game state; subscribe to it only if the client intentionally keeps the legacy chat channel.
 
 Then the client sends:
 
