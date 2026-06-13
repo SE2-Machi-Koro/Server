@@ -36,7 +36,7 @@ class DiceService(
             val dice = rollDice(diceCount)
             val total = dice.sum()
 
-            if (!gameDao.tryRecordDiceRoll(request.gameId, total)) {
+            if (!gameDao.tryRecordDiceRoll(request.gameId, total, diceCount)) {
                 throw CustomWebSocketException("ROLL_ALREADY_COMPLETED", "Dice have already been rolled for this turn")
             }
 
@@ -71,9 +71,9 @@ class DiceService(
                 throw CustomWebSocketException("NO_RADIO_TOWER", "You need a built Radio Tower to reroll")
             }
 
-            // Determine dice count from request (same resolver used for initial roll)
-            val diceCount = resolveDiceCount(request)
-            validateDiceCount(diceCount)
+            // Use server-stored count from initial roll — client value is ignored
+            val diceCount = game.lastDiceCount
+                ?: throw CustomWebSocketException("INVALID_DICE_STATE", "No dice count stored from initial roll")
 
             if (diceCount == TWO_DICE_COUNT) {
                 requireTrainStation(rollingPlayerId)
@@ -90,7 +90,6 @@ class DiceService(
             // Re-evaluate Amusement Park based on the rerolled result, overriding any grant from the initial roll
             val extraGranted = if (diceCount == TWO_DICE_COUNT && dice.size == 2 && dice[0] == dice[1] && hasAmusementPark(rollingPlayerId)) {
                 gameDao.markExtraTurnIfEligible(request.gameId, rollingPlayerId, game.roundNumber)
-                true
             } else {
                 gameDao.removeExtraTurnMark(request.gameId, rollingPlayerId, game.roundNumber)
                 false
