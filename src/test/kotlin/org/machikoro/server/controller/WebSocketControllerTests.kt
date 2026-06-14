@@ -50,6 +50,8 @@ class WebSocketControllerTests {
     @BeforeEach
     fun setup() {
         whenever(gameSyncService.findActiveInProgressGameId(any())).thenReturn(null)
+        // Default: no waiting lobby membership. Mockito otherwise returns 0 for a
+        // boxed Int return, which would spuriously trigger reconnect registration.
         whenever(lobbyService.findWaitingLobbyIdForUser(any())).thenReturn(null)
     }
 
@@ -116,16 +118,38 @@ class WebSocketControllerTests {
     }
 
     @Test
-    fun `addUser registers reconnecting user for server-resolved waiting lobby`() {
-        whenever(lobbyService.findWaitingLobbyIdForUser(10)).thenReturn(7)
+    fun `addUser re-registers session against server-resolved waiting lobby on reconnect`() {
+        // Host reconnects under a new session id: no in-progress game, but a
+        // WAITING lobby membership is still owned server-side. The new session
+        // must be re-registered so a later game.start can resolve the host.
+        whenever(gameSyncService.findActiveInProgressGameId(10)).thenReturn(null)
+        whenever(lobbyService.findWaitingLobbyIdForUser(10)).thenReturn(42)
         val accessor = authenticatedAccessor(userId = 10, username = "dave", sessionId = "session-new")
+
+        // Client-supplied gameId is stale and must be ignored entirely.
         val message = WebSocketMessage(type = MessageType.JOIN, sender = "dave", gameId = 999)
 
         controller.addUser(message, accessor)
 
-        verify(lobbyService).addUserToLobby(7, 10)
-        verify(connectionTracker).register("session-new", 10, 7)
-        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+        // No lobby join — the user is already a member — just session re-registration.
+        verify(lobbyService, never()).addUserToLobby(any(), any())
+        verify(connectionTracker).register("session-new", 10, 42)
+    }
+
+    @Test
+    fun `addUser does not register waiting lobby when sessionId is null`() {
+        whenever(gameSyncService.findActiveInProgressGameId(7)).thenReturn(null)
+        whenever(lobbyService.findWaitingLobbyIdForUser(7)).thenReturn(42)
+        val accessor = SimpMessageHeaderAccessor.create().apply {
+            sessionAttributes = mutableMapOf()
+            user = UserPrincipal(userId = 7, username = "frank")
+        }
+
+        val message = WebSocketMessage(type = MessageType.JOIN, sender = "frank", gameId = 42)
+
+        controller.addUser(message, accessor)
+
+        verify(connectionTracker, never()).register(any(), any(), any())
     }
 
     @Test

@@ -86,10 +86,12 @@ class WebSocketController(
         // without trusting whatever the client put in the message payload.
         headerAccessor.sessionAttributes?.put("username", principal.username)
 
+        val sessionId = headerAccessor.sessionId
+
         // Trust only server-side mapping for reconnect. A client-provided
         // gameId can be stale and must not recreate old lobby membership.
         val mappedInProgressGameId = gameSyncService.findActiveInProgressGameId(principal.userId)
-        var gameIdToJoin = mappedInProgressGameId ?: lobbyService.findWaitingLobbyIdForUser(principal.userId)
+        var gameIdToJoin = mappedInProgressGameId
 
         if (gameIdToJoin != null) {
             try {
@@ -108,7 +110,6 @@ class WebSocketController(
                 gameIdToJoin = remappedInProgressGameId
             }
 
-            val sessionId = headerAccessor.sessionId
             if (sessionId != null) {
                 connectionTracker.register(sessionId, principal.userId, gameIdToJoin)
             }
@@ -121,6 +122,17 @@ class WebSocketController(
                     userId = principal.userId,
                     gameId = syncGameId,
                 )
+            }
+        } else if (sessionId != null) {
+            // No in-progress game, but the user may still hold a server-owned
+            // WAITING lobby membership — e.g. a host whose STOMP session dropped
+            // and reconnected under a new session id, or after a backend restart.
+            // Re-register the fresh session against that server-resolved waiting
+            // membership (never the client-supplied gameId) so later game actions
+            // such as game.start can still resolve the requesting user.
+            val waitingGameId = lobbyService.findWaitingLobbyIdForUser(principal.userId)
+            if (waitingGameId != null) {
+                connectionTracker.register(sessionId, principal.userId, waitingGameId)
             }
         }
 
