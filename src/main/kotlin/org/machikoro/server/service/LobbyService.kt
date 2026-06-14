@@ -113,6 +113,9 @@ class LobbyService(
         playerDao.getLobbyRoster(gameId).map { it.copy(isReady = it.userId in ready) }
     }
 
+    fun findWaitingLobbyIdForUser(userId: Int): Int? =
+        playerDao.findWaitingMembershipByUserId(userId)?.game?.id
+
     /**
      * Flips the ready state for [userId] in [gameId].
      *

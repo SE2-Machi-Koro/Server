@@ -89,7 +89,7 @@ class WebSocketController(
         // Trust only server-side mapping for reconnect. A client-provided
         // gameId can be stale and must not recreate old lobby membership.
         val mappedInProgressGameId = gameSyncService.findActiveInProgressGameId(principal.userId)
-        var gameIdToJoin = mappedInProgressGameId
+        var gameIdToJoin = mappedInProgressGameId ?: lobbyService.findWaitingLobbyIdForUser(principal.userId)
 
         if (gameIdToJoin != null) {
             try {

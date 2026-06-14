@@ -50,6 +50,7 @@ class WebSocketControllerTests {
     @BeforeEach
     fun setup() {
         whenever(gameSyncService.findActiveInProgressGameId(any())).thenReturn(null)
+        whenever(lobbyService.findWaitingLobbyIdForUser(any())).thenReturn(null)
     }
 
     @Test
@@ -112,6 +113,19 @@ class WebSocketControllerTests {
 
         verify(lobbyService, never()).addUserToLobby(any(), any())
         verify(connectionTracker, never()).register(any(), any(), any())
+    }
+
+    @Test
+    fun `addUser registers reconnecting user for server-resolved waiting lobby`() {
+        whenever(lobbyService.findWaitingLobbyIdForUser(10)).thenReturn(7)
+        val accessor = authenticatedAccessor(userId = 10, username = "dave", sessionId = "session-new")
+        val message = WebSocketMessage(type = MessageType.JOIN, sender = "dave", gameId = 999)
+
+        controller.addUser(message, accessor)
+
+        verify(lobbyService).addUserToLobby(7, 10)
+        verify(connectionTracker).register("session-new", 10, 7)
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }
 
     @Test

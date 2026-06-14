@@ -372,6 +372,23 @@ class LobbyServiceTest {
     }
 
     @Test
+    fun `findWaitingLobbyIdForUser returns waiting membership game id`() {
+        val userId = 10
+        val waitingGame = game(7, GameStatus.WAITING)
+        whenever(playerDao.findWaitingMembershipByUserId(userId))
+            .thenReturn(PlayerDao.PlayerGameMembership(player(userId), waitingGame))
+
+        assertEquals(7, lobbyService.findWaitingLobbyIdForUser(userId))
+    }
+
+    @Test
+    fun `findWaitingLobbyIdForUser returns null when user has no waiting membership`() {
+        whenever(playerDao.findWaitingMembershipByUserId(10)).thenReturn(null)
+
+        assertEquals(null, lobbyService.findWaitingLobbyIdForUser(10))
+    }
+
+    @Test
     fun `startGame throws NotEnoughPlayersException with no players`() {
         val gameId = 1
         whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.WAITING))
