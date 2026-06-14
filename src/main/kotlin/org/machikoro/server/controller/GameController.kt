@@ -330,6 +330,7 @@ class GameController(
                         "total" to result.total,
                         "completed" to result.completed,
                         "extraTurnGranted" to result.extraTurnGranted,
+                        "roundNumber" to state.game.roundNumber,
                         "timestamp" to System.currentTimeMillis(),
                         "state" to state,
                     ),
@@ -349,6 +350,7 @@ class GameController(
                         "total" to result.total,
                         "completed" to result.completed,
                         "extraTurnGranted" to result.extraTurnGranted,
+                        "roundNumber" to state.game.roundNumber,
                     ),
                     gameId = request.gameId,
                 )
