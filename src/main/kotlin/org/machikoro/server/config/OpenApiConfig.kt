@@ -50,7 +50,7 @@ class OpenApiConfig {
     | `/app/game.endTurn` | `EndTurnRequest` | `GAME_ACTION` or `GAME_END` to `/topic/game/{gameId}` |
     | `/app/game.sync` | `SyncGameRequest` | `SYNC` to resolved `/queue/game-sync-user{sessionId}` |
     
-    See `docs/websocket-game-protocol.md` for payload examples and reconnect flow.
+    See the `docs` repo (https://github.com/SE2-Machi-Koro/docs) for payload examples and reconnect flow.
     """
                         .trimIndent()
                 )

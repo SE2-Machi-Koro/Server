@@ -321,8 +321,8 @@ The gameplay loop is action-driven: `ROLL_DICE --rollDice--> RESOLVE_EFFECTS --r
 - **Swagger UI (REST):** Accessible at `http://localhost:8080/swagger-ui.html`. Powered by Springdoc OpenAPI, this interface provides interactive documentation for our standard REST endpoints.
 - **Springwolf UI (AsyncAPI/WebSockets):** Accessible at `http://localhost:8080/springwolf/asyncapi-ui.html`. Powered by Springwolf, this provides interactive documentation and an event publisher for our STOMP over WebSocket channels, which are the backbone of our real-time game communications.
 - **WebSocket Endpoints:** `ws://localhost:8080/ws` (native STOMP) and `http://localhost:8080/ws-sockjs` (SockJS fallback)
-- **WebSocket Game Protocol:** Client subscriptions, send destinations, message envelopes, and reconnect synchronization are documented in [docs/websocket-game-protocol.md](docs/websocket-game-protocol.md).
-- **Backend Restart Recovery:** The manual restart procedure and `/app/game.sync` verification checklist are documented in [docs/backend-restart-recovery.md](docs/backend-restart-recovery.md).
+- **WebSocket Game Protocol:** Client subscriptions, send destinations, message envelopes, and reconnect synchronization are documented in the [`docs` repo](https://github.com/SE2-Machi-Koro/docs), which is the single source of truth for the WebSocket protocol.
+- **Backend Restart Recovery:** The manual restart procedure and `/app/game.sync` verification checklist are documented in [scripts/backend-restart-recovery.md](scripts/backend-restart-recovery.md), next to the smoke test it describes.
 
 Run the backend restart recovery smoke test with:
 
