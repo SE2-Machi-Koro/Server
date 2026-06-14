@@ -208,6 +208,48 @@ class PlayerDaoTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `findWaitingGameIdsByUserId returns only waiting memberships`() {
+        val waitingGameId = gameDao.create(userId)
+        val activeGameId = gameDao.create(userId)
+        val finishedGameId = gameDao.create(userId)
+
+        playerDao.addPlayer(waitingGameId, userId)
+        playerDao.addPlayer(activeGameId, userId)
+        playerDao.addPlayer(finishedGameId, userId)
+        gameDao.updateStatus(activeGameId, GameStatus.IN_PROGRESS)
+        gameDao.updateStatus(finishedGameId, GameStatus.FINISHED)
+
+        assertEquals(listOf(waitingGameId), playerDao.findWaitingGameIdsByUserId(userId))
+    }
+
+    @Test
+    fun `findWaitingMembershipByUserId returns newest waiting membership`() {
+        val olderWaitingGameId = gameDao.create(userId)
+        val newerWaitingGameId = gameDao.create(userId)
+        val activeGameId = gameDao.create(userId)
+        playerDao.addPlayer(olderWaitingGameId, userId)
+        val expectedPlayer = playerDao.addPlayer(newerWaitingGameId, userId)
+        playerDao.addPlayer(activeGameId, userId)
+        gameDao.updateStatus(activeGameId, GameStatus.IN_PROGRESS)
+
+        val membership = playerDao.findWaitingMembershipByUserId(userId)
+
+        assertNotNull(membership)
+        assertEquals(newerWaitingGameId, membership!!.game.id)
+        assertEquals(expectedPlayer.id, membership.player.id)
+        assertEquals(GameStatus.WAITING, membership.game.status)
+    }
+
+    @Test
+    fun `findWaitingMembershipByUserId returns null when user has no waiting lobby`() {
+        val activeGameId = gameDao.create(userId)
+        playerDao.addPlayer(activeGameId, userId)
+        gameDao.updateStatus(activeGameId, GameStatus.IN_PROGRESS)
+
+        assertNull(playerDao.findWaitingMembershipByUserId(userId))
+    }
+
+    @Test
     fun `findCurrentMembershipByUserId prefers newest in-progress game over waiting lobby`() {
         val waitingGameId = gameDao.create(userId)
         val activeGameId = gameDao.create(userId)
