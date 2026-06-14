@@ -85,9 +85,10 @@ class WebSocketController(
         // without trusting whatever the client put in the message payload.
         headerAccessor.sessionAttributes?.put("username", principal.username)
 
-        // Prefer server-side mapping to an active game when a player reconnects.
+        // Trust only server-side mapping for reconnect. A client-provided
+        // gameId can be stale and must not recreate old lobby membership.
         val mappedInProgressGameId = gameSyncService.findActiveInProgressGameId(principal.userId)
-        var gameIdToJoin = mappedInProgressGameId ?: message.gameId
+        var gameIdToJoin = mappedInProgressGameId
 
         if (gameIdToJoin != null) {
             try {
