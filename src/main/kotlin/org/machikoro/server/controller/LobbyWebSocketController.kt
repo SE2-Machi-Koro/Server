@@ -2,6 +2,7 @@ package org.machikoro.server.controller
 
 import io.github.springwolf.core.asyncapi.annotations.AsyncListener
 import io.github.springwolf.core.asyncapi.annotations.AsyncOperation
+import org.machikoro.server.auth.UserPrincipal
 import org.machikoro.server.auth.userPrincipal
 import org.machikoro.server.dto.LobbyLeavingOutcome
 import org.machikoro.server.dto.LobbyRosterDto
@@ -256,7 +257,7 @@ class LobbyWebSocketController(
                 sender = "SERVER",
                 content = "Lobby roster updated",
                 gameId = gameId,
-                payload = org.machikoro.server.dto.LobbyRosterDto(players = roster),
+                payload = LobbyRosterDto(players = roster),
             )
         )
     }

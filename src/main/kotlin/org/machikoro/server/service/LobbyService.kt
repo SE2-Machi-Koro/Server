@@ -26,7 +26,7 @@ import org.springframework.stereotype.Service
 import java.util.concurrent.ConcurrentHashMap
 
 @Service
-open class LobbyService(
+class LobbyService(
     private val gameDao: GameDao,
     private val playerDao: PlayerDao,
     private val gameMarketplaceDao: GameMarketplaceDao,
@@ -50,7 +50,7 @@ open class LobbyService(
      * [LobbyService] and override this to `block()` directly, bypassing the
      * Exposed transaction machinery that requires a real database connection.
      */
-    protected open fun <T> runInTransaction(block: () -> T): T = transaction { block() }
+    protected fun <T> runInTransaction(block: () -> T): T = transaction { block() }
 
     companion object {
         // Machi Koro base game requires at least 2 players.

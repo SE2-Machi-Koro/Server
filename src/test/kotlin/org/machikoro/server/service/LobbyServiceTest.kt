@@ -85,6 +85,7 @@ class LobbyServiceTest {
     private fun player(id: Int) =
         PlayerModel(id = id, gameId = 1, userId = id, turnOrder = 0, coins = 3, lastSeenAt = null)
 
+    @Suppress("SameParameterValue")
     private fun rosterEntry(playerId: Int, username: String, gameId: Int = 1) =
         LobbyRosterPlayerDto(playerId = playerId, userId = playerId, username = username, gameId = gameId, turnOrder = playerId - 1, coins = 3)
 

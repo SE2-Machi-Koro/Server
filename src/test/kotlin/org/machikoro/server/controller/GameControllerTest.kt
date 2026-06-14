@@ -994,6 +994,7 @@ class GameControllerTest {
         assertEquals("RESOLVE_EFFECTS", actionPayload["turnPhase"])
         assertEquals(4, actionPayload["roundNumber"])
     }
+    @Test
     fun `rerollDice throws UNAUTHENTICATED when accessor has no principal`() {
         assertUnauthenticated { controller.rerollDice(RollDiceRequest(gameId = 42, playerId = 1), it) }
         verify(diceService, never()).rerollDice(any(), any())

@@ -4,6 +4,7 @@ import io.github.springwolf.core.asyncapi.annotations.AsyncListener
 import io.github.springwolf.core.asyncapi.annotations.AsyncOperation
 import io.micrometer.core.instrument.Metrics
 import io.micrometer.core.instrument.Timer
+import org.machikoro.server.auth.UserPrincipal
 import org.machikoro.server.auth.userPrincipal
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.SyncGameRequest
