@@ -126,6 +126,9 @@ class PlayerDao {
             ?.value
     }
 
+    /**
+     * Returns every waiting lobby membership for logout cleanup.
+     */
     fun findWaitingGameIdsByUserId(userId: Int): List<Int> = transaction {
         Players.join(
             Games,
@@ -137,6 +140,10 @@ class PlayerDao {
             .map { it[Players.gameId].value }
     }
 
+    /**
+     * Returns the newest waiting lobby membership so duplicate create requests
+     * can behave as idempotent retries.
+     */
     fun findWaitingMembershipByUserId(userId: Int): PlayerGameMembership? = transaction {
         Players.join(
             Games,

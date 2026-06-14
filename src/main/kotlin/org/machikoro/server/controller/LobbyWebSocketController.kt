@@ -66,6 +66,8 @@ class LobbyWebSocketController(
         logger.info("User '{}' requested lobby creation", principal.username)
 
         val lobby = lobbyService.createLobby(principal.userId)
+        // Membership is established here, so later game actions can identify
+        // the user without relying on a stale chat.addUser gameId payload.
         connectionTracker.register(sessionId, principal.userId, lobby.id)
 
         // Deliver only to the creator — avoids auto-joining unrelated clients
@@ -157,6 +159,8 @@ class LobbyWebSocketController(
         val roster = lobbyService.getLobbyRoster(player.gameId)
 
         if (sessionId != null) {
+            // Joining establishes membership; register the session here instead
+            // of waiting for a separate chat.addUser frame with client state.
             connectionTracker.register(sessionId, principal.userId, player.gameId)
 
             // Tell the joiner they successfully joined — client navigates to LobbyScreen on this event

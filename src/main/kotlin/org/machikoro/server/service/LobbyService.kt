@@ -63,6 +63,8 @@ open class LobbyService(
      * Creates a new lobby owned by [hostUserId] and returns the persisted
      * [GameModel]. The host is registered on the game record and immediately
      * added to the player roster so membership is server-owned from creation.
+     * Duplicate create requests from the same waiting member are treated as
+     * idempotent retries and return the existing lobby.
      *
      * Wrapped in a single transaction so the create + re-fetch pair is atomic.
      */
@@ -231,6 +233,10 @@ open class LobbyService(
         LobbyLeavingOutcome.LobbyRemains(userId)
     }
 
+    /**
+     * Logout cleanup only removes waiting lobby memberships. In-progress games
+     * remain reconnectable, which keeps legitimate resume flows intact.
+     */
     fun leaveWaitingLobbiesForUser(userId: Int) {
         playerDao.findWaitingGameIdsByUserId(userId)
             .forEach { gameId ->

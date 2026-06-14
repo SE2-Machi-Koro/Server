@@ -330,6 +330,8 @@ class GameController(
                         "total" to result.total,
                         "completed" to result.completed,
                         "extraTurnGranted" to result.extraTurnGranted,
+                        // Keep round metadata top-level so clients do not need
+                        // to inspect the nested state to complete dice UI.
                         "roundNumber" to state.game.roundNumber,
                         "timestamp" to System.currentTimeMillis(),
                         "state" to state,
@@ -350,6 +352,8 @@ class GameController(
                         "total" to result.total,
                         "completed" to result.completed,
                         "extraTurnGranted" to result.extraTurnGranted,
+                        // Mirrors the ROLL_DICE frame for clients that consume
+                        // only GAME_ACTION updates.
                         "roundNumber" to state.game.roundNumber,
                     ),
                     gameId = request.gameId,
