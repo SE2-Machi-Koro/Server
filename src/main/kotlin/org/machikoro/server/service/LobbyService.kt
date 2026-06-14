@@ -26,7 +26,7 @@ import org.springframework.stereotype.Service
 import java.util.concurrent.ConcurrentHashMap
 
 @Service
-open class LobbyService(
+class LobbyService(
     private val gameDao: GameDao,
     private val playerDao: PlayerDao,
     private val gameMarketplaceDao: GameMarketplaceDao,
@@ -50,7 +50,7 @@ open class LobbyService(
      * [LobbyService] and override this to `block()` directly, bypassing the
      * Exposed transaction machinery that requires a real database connection.
      */
-    protected open fun <T> runInTransaction(block: () -> T): T = transaction { block() }
+    protected fun <T> runInTransaction(block: () -> T): T = transaction { block() }
 
     companion object {
         // Machi Koro base game requires at least 2 players.
@@ -61,14 +61,18 @@ open class LobbyService(
 
     /**
      * Creates a new lobby owned by [hostUserId] and returns the persisted
-     * [GameModel]. The host is registered on the game record but is NOT
-     * automatically added to the player roster — callers go through
-     * [addUserToLobby] for that, the same as any other joining player.
+     * [GameModel]. The host is registered on the game record and immediately
+     * added to the player roster so membership is server-owned from creation.
+     * Duplicate create requests from the same waiting member are treated as
+     * idempotent retries and return the existing lobby.
      *
      * Wrapped in a single transaction so the create + re-fetch pair is atomic.
      */
     fun createLobby(hostUserId: Int): GameModel = runInTransaction {
+        playerDao.findWaitingMembershipByUserId(hostUserId)?.let { return@runInTransaction it.game }
+
         val gameId = gameDao.create(hostUserId)
+        playerDao.addPlayer(gameId, hostUserId)
         gameDao.findById(gameId)
             ?: throw GameNotFoundException("Game $gameId not found after creation")
     }
@@ -108,6 +112,9 @@ open class LobbyService(
         val ready = readyPlayers[gameId] ?: emptySet()
         playerDao.getLobbyRoster(gameId).map { it.copy(isReady = it.userId in ready) }
     }
+
+    fun findWaitingLobbyIdForUser(userId: Int): Int? =
+        playerDao.findWaitingMembershipByUserId(userId)?.game?.id
 
     /**
      * Flips the ready state for [userId] in [gameId].
@@ -227,6 +234,17 @@ open class LobbyService(
         }
 
         LobbyLeavingOutcome.LobbyRemains(userId)
+    }
+
+    /**
+     * Logout cleanup only removes waiting lobby memberships. In-progress games
+     * remain reconnectable, which keeps legitimate resume flows intact.
+     */
+    fun leaveWaitingLobbiesForUser(userId: Int) {
+        playerDao.findWaitingGameIdsByUserId(userId)
+            .forEach { gameId ->
+                runCatching { leaveLobby(gameId, userId) }
+            }
     }
 
 
