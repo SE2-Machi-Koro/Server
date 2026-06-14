@@ -61,14 +61,16 @@ open class LobbyService(
 
     /**
      * Creates a new lobby owned by [hostUserId] and returns the persisted
-     * [GameModel]. The host is registered on the game record but is NOT
-     * automatically added to the player roster — callers go through
-     * [addUserToLobby] for that, the same as any other joining player.
+     * [GameModel]. The host is registered on the game record and immediately
+     * added to the player roster so membership is server-owned from creation.
      *
      * Wrapped in a single transaction so the create + re-fetch pair is atomic.
      */
     fun createLobby(hostUserId: Int): GameModel = runInTransaction {
+        playerDao.findWaitingMembershipByUserId(hostUserId)?.let { return@runInTransaction it.game }
+
         val gameId = gameDao.create(hostUserId)
+        playerDao.addPlayer(gameId, hostUserId)
         gameDao.findById(gameId)
             ?: throw GameNotFoundException("Game $gameId not found after creation")
     }
@@ -227,6 +229,13 @@ open class LobbyService(
         }
 
         LobbyLeavingOutcome.LobbyRemains(userId)
+    }
+
+    fun leaveWaitingLobbiesForUser(userId: Int) {
+        playerDao.findWaitingGameIdsByUserId(userId)
+            .forEach { gameId ->
+                runCatching { leaveLobby(gameId, userId) }
+            }
     }
 
 

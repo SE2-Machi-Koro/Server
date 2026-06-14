@@ -11,6 +11,7 @@ import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.service.LobbyService
+import org.machikoro.server.service.WebSocketConnectionTracker
 import org.slf4j.LoggerFactory
 import org.springframework.messaging.handler.annotation.MessageMapping
 import org.springframework.messaging.handler.annotation.Payload
@@ -22,6 +23,7 @@ import org.springframework.stereotype.Controller
 class LobbyWebSocketController(
     private val lobbyService: LobbyService,
     private val messagingTemplate: SimpMessagingTemplate,
+    private val connectionTracker: WebSocketConnectionTracker,
 ) {
     private val logger = LoggerFactory.getLogger(LobbyWebSocketController::class.java)
 
@@ -64,6 +66,7 @@ class LobbyWebSocketController(
         logger.info("User '{}' requested lobby creation", principal.username)
 
         val lobby = lobbyService.createLobby(principal.userId)
+        connectionTracker.register(sessionId, principal.userId, lobby.id)
 
         // Deliver only to the creator — avoids auto-joining unrelated clients
         messagingTemplate.convertAndSend(
@@ -154,6 +157,8 @@ class LobbyWebSocketController(
         val roster = lobbyService.getLobbyRoster(player.gameId)
 
         if (sessionId != null) {
+            connectionTracker.register(sessionId, principal.userId, player.gameId)
+
             // Tell the joiner they successfully joined — client navigates to LobbyScreen on this event
             messagingTemplate.convertAndSend(
                 "/queue/lobby-user$sessionId",

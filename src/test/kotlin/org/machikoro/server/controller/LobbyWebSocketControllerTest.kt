@@ -11,6 +11,7 @@ import org.machikoro.server.dto.WebSocketErrorDto
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.service.LobbyService
+import org.machikoro.server.service.WebSocketConnectionTracker
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.machikoro.server.domain.models.PlayerModel
@@ -33,7 +34,8 @@ class LobbyWebSocketControllerTest {
 
     private val lobbyService = mock<LobbyService>()
     private val messagingTemplate = mock<SimpMessagingTemplate>()
-    private val controller = LobbyWebSocketController(lobbyService, messagingTemplate)
+    private val connectionTracker = mock<WebSocketConnectionTracker>()
+    private val controller = LobbyWebSocketController(lobbyService, messagingTemplate, connectionTracker)
 
     // Helper: accessor with authenticated principal and a session ID
     private fun authenticatedAccessor(userId: Int, username: String, sessionId: String = "test-session"): SimpMessageHeaderAccessor =
@@ -95,6 +97,7 @@ class LobbyWebSocketControllerTest {
         assertEquals("WAITING", payload["status"])
 
         verify(lobbyService).createLobby(10)
+        verify(connectionTracker).register("sess-42", 10, 1)
     }
 
     @Test
@@ -112,6 +115,7 @@ class LobbyWebSocketControllerTest {
         )
 
         verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+        verify(connectionTracker, never()).register(any(), any(), any())
     }
 
     @Test
@@ -128,6 +132,7 @@ class LobbyWebSocketControllerTest {
         assertEquals("UNAUTHENTICATED", ex.errorCode)
         verify(lobbyService, never()).createLobby(any())
         verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+        verify(connectionTracker, never()).register(any(), any(), any())
     }
 
     @Test
@@ -155,6 +160,7 @@ class LobbyWebSocketControllerTest {
         assertEquals("ABC1234", (msgCaptor.firstValue.payload as? Map<*, *>)?.get("lobbyCode"))
 
         verify(lobbyService).createLobby(10)
+        verify(connectionTracker).register("sess-99", 10, 1)
     }
 
     @Test
@@ -209,6 +215,7 @@ class LobbyWebSocketControllerTest {
 
         verify(lobbyService).joinLobby("ABC1234", 20)
         verify(lobbyService).getLobbyRoster(1)
+        verify(connectionTracker).register("sess-77", 20, 1)
     }
 
     @Test

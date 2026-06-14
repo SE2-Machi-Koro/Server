@@ -126,6 +126,35 @@ class PlayerDao {
             ?.value
     }
 
+    fun findWaitingGameIdsByUserId(userId: Int): List<Int> = transaction {
+        Players.join(
+            Games,
+            JoinType.INNER,
+            additionalConstraint = { Players.gameId eq Games.id }
+        )
+            .selectAll()
+            .where { (Players.userId eq userId) and (Games.status eq GameStatus.WAITING) }
+            .map { it[Players.gameId].value }
+    }
+
+    fun findWaitingMembershipByUserId(userId: Int): PlayerGameMembership? = transaction {
+        Players.join(
+            Games,
+            JoinType.INNER,
+            additionalConstraint = { Players.gameId eq Games.id }
+        )
+            .selectAll()
+            .where { (Players.userId eq userId) and (Games.status eq GameStatus.WAITING) }
+            .orderBy(Games.id to SortOrder.DESC)
+            .firstOrNull()
+            ?.let { row ->
+                PlayerGameMembership(
+                    player = row.toModel(),
+                    game = row.toGameModel(),
+                )
+            }
+    }
+
     /**
      * Returns the newest valid membership for a reconnect/login decision.
      *
