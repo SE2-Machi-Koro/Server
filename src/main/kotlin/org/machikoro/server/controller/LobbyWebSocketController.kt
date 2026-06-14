@@ -32,8 +32,8 @@ class LobbyWebSocketController(
      * Handles lobby creation via WebSocket.
      *
      * Client sends a message to /app/lobby.create.
-     * Server creates a new lobby and delivers LOBBY_CREATED only to the creator
-     * via /queue/lobby-user{sessionId} — not a global broadcast.
+     * Server creates a new lobby and delivers LOBBY_CREATED plus the host's
+     * LOBBY_JOINED/LOBBY_ROSTER only to the creator via /queue/lobby-user{sessionId}.
      *
      * Identity is read from the [UserPrincipal] that [org.machikoro.server.auth.StompAuthChannelInterceptor]
      * attaches at CONNECT time — [WebSocketMessage.sender] is ignored to prevent
@@ -70,6 +70,8 @@ class LobbyWebSocketController(
         // Membership is established here, so later game actions can identify
         // the user without relying on a stale chat.addUser gameId payload.
         connectionTracker.register(sessionId, principal.userId, lobby.id)
+        val roster = lobbyService.getLobbyRoster(lobby.id)
+        val hostRosterEntry = roster.firstOrNull { it.userId == principal.userId }
 
         // Deliver only to the creator — avoids auto-joining unrelated clients
         messagingTemplate.convertAndSend(
@@ -84,6 +86,38 @@ class LobbyWebSocketController(
                     "hostUserId" to lobby.hostUserId,
                     "status" to lobby.status.name
                 )
+            )
+        )
+
+        // The merged client navigates to Lobby only after the server confirms
+        // membership with LOBBY_JOINED; LOBBY_CREATED only supplies the code.
+        if (hostRosterEntry != null) {
+            messagingTemplate.convertAndSend(
+                "/queue/lobby-user$sessionId",
+                WebSocketMessage(
+                    type = MessageType.LOBBY_JOINED,
+                    sender = "SERVER",
+                    content = "You joined the lobby",
+                    gameId = lobby.id,
+                    payload = mapOf(
+                        "playerId" to hostRosterEntry.playerId,
+                        "userId" to hostRosterEntry.userId,
+                        "username" to principal.username,
+                        "gameId" to lobby.id,
+                        "coins" to hostRosterEntry.coins,
+                    )
+                )
+            )
+        }
+
+        messagingTemplate.convertAndSend(
+            "/queue/lobby-user$sessionId",
+            WebSocketMessage(
+                type = MessageType.LOBBY_ROSTER,
+                sender = "SERVER",
+                content = "Lobby roster",
+                gameId = lobby.id,
+                payload = LobbyRosterDto(players = roster),
             )
         )
     }

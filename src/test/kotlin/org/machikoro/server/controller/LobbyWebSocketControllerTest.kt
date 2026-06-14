@@ -68,8 +68,12 @@ class LobbyWebSocketControllerTest {
     )
 
     @Test
-    fun `createLobby sends LOBBY_CREATED only to the creator's session queue`() {
+    fun `createLobby sends created joined and roster messages to creator session queue`() {
+        val roster = listOf(
+            LobbyRosterPlayerDto(playerId = 1, userId = 10, username = "Player1", gameId = 1, turnOrder = 0, coins = 3),
+        )
         whenever(lobbyService.createLobby(10)).thenReturn(game())
+        whenever(lobbyService.getLobbyRoster(1)).thenReturn(roster)
 
         val accessor = authenticatedAccessor(userId = 10, username = "Player1", sessionId = "sess-42")
 
@@ -80,23 +84,45 @@ class LobbyWebSocketControllerTest {
 
         val destCaptor = argumentCaptor<String>()
         val msgCaptor = argumentCaptor<WebSocketMessage>()
-        verify(messagingTemplate).convertAndSend(destCaptor.capture(), msgCaptor.capture())
+        verify(messagingTemplate, times(3)).convertAndSend(destCaptor.capture(), msgCaptor.capture())
 
-        // Must go to creator's session queue, not a global topic
-        assertEquals("/queue/lobby-user${"sess-42"}", destCaptor.firstValue)
+        destCaptor.allValues.forEach { destination ->
+            // Must go to creator's session queue, not a global topic
+            assertEquals("/queue/lobby-usersess-42", destination)
+        }
 
-        val msg = msgCaptor.firstValue
-        assertEquals(MessageType.LOBBY_CREATED, msg.type)
-        assertEquals("SERVER", msg.sender)
-        assertEquals("Lobby created", msg.content)
-        assertEquals(1, msg.gameId)
+        val createdMsg = msgCaptor.allValues[0]
+        assertEquals(MessageType.LOBBY_CREATED, createdMsg.type)
+        assertEquals("SERVER", createdMsg.sender)
+        assertEquals("Lobby created", createdMsg.content)
+        assertEquals(1, createdMsg.gameId)
 
-        val payload = msg.payload as? Map<*, *> ?: throw AssertionError("Payload is not a Map")
+        val payload = createdMsg.payload as? Map<*, *> ?: throw AssertionError("Payload is not a Map")
         assertEquals("ABC1234", payload["lobbyCode"])
         assertEquals(10, payload["hostUserId"])
         assertEquals("WAITING", payload["status"])
 
+        val joinedMsg = msgCaptor.allValues[1]
+        assertEquals(MessageType.LOBBY_JOINED, joinedMsg.type)
+        assertEquals("SERVER", joinedMsg.sender)
+        assertEquals("You joined the lobby", joinedMsg.content)
+        assertEquals(1, joinedMsg.gameId)
+        val joinedPayload = joinedMsg.payload as? Map<*, *> ?: throw AssertionError("Payload is not a Map")
+        assertEquals(1, joinedPayload["playerId"])
+        assertEquals(10, joinedPayload["userId"])
+        assertEquals("Player1", joinedPayload["username"])
+        assertEquals(1, joinedPayload["gameId"])
+        assertEquals(3, joinedPayload["coins"])
+
+        val rosterMsg = msgCaptor.allValues[2]
+        assertEquals(MessageType.LOBBY_ROSTER, rosterMsg.type)
+        assertEquals("SERVER", rosterMsg.sender)
+        assertEquals("Lobby roster", rosterMsg.content)
+        assertEquals(1, rosterMsg.gameId)
+        assertEquals(LobbyRosterDto(players = roster), rosterMsg.payload)
+
         verify(lobbyService).createLobby(10)
+        verify(lobbyService).getLobbyRoster(1)
         verify(connectionTracker).register("sess-42", 10, 1)
     }
 
@@ -137,7 +163,11 @@ class LobbyWebSocketControllerTest {
 
     @Test
     fun `createLobby uses principal from session attributes when header user is missing`() {
+        val roster = listOf(
+            LobbyRosterPlayerDto(playerId = 1, userId = 10, username = "Player1", gameId = 1, turnOrder = 0, coins = 3),
+        )
         whenever(lobbyService.createLobby(10)).thenReturn(game())
+        whenever(lobbyService.getLobbyRoster(1)).thenReturn(roster)
 
         val accessor = SimpMessageHeaderAccessor.create().apply {
             sessionId = "sess-99"
@@ -153,13 +183,16 @@ class LobbyWebSocketControllerTest {
 
         val destCaptor = argumentCaptor<String>()
         val msgCaptor = argumentCaptor<WebSocketMessage>()
-        verify(messagingTemplate).convertAndSend(destCaptor.capture(), msgCaptor.capture())
+        verify(messagingTemplate, times(3)).convertAndSend(destCaptor.capture(), msgCaptor.capture())
 
         assertEquals("/queue/lobby-usersess-99", destCaptor.firstValue)
         assertEquals(MessageType.LOBBY_CREATED, msgCaptor.firstValue.type)
         assertEquals("ABC1234", (msgCaptor.firstValue.payload as? Map<*, *>)?.get("lobbyCode"))
+        assertEquals(MessageType.LOBBY_JOINED, msgCaptor.allValues[1].type)
+        assertEquals(MessageType.LOBBY_ROSTER, msgCaptor.allValues[2].type)
 
         verify(lobbyService).createLobby(10)
+        verify(lobbyService).getLobbyRoster(1)
         verify(connectionTracker).register("sess-99", 10, 1)
     }
 
