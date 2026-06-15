@@ -6,10 +6,6 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.machikoro.server.dao.UserDao
-import org.machikoro.server.domain.enums.GameStatus
-import org.machikoro.server.domain.enums.TurnPhase
-import org.machikoro.server.domain.models.GameModel
-import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.domain.models.UserModel
 import org.machikoro.server.dto.GameChatRequest
 import org.machikoro.server.dto.MessageType
@@ -36,7 +32,6 @@ import org.springframework.util.MimeTypeUtils
 import org.springframework.web.socket.WebSocketHttpHeaders
 import org.springframework.web.socket.client.standard.StandardWebSocketClient
 import org.springframework.web.socket.messaging.WebSocketStompClient
-import org.mockito.kotlin.any
 import org.mockito.kotlin.whenever
 import org.springframework.messaging.converter.MappingJackson2MessageConverter
 import java.lang.reflect.Type

@@ -439,11 +439,7 @@ class GameController(
         payloadType = GameChatRequest::class,
     ))
     fun sendGameChat(@Payload request: GameChatRequest, headerAccessor: SimpMessageHeaderAccessor) {
-        val principal = headerAccessor.userPrincipal()
-        if (principal == null) {
-            logger.warn("Game chat rejected: no authenticated principal on session ${headerAccessor.sessionId}")
-            return
-        }
+        val principal = headerAccessor.userPrincipal() ?: return
 
         val message = request.message.trim()
         if (message.isEmpty()) {
