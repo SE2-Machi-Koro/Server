@@ -195,10 +195,10 @@ class GameController(
                     gameId = gameId,
                 )
             )
-        } catch (e: GameStartedException) {
+        } catch (_: GameStartedException) {
             // Already initialized — idempotent, only runs once per game
             logger.debug("enterGameScreen: game $gameId already in progress, skipping initialization")
-        } catch (e: NotHostException) {
+        } catch (_: NotHostException) {
             // Non-host entered screen — host will trigger initialization when they enter
             logger.debug("enterGameScreen: userId=${principal.userId} is not host of game $gameId, skipping")
         }
@@ -267,7 +267,7 @@ class GameController(
         when (val result = gamePhaseService.endTurn(request.gameId)) {
             is EndTurnOutcome.Continue -> {
                 logger.info("Ended turn for game ${request.gameId}, new phase ${result.nextPhase}")
-                broadcastPhase(request.gameId, "TURN_ENDED")
+                broadcastTurnEnded(request.gameId)
             }
             is EndTurnOutcome.Won -> {
                 logger.info("Game ${request.gameId} finished, winner=${result.winnerId}")
@@ -332,6 +332,9 @@ class GameController(
                         "total" to result.total,
                         "completed" to result.completed,
                         "extraTurnGranted" to result.extraTurnGranted,
+                        // Keep round metadata top-level so clients do not need
+                        // to inspect the nested state to complete dice UI.
+                        "roundNumber" to state.game.roundNumber,
                         "timestamp" to System.currentTimeMillis(),
                         "state" to state,
                     ),
@@ -351,6 +354,9 @@ class GameController(
                         "total" to result.total,
                         "completed" to result.completed,
                         "extraTurnGranted" to result.extraTurnGranted,
+                        // Mirrors the ROLL_DICE frame for clients that consume
+                        // only GAME_ACTION updates.
+                        "roundNumber" to state.game.roundNumber,
                     ),
                     gameId = request.gameId,
                 )
@@ -497,11 +503,10 @@ class GameController(
     }
 
     /**
-     * Broadcasts the new turn phase and the active player's user ID to all
-     * subscribers of the game topic. The [activePlayerId] identifies the user
-     * whose turn it is so clients can compare it against their own user ID.
+     * Broadcasts the new turn phase and active player's user ID to all
+     * subscribers of the game topic.
      */
-    private fun broadcastPhase(gameId: Int, event: String) {
+    private fun broadcastTurnEnded(gameId: Int) {
         val state = gameSyncService.buildSnapshot(gameId)
         messagingTemplate.convertAndSend(
             "/topic/game/$gameId",
@@ -510,7 +515,7 @@ class GameController(
                 sender = "server",
                 payload = buildGameActionPayload(
                     state = state,
-                    event = event,
+                    event = "TURN_ENDED",
                 ),
                 gameId = gameId,
             ),

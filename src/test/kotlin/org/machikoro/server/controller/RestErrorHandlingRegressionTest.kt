@@ -90,29 +90,32 @@ class RestErrorHandlingRegressionTest {
     }
 
     @Test
+    @WithUserPrincipal(userId = 1)
     fun `lobby start returns structured not-found error`() {
         whenever(lobbyService.startGame(gameId = 404, requestingUserId = 1))
             .thenThrow(GameNotFoundException("Game 404 not found"))
 
-        mockMvc.perform(post("/lobby/{gameId}/start", 404).param("requestingUserId", "1"))
+        mockMvc.perform(post("/lobby/{gameId}/start", 404))
             .expectApiError(status().isNotFound, "GAME_NOT_FOUND", "Game 404 not found")
     }
 
     @Test
+    @WithUserPrincipal(userId = 1)
     fun `lobby start returns structured invalid game-state error`() {
         whenever(lobbyService.startGame(gameId = 7, requestingUserId = 1))
             .thenThrow(GameStartedException("Game 7 has already started"))
 
-        mockMvc.perform(post("/lobby/{gameId}/start", 7).param("requestingUserId", "1"))
+        mockMvc.perform(post("/lobby/{gameId}/start", 7))
             .expectApiError(status().isBadRequest, "GAME_STARTED", "Game 7 has already started")
     }
 
     @Test
+    @WithUserPrincipal(userId = 1)
     fun `unexpected REST exception returns generic error without internal details`() {
         whenever(lobbyService.startGame(gameId = 500, requestingUserId = 1))
             .thenThrow(IllegalStateException("jdbc:postgresql://prod.internal password=secret"))
 
-        mockMvc.perform(post("/lobby/{gameId}/start", 500).param("requestingUserId", "1"))
+        mockMvc.perform(post("/lobby/{gameId}/start", 500))
             .expectApiError(
                 status().isInternalServerError,
                 "INTERNAL_ERROR",

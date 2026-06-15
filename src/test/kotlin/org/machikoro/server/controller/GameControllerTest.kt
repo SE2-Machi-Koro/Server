@@ -87,8 +87,9 @@ class GameControllerTest {
         gameId: Int,
         turnPhase: TurnPhase = defaultGame.turnPhase,
         activePlayerId: Int? = 1,
+        roundNumber: Int = defaultGame.roundNumber,
     ) = GameStateDto(
-        game = defaultGame.copy(id = gameId, turnPhase = turnPhase),
+        game = defaultGame.copy(id = gameId, turnPhase = turnPhase, roundNumber = roundNumber),
         players = listOf(
             PlayerModel(id = 1, gameId = gameId, userId = 1, turnOrder = 0, coins = 3, lastSeenAt = null),
             PlayerModel(id = 2, gameId = gameId, userId = 2, turnOrder = 1, coins = 3, lastSeenAt = null),
@@ -649,6 +650,7 @@ class GameControllerTest {
         assertEquals(listOf(3, 4), payload["result"])
         assertEquals(7, payload["total"])
         assertEquals(true, payload["completed"])
+        assertEquals(1, payload["roundNumber"])
         assert(payload["timestamp"] is Long)
         assertEquals(snapshot, payload["state"])
         assertEquals(gameId, message.gameId)
@@ -666,6 +668,7 @@ class GameControllerTest {
         assertEquals(listOf(3, 4), actionPayload["result"])
         assertEquals(7, actionPayload["total"])
         assertEquals(true, actionPayload["completed"])
+        assertEquals(1, actionPayload["roundNumber"])
         assertEquals(snapshot, actionPayload["state"])
         verify(diceService).rollDice(request, activePlayer.id)
         verify(gameStateGuard, never()).ensureSenderOwnsPlayer(any(), any(), any())
@@ -959,6 +962,39 @@ class GameControllerTest {
         val actionPayload = actionMessage.payload as Map<String, Any?>
         assertEquals(false, actionPayload["extraTurnGranted"])
     }
+
+    @Test
+    fun `rollDice broadcasts completed result shape for round 4`() {
+        val gameId = 1
+        val activePlayer = PlayerModel(id = 9, gameId = gameId, userId = alice.userId, turnOrder = 0, coins = 3, lastSeenAt = null)
+        val request = RollDiceRequest(gameId = gameId)
+        val response = RollDiceResponse(result = listOf(4), total = 4)
+        val snapshot = gameStateDto(gameId, turnPhase = TurnPhase.RESOLVE_EFFECTS, roundNumber = 4)
+
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice)).thenReturn(activePlayer)
+        whenever(diceService.rollDice(request, activePlayer.id)).thenReturn(response)
+        whenever(gameSyncService.buildSnapshot(gameId)).thenReturn(snapshot)
+
+        controller.rollDice(request, authedAccessor())
+
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate, times(2)).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+
+        @Suppress("UNCHECKED_CAST")
+        val rollPayload = captor.firstValue.payload as Map<String, Any?>
+        assertEquals("DICE_ROLLED", rollPayload["event"])
+        assertEquals(true, rollPayload["completed"])
+        assertEquals("RESOLVE_EFFECTS", rollPayload["turnPhase"])
+        assertEquals(4, rollPayload["roundNumber"])
+
+        @Suppress("UNCHECKED_CAST")
+        val actionPayload = captor.secondValue.payload as Map<String, Any?>
+        assertEquals("DICE_ROLLED", actionPayload["event"])
+        assertEquals(true, actionPayload["completed"])
+        assertEquals("RESOLVE_EFFECTS", actionPayload["turnPhase"])
+        assertEquals(4, actionPayload["roundNumber"])
+    }
+    @Test
     fun `rerollDice throws UNAUTHENTICATED when accessor has no principal`() {
         assertUnauthenticated { controller.rerollDice(RollDiceRequest(gameId = 42, playerId = 1), it) }
         verify(diceService, never()).rerollDice(any(), any())

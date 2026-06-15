@@ -127,6 +127,42 @@ class PlayerDao {
     }
 
     /**
+     * Returns every waiting lobby membership for logout cleanup.
+     */
+    fun findWaitingGameIdsByUserId(userId: Int): List<Int> = transaction {
+        Players.join(
+            Games,
+            JoinType.INNER,
+            additionalConstraint = { Players.gameId eq Games.id }
+        )
+            .selectAll()
+            .where { (Players.userId eq userId) and (Games.status eq GameStatus.WAITING) }
+            .map { it[Players.gameId].value }
+    }
+
+    /**
+     * Returns the newest waiting lobby membership so duplicate create requests
+     * can behave as idempotent retries.
+     */
+    fun findWaitingMembershipByUserId(userId: Int): PlayerGameMembership? = transaction {
+        Players.join(
+            Games,
+            JoinType.INNER,
+            additionalConstraint = { Players.gameId eq Games.id }
+        )
+            .selectAll()
+            .where { (Players.userId eq userId) and (Games.status eq GameStatus.WAITING) }
+            .orderBy(Games.id to SortOrder.DESC)
+            .firstOrNull()
+            ?.let { row ->
+                PlayerGameMembership(
+                    player = row.toModel(),
+                    game = row.toGameModel(),
+                )
+            }
+    }
+
+    /**
      * Returns the newest valid membership for a reconnect/login decision.
      *
      * IN_PROGRESS games take precedence over WAITING lobbies so a client that

@@ -15,6 +15,7 @@ import java.util.UUID
 class AuthService(
     private val userDao: UserDao,
     private val passwordEncoder: PasswordEncoder,
+    private val lobbyService: LobbyService,
 ) {
     private val logger = LoggerFactory.getLogger(AuthService::class.java)
 
@@ -78,6 +79,7 @@ class AuthService(
     @Transactional
     fun logout(sessionToken: String) {
         val user = userDao.findBySessionToken(sessionToken) ?: return
+        lobbyService.leaveWaitingLobbiesForUser(user.id)
         userDao.updateSessionToken(user.id, null)
         logger.info("Cleared session for user '{}'", user.username)
     }
