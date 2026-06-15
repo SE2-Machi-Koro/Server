@@ -2,6 +2,7 @@ package org.machikoro.server.controller
 
 import io.github.springwolf.core.asyncapi.annotations.AsyncListener
 import io.github.springwolf.core.asyncapi.annotations.AsyncOperation
+import org.machikoro.server.auth.UserPrincipal
 import org.machikoro.server.auth.userPrincipal
 import org.machikoro.server.dto.LobbyLeavingOutcome
 import org.machikoro.server.dto.LobbyRosterDto
@@ -11,6 +12,7 @@ import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.exception.GameNotFoundException
 import org.machikoro.server.service.LobbyService
+import org.machikoro.server.service.WebSocketConnectionTracker
 import org.slf4j.LoggerFactory
 import org.springframework.messaging.handler.annotation.MessageMapping
 import org.springframework.messaging.handler.annotation.Payload
@@ -22,6 +24,7 @@ import org.springframework.stereotype.Controller
 class LobbyWebSocketController(
     private val lobbyService: LobbyService,
     private val messagingTemplate: SimpMessagingTemplate,
+    private val connectionTracker: WebSocketConnectionTracker,
 ) {
     private val logger = LoggerFactory.getLogger(LobbyWebSocketController::class.java)
 
@@ -29,8 +32,8 @@ class LobbyWebSocketController(
      * Handles lobby creation via WebSocket.
      *
      * Client sends a message to /app/lobby.create.
-     * Server creates a new lobby and delivers LOBBY_CREATED only to the creator
-     * via /queue/lobby-user{sessionId} — not a global broadcast.
+     * Server creates a new lobby and delivers LOBBY_CREATED plus the host's
+     * LOBBY_JOINED/LOBBY_ROSTER only to the creator via /queue/lobby-user{sessionId}.
      *
      * Identity is read from the [UserPrincipal] that [org.machikoro.server.auth.StompAuthChannelInterceptor]
      * attaches at CONNECT time — [WebSocketMessage.sender] is ignored to prevent
@@ -64,6 +67,11 @@ class LobbyWebSocketController(
         logger.info("User '{}' requested lobby creation", principal.username)
 
         val lobby = lobbyService.createLobby(principal.userId)
+        // Membership is established here, so later game actions can identify
+        // the user without relying on a stale chat.addUser gameId payload.
+        connectionTracker.register(sessionId, principal.userId, lobby.id)
+        val roster = lobbyService.getLobbyRoster(lobby.id)
+        val hostRosterEntry = roster.firstOrNull { it.userId == principal.userId }
 
         // Deliver only to the creator — avoids auto-joining unrelated clients
         messagingTemplate.convertAndSend(
@@ -78,6 +86,38 @@ class LobbyWebSocketController(
                     "hostUserId" to lobby.hostUserId,
                     "status" to lobby.status.name
                 )
+            )
+        )
+
+        // The merged client navigates to Lobby only after the server confirms
+        // membership with LOBBY_JOINED; LOBBY_CREATED only supplies the code.
+        if (hostRosterEntry != null) {
+            messagingTemplate.convertAndSend(
+                "/queue/lobby-user$sessionId",
+                WebSocketMessage(
+                    type = MessageType.LOBBY_JOINED,
+                    sender = "SERVER",
+                    content = "You joined the lobby",
+                    gameId = lobby.id,
+                    payload = mapOf(
+                        "playerId" to hostRosterEntry.playerId,
+                        "userId" to hostRosterEntry.userId,
+                        "username" to principal.username,
+                        "gameId" to lobby.id,
+                        "coins" to hostRosterEntry.coins,
+                    )
+                )
+            )
+        }
+
+        messagingTemplate.convertAndSend(
+            "/queue/lobby-user$sessionId",
+            WebSocketMessage(
+                type = MessageType.LOBBY_ROSTER,
+                sender = "SERVER",
+                content = "Lobby roster",
+                gameId = lobby.id,
+                payload = LobbyRosterDto(players = roster),
             )
         )
     }
@@ -154,6 +194,10 @@ class LobbyWebSocketController(
         val roster = lobbyService.getLobbyRoster(player.gameId)
 
         if (sessionId != null) {
+            // Joining establishes membership; register the session here instead
+            // of waiting for a separate chat.addUser frame with client state.
+            connectionTracker.register(sessionId, principal.userId, player.gameId)
+
             // Tell the joiner they successfully joined — client navigates to LobbyScreen on this event
             messagingTemplate.convertAndSend(
                 "/queue/lobby-user$sessionId",
@@ -247,7 +291,7 @@ class LobbyWebSocketController(
                 sender = "SERVER",
                 content = "Lobby roster updated",
                 gameId = gameId,
-                payload = org.machikoro.server.dto.LobbyRosterDto(players = roster),
+                payload = LobbyRosterDto(players = roster),
             )
         )
     }

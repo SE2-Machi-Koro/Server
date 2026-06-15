@@ -85,6 +85,7 @@ class LobbyServiceTest {
     private fun player(id: Int) =
         PlayerModel(id = id, gameId = 1, userId = id, turnOrder = 0, coins = 3, lastSeenAt = null)
 
+    @Suppress("SameParameterValue")
     private fun rosterEntry(playerId: Int, username: String, gameId: Int = 1) =
         LobbyRosterPlayerDto(playerId = playerId, userId = playerId, username = username, gameId = gameId, turnOrder = playerId - 1, coins = 3)
 
@@ -187,7 +188,22 @@ class LobbyServiceTest {
 
         kotlin.test.assertEquals(expected, result)
         verify(gameDao).create(eq(hostUserId), any(), any())
+        verify(playerDao).addPlayer(gameId, hostUserId)
         verify(gameDao).findById(gameId)
+    }
+
+    @Test
+    fun `createLobby returns existing waiting lobby for duplicate create`() {
+        val hostUserId = 7
+        val existingGame = game(42, GameStatus.WAITING).copy(hostUserId = hostUserId)
+        whenever(playerDao.findWaitingMembershipByUserId(hostUserId))
+            .thenReturn(PlayerDao.PlayerGameMembership(player(hostUserId), existingGame))
+
+        val result = lobbyService.createLobby(hostUserId)
+
+        assertEquals(existingGame, result)
+        verify(gameDao, never()).create(any(), any(), any())
+        verify(playerDao, never()).addPlayer(any(), any())
     }
 
     @Test
@@ -353,6 +369,23 @@ class LobbyServiceTest {
 
         assertEquals(0, roster.size)
         verify(playerDao).getLobbyRoster(1)
+    }
+
+    @Test
+    fun `findWaitingLobbyIdForUser returns waiting membership game id`() {
+        val userId = 10
+        val waitingGame = game(7, GameStatus.WAITING)
+        whenever(playerDao.findWaitingMembershipByUserId(userId))
+            .thenReturn(PlayerDao.PlayerGameMembership(player(userId), waitingGame))
+
+        assertEquals(7, lobbyService.findWaitingLobbyIdForUser(userId))
+    }
+
+    @Test
+    fun `findWaitingLobbyIdForUser returns null when user has no waiting membership`() {
+        whenever(playerDao.findWaitingMembershipByUserId(10)).thenReturn(null)
+
+        assertEquals(null, lobbyService.findWaitingLobbyIdForUser(10))
     }
 
     @Test
@@ -648,6 +681,25 @@ class LobbyServiceTest {
         assertEquals(0, count)
         verify(playerDao, never()).deleteByGameId(any())
         verify(gameDao, never()).delete(any())
+    }
+
+    @Test
+    fun `leaveWaitingLobbiesForUser leaves every waiting lobby membership`() {
+        val userId = 10
+        whenever(playerDao.findWaitingGameIdsByUserId(userId)).thenReturn(listOf(1, 2))
+        whenever(playerDao.findByGameIdAndUserId(1, userId))
+            .thenReturn(player(5).copy(gameId = 1, userId = userId))
+        whenever(playerDao.findByGameIdAndUserId(2, userId))
+            .thenReturn(player(6).copy(gameId = 2, userId = userId))
+        whenever(gameDao.findById(1)).thenReturn(game(1, GameStatus.WAITING).copy(hostUserId = 99))
+        whenever(gameDao.findById(2)).thenReturn(game(2, GameStatus.WAITING).copy(hostUserId = userId))
+        whenever(playerDao.getLobbyRoster(1)).thenReturn(listOf(rosterEntry(20, "bob", 1)))
+
+        lobbyService.leaveWaitingLobbiesForUser(userId)
+
+        verify(playerDao).deleteByPlayerId(5)
+        verify(playerDao).deleteByGameId(2)
+        verify(gameDao).delete(2)
     }
 
     // === toggleReady() ===

@@ -22,8 +22,9 @@ class AuthServiceTest {
 
     private val userDao = mock<UserDao>()
     private val passwordEncoder = mock<PasswordEncoder>()
+    private val lobbyService = mock<LobbyService>()
 
-    private val service = AuthService(userDao, passwordEncoder)
+    private val service = AuthService(userDao, passwordEncoder, lobbyService)
 
     @Test
     fun `register persists user with hashed password and returns id and username`() {
@@ -170,6 +171,7 @@ class AuthServiceTest {
 
         service.logout(token)
 
+        verify(lobbyService).leaveWaitingLobbiesForUser(7)
         verify(userDao).updateSessionToken(eq(7), isNull())
     }
 
@@ -179,6 +181,7 @@ class AuthServiceTest {
 
         service.logout("stale")
 
+        verify(lobbyService, never()).leaveWaitingLobbiesForUser(any())
         verify(userDao, never()).updateSessionToken(any(), any())
     }
 
