@@ -48,8 +48,9 @@ class WebSocketController(
         description = "Broadcasts a chat message to all subscribers of /topic/public.",
         payloadType = WebSocketMessage::class,
     ))
-    fun sendMessage(@Payload message: WebSocketMessage): WebSocketMessage {
-        logger.info("Message received from ${message.sender}: ${message.content}")
+    fun sendMessage(@Payload message: WebSocketMessage, headerAccessor: SimpMessageHeaderAccessor): WebSocketMessage {
+        val principal = headerAccessor.userPrincipal()
+        logger.info("Message received from ${principal?.username} in game ${message.gameId}: ${message.content}")
         return message
     }
 
