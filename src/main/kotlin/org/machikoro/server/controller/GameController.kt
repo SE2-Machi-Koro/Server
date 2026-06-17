@@ -10,6 +10,7 @@ import org.machikoro.server.dto.AccuseRequest
 import org.machikoro.server.dto.AccusationOutcome
 import org.machikoro.server.dto.EndTurnRequest
 import org.machikoro.server.dto.EnterGameScreenRequest
+import org.machikoro.server.dto.GameChatRequest
 import org.machikoro.server.dto.GameStateDto
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.PurchaseRequest
@@ -33,6 +34,7 @@ import org.machikoro.server.service.PurchaseService
 import org.machikoro.server.service.WebSocketConnectionTracker
 import io.github.springwolf.core.asyncapi.annotations.AsyncListener
 import io.github.springwolf.core.asyncapi.annotations.AsyncOperation
+import org.machikoro.server.auth.userPrincipal
 import org.machikoro.server.domain.enums.DiceRoll
 import org.slf4j.LoggerFactory
 import org.springframework.messaging.handler.annotation.MessageMapping
@@ -417,6 +419,55 @@ class GameController(
             if (outcome.caught) "CAUGHT" else "WRONG",
         )
         broadcastAccusationResult(request.gameId, outcome)
+    }
+
+    /**
+    * Handle in-game chat messages and broadcast to all game subscribers.
+    *
+    * Message is sent to /app/game.chat.send and broadcast to /topic/game/{gameId}.
+    * The sender is authenticated via the STOMP session principal, and verified to be
+    * a participant of the specified game. Blank and oversized messages are rejected
+    * silently.
+    *
+    * Chat does not mutate game state and is not persisted. Invalid requests are
+    * logged and ignored without broadcasting.
+    */
+    @MessageMapping("/game.chat.send")
+    @AsyncListener(operation = AsyncOperation(
+        channelName = "/game.chat.send",
+        description = "Sends an in-game chat message. Broadcast to /topic/game/{gameId} only.",
+        payloadType = GameChatRequest::class,
+    ))
+    fun sendGameChat(@Payload request: GameChatRequest, headerAccessor: SimpMessageHeaderAccessor) {
+        val principal = headerAccessor.userPrincipal() ?: return
+
+        val message = request.message.trim()
+        if (message.isEmpty()) {
+            logger.debug("Game chat rejected: blank message in game ${request.gameId}")
+            return
+        }
+
+        val maxLength = 300
+        if (message.length > maxLength) {
+            logger.debug("Game chat rejected: message length ${message.length} exceeds max $maxLength in game ${request.gameId}")
+            return
+        }
+
+        if (!gameSyncService.isUserInGame(principal.userId, request.gameId)) {
+            logger.warn("Game chat rejected: userId=${principal.userId} not in game ${request.gameId}")
+            return
+        }
+
+        logger.info("Game chat broadcast in game {}: {} from user {}", request.gameId, message, principal.userId)
+        messagingTemplate.convertAndSend(
+            "/topic/game/${request.gameId}",
+            WebSocketMessage(
+                type = MessageType.CHAT,
+                sender = principal.username,
+                content = message,
+                gameId = request.gameId
+            ),
+        )
     }
 
     /**
