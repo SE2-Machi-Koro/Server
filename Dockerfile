@@ -10,7 +10,7 @@ COPY gradle.properties .
 COPY gradle.lockfile .
 COPY src src
 RUN chmod +x ./gradlew
-RUN --mount=type=cache,id=gradle,target=/root/.gradle \
+RUN --mount=type=cache,id=s/dfcbae23-f955-46ae-97ba-22310eb59b60-/root/.gradle,target=/root/.gradle \
     ./gradlew bootJar -x test
 
 FROM scratch AS packaged-jar
