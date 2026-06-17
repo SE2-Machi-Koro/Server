@@ -91,14 +91,18 @@ class SecurityConfigTests {
 
     @Test
     fun rootPathShouldBeAccessibleWithoutAuthentication() {
+        // No static page is served at the root; a 404 (not 401/403) proves
+        // the request is permitted without authentication.
         mockMvc.perform(get("/"))
-            .andExpect(status().isOk)
+            .andExpect(status().isNotFound)
     }
 
     @Test
     fun indexHtmlShouldBeAccessibleWithoutAuthentication() {
+        // The browser chat demo page was removed; the path is still permitted
+        // without authentication, so it returns 404 rather than 401/403.
         mockMvc.perform(get("/index.html"))
-            .andExpect(status().isOk)
+            .andExpect(status().isNotFound)
     }
 
     @Test
