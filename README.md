@@ -344,11 +344,12 @@ GET http://localhost:8080/actuator/health
 
 ## Deployment
 
-The server is deployed to the AAU shared infrastructure (`se2-demo.aau.at`, group 6) via
-[doco-cd](https://github.com/kimdre/doco-cd), which reconciles the running stack from this
-repository's `compose.yaml` on every push to `main`.
+The server is deployed to **Railway** (`https://railway.app`), a cloud platform that runs Docker containers and manages PostgreSQL databases automatically. The production backend automatically pulls the latest image from the GitHub Container Registry (GHCR) on every push to `main`.
 
-### Pipeline overview
+Previously deployed to the AAU shared infrastructure (`se2-demo.aau.at`, group 6) via
+[doco-cd](https://github.com/kimdre/doco-cd) — see [Legacy AAU Deployment](#legacy-aau-deployment) below for historical reference.
+
+### Railway Deployment Pipeline
 
 ```mermaid
 flowchart LR
@@ -356,34 +357,71 @@ flowchart LR
     Action --> Test[Build & Test]
     Action --> Docker[Build Multi-Arch Docker Image]
     Docker --> GHCR[(GHCR Image Registry)]
-    
-    GHCR --> DocoCD(doco-cd on AAU Server)
-    DocoCD -->|Pulls Image| Production[Docker Compose Stack]
-    Production --> Backend[Machi Koro Backend]
-    Production --> DB[(PostgreSQL)]
+    GHCR --> Railway[Railway Platform]
+    Railway --> Backend[Machi Koro Backend]
+    Railway --> DB[(PostgreSQL)]
 ```
 
-1. A push to `main` triggers the [`Publish Docker image to GHCR`](.github/workflows/docker-publish.yml)
-  workflow.
-2. The workflow first runs a `build-jar` job on `ubuntu-latest`, sets up JDK 21 with
-  Gradle dependency caching, and executes `./gradlew bootJar -x test` exactly once.
-  The resulting application jar is uploaded as a short-lived workflow artifact.
-3. The `build-and-push` job downloads that artifact and uses Docker Buildx to package
-  and push the multi-architecture runtime image for `linux/amd64` and `linux/arm64`
-  without recompiling the application per architecture. This avoids the slow Gradle
-  build under QEMU emulation on `arm64`.
-4. The published image is pushed to
-   `ghcr.io/se2-machi-koro/server` with the tags:
+1. A push to `main` triggers the [`Publish Docker image to GHCR`](.github/workflows/docker-publish.yml) workflow.
+2. The workflow first runs a `build-jar` job on `ubuntu-latest`, sets up JDK 21 with Gradle dependency caching, and executes `./gradlew bootJar -x test` exactly once. The resulting application jar is uploaded as a short-lived workflow artifact.
+3. The `build-and-push` job downloads that artifact and uses Docker Buildx to package and push the multi-architecture runtime image for `linux/amd64` and `linux/arm64` without recompiling the application per architecture.
+4. The published image is pushed to `ghcr.io/se2-machi-koro/server` with the tags:
    - `latest` (only on `main`)
    - `sha-<short-commit>` (every build, used for rollback)
    - `v*` (when a Git tag matching `v*` is pushed)
-5. doco-cd on the AAU server detects the change, pulls the new image (`pull_policy: always`),
-   and restarts the `backend` service defined in [compose.yaml](compose.yaml), when the
-   course deployment config contains a stack entry for this repository.
-6. The Postgres service runs alongside the backend on the internal compose network and is
-   **not exposed to the host** — only the backend is published on `PUBLIC_PORT` (`53210`).
+5. Railway detects the new image (via pull_policy: always) and automatically redeploys the backend service.
+6. The PostgreSQL database and backend run together in Railway; the backend is published on Railway's auto-generated HTTPS domain.
 
-### Live endpoints
+### Setting up Railway (First Time)
+
+1. Go to [railway.app](https://railway.app) and sign up with your GitHub account.
+2. Create a new project.
+3. Add a PostgreSQL database to the project (Railway provides automatic hosting and backup).
+4. Create an empty service and deploy from Docker image: `ghcr.io/se2-machi-koro/server:latest`
+5. In the backend service settings, configure the following environment variables:
+   ```
+   DB_HOST=${{Postgres.PGHOST}}
+   DB_PORT=${{Postgres.PGPORT}}
+   DB_NAME=${{Postgres.PGDATABASE}}
+   DB_USERNAME=${{Postgres.PGUSER}}
+   DB_PASSWORD=${{Postgres.PGPASSWORD}}
+   SERVER_PORT=8080
+   SPRING_DOCKER_COMPOSE_ENABLED=false
+   WEBSOCKET_ALLOWED_ORIGINS=<your-railway-domain>
+   DEBUG_ENABLED=false
+   ADMIN_PASSWORD=
+   ```
+6. Generate a public domain in the networking settings and update `WEBSOCKET_ALLOWED_ORIGINS` with that domain.
+7. The backend is now live and will auto-update on every push to `main`.
+
+### Dockerfile Requirements for Railway
+
+Railway's BuildKit requires explicit `id` parameters for Docker cache mounts. The `--mount=type=cache` directive in the Dockerfile must include an `id` parameter:
+
+```dockerfile
+RUN --mount=type=cache,id=gradle,target=/root/.gradle \
+    ./gradlew bootJar -x test
+```
+
+Without the `id`, Railway's build will fail with: `"--mount=type=cache requires an explicit id parameter"`. This is automatically handled in the current Dockerfile.
+
+### Live Endpoints
+
+Railway provides an auto-generated HTTPS domain. Check the Railway dashboard for the exact URL. Typical endpoints:
+
+| Resource     | URL                                                  |
+|--------------|------------------------------------------------------|
+| Backend      | `https://<railway-domain>`                           |
+| Health check | `https://<railway-domain>/actuator/health`           |
+| WebSocket    | `wss://<railway-domain>/ws`                          |
+| Swagger UI   | `https://<railway-domain>/swagger-ui.html`           |
+| AsyncAPI UI  | `https://<railway-domain>/springwolf/asyncapi-ui.html` |
+
+### Legacy AAU Deployment
+
+Previously, the server was deployed to the AAU shared infrastructure via doco-cd. This section is kept for historical reference.
+
+**AAU Live Endpoints (no longer active):**
 
 | Resource     | URL                                                  |
 |--------------|------------------------------------------------------|
@@ -391,7 +429,7 @@ flowchart LR
 | Health check | `http://se2-demo.aau.at:53210/actuator/health`       |
 | WebSocket    | `ws://se2-demo.aau.at:53210/ws`                      |
 
-### Server access
+#### AAU Server Access (Legacy)
 
 ```bash
 ssh grp-6@se2-demo.aau.at -p 53200
@@ -403,19 +441,9 @@ The doco-cd working copy of this repo lives at:
 /var/lib/docker/volumes/doco-cd-setup_data/_data/github.com/SE2-Machi-Koro/Server/
 ```
 
-This path is owned by Docker and may not be directly readable from the `grp-6` shell.
-If doco-cd has not created a group 6 stack yet, deploy from the group home directory:
+#### AAU Manual Deployment (Legacy)
 
-```bash
-mkdir -p /home/grp-6/machi-koro-server-deploy
-cp compose.yaml /home/grp-6/machi-koro-server-deploy/compose.yaml
-cd /home/grp-6/machi-koro-server-deploy
-```
-
-The production `.env` must be placed next to `compose.yaml` in the active deployment
-directory and locked down with `chmod 600`. Use [.env.example](.env.example) as the
-template; the production values for `DB_USERNAME` / `DB_PASSWORD` are set by the team
-and never committed.
+The production `.env` must be placed next to `compose.yaml` in the active deployment directory and locked down with `chmod 600`. Use [.env.example](.env.example) as the template.
 
 Minimal production `.env` for the AAU group 6 server:
 
@@ -436,24 +464,9 @@ docker compose up -d
 docker compose ps
 ```
 
-This manual fallback does not auto-restart on every push to `main`. After a new image is
-published to GHCR, refresh the running stack from `/home/grp-6/machi-koro-server-deploy`
-with the same `docker compose pull && docker compose up -d` commands, or add a group 6
-stack entry to the course doco-cd config so reconciliation is automatic.
+#### AAU Rollback (Legacy)
 
-The deployment is healthy when `docker compose ps` shows both `machikoro-db` and
-`machikoro-server` as healthy and the external health check returns `status: UP`:
-
-```bash
-curl http://se2-demo.aau.at:53210/actuator/health
-```
-
-### Rollback
-
-To roll back to a previous image, edit the production `.env` on the server and set
-`IMAGE_TAG=sha-<short-commit>` (or any other tag published to GHCR), then trigger a
-manual `docker compose up -d` or a doco-cd reconcile. The `compose.yaml` resolves the image as
-`ghcr.io/se2-machi-koro/server:${IMAGE_TAG:-latest}`.
+To roll back to a previous image, edit the production `.env` on the server and set `IMAGE_TAG=sha-<short-commit>` (or any other tag published to GHCR), then trigger a manual `docker compose up -d` or a doco-cd reconcile. The `compose.yaml` resolves the image as `ghcr.io/se2-machi-koro/server:${IMAGE_TAG:-latest}`.
 
 ## Frontend dependencies (Subresource Integrity)
 
@@ -476,4 +489,4 @@ DevTools console that no *"Failed to find a valid digest in the 'integrity' attr
 error is logged.
 
 ---
-*Last Updated: 10.06.2026*
+*Last Updated: 17.06.2026* — Deployment migrated from AAU doco-cd to Railway
