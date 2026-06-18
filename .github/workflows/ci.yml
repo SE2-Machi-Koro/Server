@@ -60,10 +60,10 @@ jobs:
           name: server-test-reports
           path: build/reports/tests/
 
-  # Deployment is handled by doco-cd on every push to `main`.
-  # doco-cd clones the repo to
-  #   /var/lib/docker/volumes/doco-cd-setup_data/_data/github.com/<org>/<repo>/
-  # on the AAU shared server and runs `docker compose up -d` against
-  # `compose.yaml`. Production secrets live in a server-side `.env` placed
-  # next to `compose.yaml` (chmod 600). For debugging / rollback use SSH:
-  #   ssh grp-6@se2-demo.aau.at -p 53200
+  # Deployment is handled by Railway (https://railway.app). On every push to
+  # `main` the `docker-publish.yml` workflow pushes a new image to GHCR
+  # (ghcr.io/se2-machi-koro/server:latest); Railway watches that image
+  # (pull_policy: always) and automatically redeploys the backend service.
+  # Production env vars (DB_*, WEBSOCKET_ALLOWED_ORIGINS, ...) are configured in
+  # the Railway service settings — see the Deployment section of README.md.
+  # The legacy AAU doco-cd/SSH flow is retained only for historical reference.
