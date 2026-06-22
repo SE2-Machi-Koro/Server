@@ -1,5 +1,7 @@
 package org.machikoro.server.service
 
+import org.slf4j.LoggerFactory
+import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
 import java.util.concurrent.ConcurrentHashMap
 
@@ -9,7 +11,11 @@ import java.util.concurrent.ConcurrentHashMap
  * and [org.machikoro.server.listener.WebSocketEventListener].
  */
 @Service
-class WebSocketConnectionTracker {
+class WebSocketConnectionTracker(
+    private val gameSyncService: GameSyncService,
+) {
+
+    private val logger = LoggerFactory.getLogger(WebSocketConnectionTracker::class.java)
 
     // sessionId → Pair(userId, gameId)
     private val sessions = ConcurrentHashMap<String, Pair<Int, Int>>()
@@ -55,5 +61,28 @@ class WebSocketConnectionTracker {
         sessions.values.mapNotNullTo(mutableSetOf()) { (uId, gId) ->
             uId.takeIf { gId == gameId }
         }
-}
 
+    /**
+     * Periodically evicts sessions whose associated game is no longer in progress.
+     *
+     * A STOMP disconnect event is the primary cleanup path, but network drops or
+     * proxy resets can leave sessions in the registry indefinitely. This scheduled
+     * sweep removes any entry whose game has already finished (or never existed),
+     * preventing the map from growing without bound over long server uptimes.
+     *
+     * Runs every 5 minutes by default. The interval is intentionally coarse — the
+     * registry is small (bounded by max concurrent players) and correctness of the
+     * [getConnectedUserIds] result matters more than immediate eviction.
+     */
+    @Scheduled(fixedDelayString = "\${websocket.tracker.cleanup-interval-ms:300000}")
+    fun evictStaleGameSessions() {
+        val stale = sessions.entries
+            .filter { (_, pair) -> !gameSyncService.isInProgress(pair.second) }
+            .map { it.key }
+
+        if (stale.isNotEmpty()) {
+            logger.debug("Evicting {} stale WebSocket session(s) for finished/missing games", stale.size)
+            stale.forEach { sessions.remove(it) }
+        }
+    }
+}

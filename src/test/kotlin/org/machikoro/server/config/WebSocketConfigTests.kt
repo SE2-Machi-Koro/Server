@@ -40,6 +40,8 @@ class WebSocketConfigTests {
         `when`(nativeEndpointRegistration.setAllowedOrigins("http://localhost:8080", "http://localhost:3000")).thenReturn(nativeEndpointRegistration)
         `when`(sockJsEndpointRegistration.setAllowedOrigins("http://localhost:8080", "http://localhost:3000")).thenReturn(sockJsEndpointRegistration)
         `when`(sockJsEndpointRegistration.withSockJS()).thenReturn(sockJsRegistration)
+        `when`(sockJsRegistration.setDisconnectDelay(2_000)).thenReturn(sockJsRegistration)
+        `when`(sockJsRegistration.setHeartbeatTime(25_000)).thenReturn(sockJsRegistration)
 
         config.registerStompEndpoints(registry)
 
@@ -48,6 +50,8 @@ class WebSocketConfigTests {
         verify(nativeEndpointRegistration).setAllowedOrigins("http://localhost:8080", "http://localhost:3000")
         verify(sockJsEndpointRegistration).setAllowedOrigins("http://localhost:8080", "http://localhost:3000")
         verify(sockJsEndpointRegistration).withSockJS()
+        verify(sockJsRegistration).setDisconnectDelay(2_000)
+        verify(sockJsRegistration).setHeartbeatTime(25_000)
     }
 
     @Test

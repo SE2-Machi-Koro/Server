@@ -5,14 +5,17 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.whenever
 
 class WebSocketConnectionTrackerTest {
 
+    private val gameSyncService = mock<GameSyncService>()
     private lateinit var tracker: WebSocketConnectionTracker
 
     @BeforeEach
     fun setUp() {
-        tracker = WebSocketConnectionTracker()
+        tracker = WebSocketConnectionTracker(gameSyncService)
     }
 
     @Test
@@ -95,6 +98,39 @@ class WebSocketConnectionTrackerTest {
 
         assertEquals(99, tracker.getUserId("session-z"))
     }
+
+    // ── evictStaleGameSessions ────────────────────────────────────────────────
+
+    @Test
+    fun `evictStaleGameSessions removes sessions for games that are no longer in progress`() {
+        whenever(gameSyncService.isInProgress(1)).thenReturn(true)
+        whenever(gameSyncService.isInProgress(2)).thenReturn(false)
+
+        tracker.register("active-session", userId = 10, gameId = 1)
+        tracker.register("stale-session", userId = 20, gameId = 2)
+
+        tracker.evictStaleGameSessions()
+
+        assertEquals(setOf(10), tracker.getConnectedUserIds(gameId = 1))
+        assertTrue(tracker.getConnectedUserIds(gameId = 2).isEmpty())
+    }
+
+    @Test
+    fun `evictStaleGameSessions is a no-op when all sessions are for in-progress games`() {
+        whenever(gameSyncService.isInProgress(5)).thenReturn(true)
+
+        tracker.register("session-a", userId = 1, gameId = 5)
+        tracker.register("session-b", userId = 2, gameId = 5)
+
+        tracker.evictStaleGameSessions()
+
+        assertEquals(setOf(1, 2), tracker.getConnectedUserIds(gameId = 5))
+    }
+
+    @Test
+    fun `evictStaleGameSessions is a no-op when the registry is empty`() {
+        tracker.evictStaleGameSessions()
+
+        assertTrue(tracker.getConnectedUserIds(gameId = 1).isEmpty())
+    }
 }
-
-

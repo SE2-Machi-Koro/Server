@@ -37,6 +37,13 @@ class WebSocketConfig(
      * Registers a native WebSocket endpoint for Android clients and a separate SockJS endpoint
      * for browser/testing flows that still rely on fallback transports.
      * Allowed origins are configured via the 'websocket.allowed-origins' property.
+     *
+     * SockJS tuning:
+     * - `setDisconnectDelay`: how long the server waits before treating a SockJS session as
+     *   disconnected after the underlying transport closes. Lowered from the 5 s default to
+     *   2 s so stale server-side session objects are released sooner.
+     * - `setHeartbeatTime`: interval at which the SockJS server sends heartbeat frames to keep
+     *   the transport alive through proxies. Set to 25 s (SockJS spec recommendation).
      */
     override fun registerStompEndpoints(registry: StompEndpointRegistry) {
         val origins = allowedOrigins.split(",").map { it.trim() }.toTypedArray()
@@ -46,6 +53,8 @@ class WebSocketConfig(
         registry.addEndpoint(SOCKJS_WS_ENDPOINT)
             .setAllowedOrigins(*origins)
             .withSockJS()
+            .setDisconnectDelay(2_000)
+            .setHeartbeatTime(25_000)
     }
 
     /**
