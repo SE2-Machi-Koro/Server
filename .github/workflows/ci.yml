@@ -55,7 +55,7 @@ jobs:
           fi
 
       - name: Build and test
-        run: ./gradlew clean build test --info --stacktrace
+        run: ./gradlew --no-build-cache clean build test --info --stacktrace
 
   # Deployment is handled by Railway (https://railway.app). On every push to
   # `main` the `docker-publish.yml` workflow pushes a new image to GHCR
