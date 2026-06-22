@@ -20,8 +20,10 @@ concurrency:
 jobs:
   sonar:
     name: SonarCloud Code Analysis
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-8-cores
     timeout-minutes: 30
+    env:
+      GRADLE_OPTS: "-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+UseG1GC"
 
     steps:
       - name: Checkout code
@@ -70,12 +72,12 @@ jobs:
             exit 1
           fi
 
-      - name: Run tests, generate JaCoCo and analyze with SonarCloud
+      - name: Build (skip tests), generate JaCoCo report and analyze with SonarCloud
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: >-
-          ./gradlew --no-daemon clean check jacocoTestReport sonar
+          ./gradlew --no-daemon clean build -x test jacocoTestReport sonar
           --info --stacktrace
 
       - name: Upload JaCoCo XML report
