@@ -344,7 +344,7 @@ GET http://localhost:8080/actuator/health
 
 ## Deployment
 
-The server is deployed to **Railway** (`https://railway.app`), a cloud platform that runs Docker containers and manages PostgreSQL databases automatically. The production backend automatically pulls the latest image from the GitHub Container Registry (GHCR) on every push to `main`.
+The server is deployed to **Railway** (`https://railway.app`), a cloud platform that runs Docker containers and manages PostgreSQL databases automatically. Railway is connected to this GitHub repository and **builds the backend from the `Dockerfile`** on every push to `main` — the deploy configuration is codified in [`railway.toml`](railway.toml) (`builder = "DOCKERFILE"`). The separate GHCR publish workflow (below) still runs to produce versioned, multi-arch images for rollback and other consumers, but Railway does **not** pull those images.
 
 Previously deployed to the AAU shared infrastructure (`se2-demo.aau.at`, group 6) via
 [doco-cd](https://github.com/kimdre/doco-cd) — see [Legacy AAU Deployment](#legacy-aau-deployment) below for historical reference.
@@ -353,31 +353,31 @@ Previously deployed to the AAU shared infrastructure (`se2-demo.aau.at`, group 6
 
 ```mermaid
 flowchart LR
-    Push(Push to main) --> Action[GitHub Actions CI/CD]
-    Action --> Test[Build & Test]
-    Action --> Docker[Build Multi-Arch Docker Image]
-    Docker --> GHCR[(GHCR Image Registry)]
-    GHCR --> Railway[Railway Platform]
-    Railway --> Backend[Machi Koro Backend]
+    Push(Push to main) --> Railway[Railway Platform]
+    Railway --> Build[Build from Dockerfile]
+    Build --> Backend[Machi Koro Backend]
     Railway --> DB[(PostgreSQL)]
+    Push -. parallel .-> Action[GitHub Actions]
+    Action --> GHCR[(GHCR Image Registry<br/>rollback / other consumers)]
 ```
 
-1. A push to `main` triggers the [`Publish Docker image to GHCR`](.github/workflows/docker-publish.yml) workflow.
-2. The workflow first runs a `build-jar` job on `ubuntu-latest`, sets up JDK 21 with Gradle dependency caching, and executes `./gradlew bootJar -x test` exactly once. The resulting application jar is uploaded as a short-lived workflow artifact.
-3. The `build-and-push` job downloads that artifact and uses Docker Buildx to package and push the multi-architecture runtime image for `linux/amd64` and `linux/arm64` without recompiling the application per architecture.
-4. The published image is pushed to `ghcr.io/se2-machi-koro/server` with the tags:
-   - `latest` (only on `main`)
-   - `sha-<short-commit>` (every build, used for rollback)
-   - `v*` (when a Git tag matching `v*` is pushed)
-5. Railway detects the new image (via pull_policy: always) and automatically redeploys the backend service.
-6. The PostgreSQL database and backend run together in Railway; the backend is published on Railway's auto-generated HTTPS domain.
+1. A push to `main` triggers a Railway deploy. Railway builds the backend directly from the [`Dockerfile`](Dockerfile) (`builder = "DOCKERFILE"` in [`railway.toml`](railway.toml)); with no target override it builds the `final` stage (`runtime-from-builder`), which compiles the jar from source inside the image.
+2. Railway runs the new container, waits for the `healthcheckPath` (`/actuator/health`) to pass, then cuts over traffic. On failure it applies the `ON_FAILURE` restart policy (up to 10 retries).
+3. The PostgreSQL database and backend run together in Railway; the backend is published on Railway's auto-generated HTTPS domain.
+
+In parallel — and independently of the Railway deploy — the [`Publish Docker image to GHCR`](.github/workflows/docker-publish.yml) workflow builds and pushes a versioned, multi-arch image (`linux/amd64`, `linux/arm64`) to `ghcr.io/se2-machi-koro/server` with the tags:
+- `latest` (only on `main`)
+- `sha-<short-commit>` (every build, used for rollback)
+- `v*` (when a Git tag matching `v*` is pushed)
+
+These images are for rollback and other consumers; Railway does not pull them.
 
 ### Setting up Railway (First Time)
 
 1. Go to [railway.app](https://railway.app) and sign up with your GitHub account.
 2. Create a new project.
 3. Add a PostgreSQL database to the project (Railway provides automatic hosting and backup).
-4. Create an empty service and deploy from Docker image: `ghcr.io/se2-machi-koro/server:latest`
+4. Create a service connected to this GitHub repository. The committed [`railway.toml`](railway.toml) tells Railway to build from the `Dockerfile`, so no manual build settings are needed.
 5. In the backend service settings, configure the following environment variables:
    ```
    DB_HOST=${{Postgres.PGHOST}}
@@ -385,12 +385,12 @@ flowchart LR
    DB_NAME=${{Postgres.PGDATABASE}}
    DB_USERNAME=${{Postgres.PGUSER}}
    DB_PASSWORD=${{Postgres.PGPASSWORD}}
-   SERVER_PORT=8080
    SPRING_DOCKER_COMPOSE_ENABLED=false
    WEBSOCKET_ALLOWED_ORIGINS=<your-railway-domain>
    DEBUG_ENABLED=false
    ADMIN_PASSWORD=
    ```
+   The app binds to Railway's injected `PORT` automatically (falling back to `SERVER_PORT`, then `8080`), so no port variable is required.
 6. Generate a public domain in the networking settings and update `WEBSOCKET_ALLOWED_ORIGINS` with that domain.
 7. The backend is now live and will auto-update on every push to `main`.
 

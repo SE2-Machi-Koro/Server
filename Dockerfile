@@ -27,11 +27,17 @@ EXPOSE 8080
 FROM runtime-base AS runtime-from-workspace
 COPY --chown=app:app --from=packaged-jar /app.jar /app/app.jar
 USER app
+# Make the JVM container-memory-aware: default heap is only ~25% of the
+# container limit, which wastes most of the platform's RAM (e.g. on Railway).
+ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75.0"
 ENTRYPOINT ["java", "-jar", "app.jar"]
 
 FROM runtime-base AS runtime-from-builder
 COPY --chown=app:app --from=builder /app/build/libs/*.jar /app/app.jar
 USER app
+# Make the JVM container-memory-aware: default heap is only ~25% of the
+# container limit, which wastes most of the platform's RAM (e.g. on Railway).
+ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75.0"
 ENTRYPOINT ["java", "-jar", "app.jar"]
 
 FROM runtime-from-builder AS final
