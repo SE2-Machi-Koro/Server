@@ -8,6 +8,10 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  # Ensure the Gradle daemon gets enough heap even if gradle.properties is not
+  # picked up early (e.g. before the checkout step runs).  This mirrors the
+  # org.gradle.jvmargs value in gradle.properties so both paths are covered.
+  GRADLE_OPTS: "-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+UseG1GC"
 
 permissions:
   contents: read
