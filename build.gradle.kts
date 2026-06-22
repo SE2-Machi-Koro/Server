@@ -99,6 +99,7 @@ kotlin {
 tasks.withType<Test> {
     useJUnitPlatform()
     jvmArgs("-XX:+EnableDynamicAgentLoading")
+    systemProperty("spring.profiles.active", "test")
     finalizedBy(tasks.jacocoTestReport)
 }
 
