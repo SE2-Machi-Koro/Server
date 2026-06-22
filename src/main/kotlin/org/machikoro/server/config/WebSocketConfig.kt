@@ -46,6 +46,8 @@ class WebSocketConfig(
         registry.addEndpoint(SOCKJS_WS_ENDPOINT)
             .setAllowedOrigins(*origins)
             .withSockJS()
+            .setDisconnectDelay(5_000)
+            .setHeartbeatTime(25_000)
     }
 
     /**
