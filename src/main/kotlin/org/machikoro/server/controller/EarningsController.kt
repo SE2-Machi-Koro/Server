@@ -45,7 +45,7 @@ class EarningsController(
         gameStateGuard.ensureSenderIsActivePlayer(request.gameId, user)
         val gameTopic = "/topic/game/${request.gameId}"
         try {
-            earningsService.resolveEffects(request.gameId)
+            val coinDeltas = earningsService.resolveEffects(request.gameId)
             val state = gameSyncService.buildSnapshot(request.gameId)
             logger.info("Resolved effects for game ${request.gameId}")
             messagingTemplate.convertAndSend(
@@ -58,6 +58,9 @@ class EarningsController(
                         "gameId" to request.gameId,
                         "turnPhase" to state.game.turnPhase.name,
                         "activePlayerId" to state.activePlayerId,
+                        // playerId -> signed coin delta; client uses it for the
+                        // coin / coin-drawer sound effects (issue #389).
+                        "coinDeltas" to coinDeltas,
                         "state" to state,
                     ),
                     gameId = request.gameId,
