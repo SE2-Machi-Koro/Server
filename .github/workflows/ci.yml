@@ -19,7 +19,7 @@ permissions:
 jobs:
   build-and-test:
     name: Build, Test & SonarCloud
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-x64
 
     steps:
       - name: Checkout code
@@ -54,15 +54,15 @@ jobs:
             exit 1
           fi
 
-      - name: Build (tests skipped in CI)
-        # Tests are skipped here because the suite uses Testcontainers (real
-        # Postgres instances), which combined with the Gradle daemon, Kotlin
-        # compiler, and test JVM exhausts the memory available on the
-        # ubuntu-latest runner even with a 4 GB heap.  Developers are
-        # responsible for running the full test suite locally before pushing.
-        # To re-enable tests in CI, either (a) switch to a larger runner,
-        # (b) mock Testcontainers, or (c) split tests into a separate job.
-        run: ./gradlew clean build -x test
+      - name: Build and test
+        run: ./gradlew clean build test --info --stacktrace
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: build/reports/tests/
 
   # Deployment is handled by Railway (https://railway.app). On every push to
   # `main` the `docker-publish.yml` workflow pushes a new image to GHCR
