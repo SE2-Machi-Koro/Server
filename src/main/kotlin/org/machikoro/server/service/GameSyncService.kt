@@ -8,8 +8,10 @@ import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.domain.enums.GameStatus
+import org.machikoro.server.dto.CardDefinitionDto
 import org.machikoro.server.dto.GameStateDto
 import org.machikoro.server.dto.ClientScreen
+import org.machikoro.server.dto.LandmarkDefinitionDto
 import org.machikoro.server.dto.SessionStateDto
 import org.machikoro.server.dto.toDefinitionDto
 import org.machikoro.server.exception.GameNotFoundException
@@ -25,6 +27,22 @@ class GameSyncService(
     private val cardDao: CardDao,
     private val landmarkDao: LandmarkDao,
 ) {
+
+    /**
+     * Card and landmark definitions are static reference data — they never change
+     * between games.  Caching them here avoids re-querying (and re-allocating) the
+     * same lists on every [buildSnapshot] call.  Without this cache, a burst of
+     * reconnects (e.g. after a server restart) would issue O(n) identical DB reads
+     * and allocate a fresh list of ~15 CardDefinitionDto objects per call, adding
+     * measurable GC pressure under the 1 GB heap limit.
+     */
+    private val cachedCardDefinitions: List<CardDefinitionDto> by lazy {
+        cardDao.findAll().map { it.toDefinitionDto() }
+    }
+
+    private val cachedLandmarkDefinitions: List<LandmarkDefinitionDto> by lazy {
+        landmarkDao.findAll().map { it.toDefinitionDto() }
+    }
 
     fun findActiveInProgressGameId(userId: Int): Int? =
         playerDao.findActiveGameIdByUserId(userId)
@@ -49,6 +67,20 @@ class GameSyncService(
         )
     }
 
+    /**
+     * Builds a full game-state snapshot for broadcast to reconnecting clients.
+     *
+     * Memory impact: this method is called on every client reconnect and allocates
+     * several intermediate collections (player card maps, landmark maps, marketplace
+     * map, username map) plus the [GameStateDto] itself.  Keep allocations bounded:
+     * - Card/landmark definitions are served from [cachedCardDefinitions] /
+     *   [cachedLandmarkDefinitions] — a single shared list rather than a new
+     *   allocation per call.
+     * - Player cards are fetched in one bulk query via [PlayerCardDao.findByPlayerIds]
+     *   to avoid N+1 DB round-trips.
+     * - Only landmarks actually assigned to players in this game are included;
+     *   the full definition catalogue is not re-fetched per snapshot.
+     */
     fun buildSnapshot(gameId: Int): GameStateDto {
         val game = gameDao.findById(gameId)
             ?: throw GameNotFoundException("Game $gameId not found")
@@ -66,8 +98,6 @@ class GameSyncService(
             player.id to playerLandmarkDao.findByPlayerId(player.id)
         }
         val marketplace = gameMarketplaceDao.findByGameIdAsMap(gameId)
-        val cardDefinitions = cardDao.findAll().map { it.toDefinitionDto() }
-        val landmarkDefinitions = landmarkDao.findAll().map { it.toDefinitionDto() }
         val playerUsernames = playerDao.getLobbyRoster(gameId).associate { it.playerId to it.username }
 
         val sortedPlayers = players.sortedBy { it.turnOrder }
@@ -77,8 +107,8 @@ class GameSyncService(
             playerCards = playerCards,
             playerLandmarks = playerLandmarks,
             marketplace = marketplace,
-            cardDefinitions = cardDefinitions,
-            landmarkDefinitions = landmarkDefinitions,
+            cardDefinitions = cachedCardDefinitions,
+            landmarkDefinitions = cachedLandmarkDefinitions,
             turnOrder = sortedPlayers.map { it.userId },
             activePlayerId = sortedPlayers.getOrNull(game.currentTurnIndex)?.userId,
             playerUsernames = playerUsernames,

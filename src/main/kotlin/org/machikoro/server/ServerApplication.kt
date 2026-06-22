@@ -3,8 +3,10 @@ package org.machikoro.server
 import io.github.cdimascio.dotenv.Dotenv
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.runApplication
+import org.springframework.scheduling.annotation.EnableScheduling
 
 @SpringBootApplication
+@EnableScheduling
 class ServerApplication
 
 internal fun loadDotenv(): Dotenv = Dotenv.configure().ignoreIfMissing().load()
