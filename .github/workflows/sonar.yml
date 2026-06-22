@@ -75,7 +75,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           GRADLE_OPTS: "-Xmx2g -XX:MaxMetaspaceSize=512m -XX:+UseG1GC"
-        run: ./gradlew --no-daemon clean check jacocoTestReport sonar
+        run: ./gradlew --no-daemon --no-build-cache clean check jacocoTestReport sonar
 
       - name: Upload JaCoCo XML report
         if: always()
