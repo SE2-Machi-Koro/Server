@@ -6,7 +6,7 @@ buildEnvironment = "V3"
 [deploy]
 runtime = "V2"
 numReplicas = 1
-healthcheckPath = "/actuator/health"
+healthcheckPath = "/actuator/health/readiness"
 sleepApplication = false
 useLegacyStacker = false
 ipv6EgressEnabled = false
