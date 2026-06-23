@@ -39,7 +39,7 @@ class EarningsServiceImpl(
         pairs.sumOf { (quantity, income) -> quantity * income }
 
     @Transactional
-    override fun processEarnings(gameId: Int, diceRoll: Int, activePlayerId: Int) {
+    override fun processEarnings(gameId: Int, diceRoll: Int, activePlayerId: Int): Map<Int, Int> {
         val activatingCards = cardDao.findByActivationNumber(diceRoll)
             .associateBy { it.cardType }
 
@@ -65,6 +65,15 @@ class EarningsServiceImpl(
                 playerDao.updateCoins(player.id, finalCoins.getValue(player.id))
             }
         }
+
+        // playerId -> signed coin delta for players whose balance changed; drives
+        // the client coin / coin-drawer sound effects (issue #389).
+        return players
+            .mapNotNull { player ->
+                val delta = finalCoins.getValue(player.id) - player.coins
+                if (delta != 0) player.id to delta else null
+            }
+            .toMap()
     }
 
     /**
@@ -186,7 +195,7 @@ class EarningsServiceImpl(
      * This is the handoff point introduced for the buying-phase flow: earnings
      * are resolved first, and only then does the turn enter BUY_OR_BUILD.
      */
-    override fun resolveEffects(gameId: Int): Unit = gameTransactionRunner.inTransaction {
+    override fun resolveEffects(gameId: Int): Map<Int, Int> = gameTransactionRunner.inTransaction {
         val game = gameStateGuard.ensureGameIsRunning(gameId)
         when (game.turnPhase) {
             TurnPhase.ROLL_DICE -> throw CustomWebSocketException(

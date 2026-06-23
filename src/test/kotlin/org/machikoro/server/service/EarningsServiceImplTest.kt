@@ -110,10 +110,12 @@ class EarningsServiceImplTest {
         whenever(playerCardDao.findByPlayerId(2))
             .thenReturn(listOf(playerCard(CardType.WHEAT_FIELD, 1)))
 
-        service.processEarnings(1, 1, 1)
+        val deltas = service.processEarnings(1, 1, 1)
 
         verify(playerDao).updateCoins(1, 5)
         verify(playerDao).updateCoins(2, 6)
+        // Signed per-player coin deltas drive the client coin sounds (#389).
+        assertEquals(mapOf(1 to 2, 2 to 1), deltas)
     }
 
     // Only the current player should earn green income
