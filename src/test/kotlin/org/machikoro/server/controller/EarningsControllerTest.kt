@@ -70,7 +70,9 @@ class EarningsControllerTest {
     fun `resolveEffects calls service and broadcasts success`() {
         val request = ResolveEffectsRequest(gameId = 1)
         val snapshot = gameStateDto(1)
+        val coinDeltas = mapOf(1 to 3, 2 to -3)
         whenever(gameSyncService.buildSnapshot(1)).thenReturn(snapshot)
+        whenever(earningsService.resolveEffects(1)).thenReturn(coinDeltas)
 
         controller.resolveEffects(request, authedAccessor())
 
@@ -89,6 +91,7 @@ class EarningsControllerTest {
         assertEquals(1, payload["gameId"])
         assertEquals("BUY_OR_BUILD", payload["turnPhase"])
         assertEquals(1, payload["activePlayerId"])
+        assertEquals(coinDeltas, payload["coinDeltas"])
         assertEquals(snapshot, payload["state"])
     }
 

@@ -1,6 +1,17 @@
 package org.machikoro.server.service.interfaces
 
 interface EarningsService {
-    fun processEarnings(gameId: Int, diceRoll: Int, activePlayerId: Int)
-    fun resolveEffects(gameId: Int)
+    /**
+     * Applies the dice-roll earnings and returns the per-player coin change as
+     * `playerId -> signed delta`, including only players whose balance changed.
+     * Clients use these deltas to drive coin sound effects (issue #389).
+     */
+    fun processEarnings(gameId: Int, diceRoll: Int, activePlayerId: Int): Map<Int, Int>
+
+    /**
+     * Resolves card effects for the current turn and advances to BUY_OR_BUILD.
+     * Returns the per-player coin change as `playerId -> signed delta` (changed
+     * players only) so the broadcast can carry sound-relevant metadata (#389).
+     */
+    fun resolveEffects(gameId: Int): Map<Int, Int>
 }
