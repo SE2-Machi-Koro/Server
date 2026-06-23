@@ -24,14 +24,38 @@ RUN apt-get update \
 RUN groupadd --system app && useradd --no-log-init --system --create-home --home-dir /app --gid app app
 EXPOSE 8080
 
+# Explode the layered bootJar so Docker can cache slow-changing layers
+# (dependencies) separately from fast-changing ones (application code).
+FROM runtime-base AS extract-from-workspace
+COPY --from=packaged-jar /app.jar /app/app.jar
+RUN java -Djarmode=tools -jar /app/app.jar extract --layers --launcher --destination /app/extracted
+
+FROM runtime-base AS extract-from-builder
+COPY --from=builder /app/build/libs/*.jar /app/app.jar
+RUN java -Djarmode=tools -jar /app/app.jar extract --layers --launcher --destination /app/extracted
+
 FROM runtime-base AS runtime-from-workspace
-COPY --chown=app:app --from=packaged-jar /app.jar /app/app.jar
+# Make the JVM container-memory-aware: default heap is only ~25% of the
+# container limit, which wastes most of the platform's RAM (e.g. on Railway).
+ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75.0"
+# Copy layers least-to-most likely to change so the cache survives code-only rebuilds.
+COPY --chown=app:app --from=extract-from-workspace /app/extracted/dependencies/ ./
+COPY --chown=app:app --from=extract-from-workspace /app/extracted/spring-boot-loader/ ./
+COPY --chown=app:app --from=extract-from-workspace /app/extracted/snapshot-dependencies/ ./
+COPY --chown=app:app --from=extract-from-workspace /app/extracted/application/ ./
 USER app
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["java", "org.springframework.boot.loader.launch.JarLauncher"]
 
 FROM runtime-base AS runtime-from-builder
-COPY --chown=app:app --from=builder /app/build/libs/*.jar /app/app.jar
+# Make the JVM container-memory-aware: default heap is only ~25% of the
+# container limit, which wastes most of the platform's RAM (e.g. on Railway).
+ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75.0"
+# Copy layers least-to-most likely to change so the cache survives code-only rebuilds.
+COPY --chown=app:app --from=extract-from-builder /app/extracted/dependencies/ ./
+COPY --chown=app:app --from=extract-from-builder /app/extracted/spring-boot-loader/ ./
+COPY --chown=app:app --from=extract-from-builder /app/extracted/snapshot-dependencies/ ./
+COPY --chown=app:app --from=extract-from-builder /app/extracted/application/ ./
 USER app
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["java", "org.springframework.boot.loader.launch.JarLauncher"]
 
 FROM runtime-from-builder AS final
