@@ -10,6 +10,8 @@ healthcheckPath = "/actuator/health"
 sleepApplication = false
 useLegacyStacker = false
 ipv6EgressEnabled = false
-multiRegionConfig = {"europe-west4-drams3a":{"numReplicas":1}}
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
+
+[deploy.multiRegionConfig.europe-west4-drams3a]
+numReplicas = 1
