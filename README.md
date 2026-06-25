@@ -17,7 +17,7 @@ PostgreSQL. Designed for reliability, scalability, and developer productivity.
   e.g., landmark completion).
 - **Authoritative Turns:** Clients request roll, resolve, purchase, and end-turn actions; only the server advances legal phases.
 - **In-Game Chat:** Built-in chat system for players in the lobby and during the game.
-- **Cheating & Accusations:** Optional Insider Trading cheat with a player-vs-player accusation flow; the server adjudicates and penalizes the caught cheater or a wrong accuser. In the client, the **"rules"** text opens the game's rulebook PDF and the cheating function.
+- **Cheating & Accusations:** Optional Insider Trading cheat with a player-vs-player accusation flow; the server adjudicates and penalizes the caught cheater or a wrong accuser, broadcasting an `ACCUSATION_RESULT` (`caught`, `penaltyCoins`, …). In the client, the **"rules"** text opens the game's rulebook PDF and the cheating function, and a correct accusation (`caught = true`) plays Cristiano Ronaldo's "siuuu" sound effect.
 - **Accounts & Authentication:** REST registration, login, and logout with token-based session authentication, enforced
   for both REST calls and STOMP WebSocket sessions.
 - **Leaderboard:** REST endpoint exposing player rankings across finished games.
@@ -498,26 +498,6 @@ docker compose ps
 #### AAU Rollback (Legacy)
 
 To roll back to a previous image, edit the production `.env` on the server and set `IMAGE_TAG=sha-<short-commit>` (or any other tag published to GHCR), then trigger a manual `docker compose up -d` or a doco-cd reconcile. The `compose.yaml` resolves the image as `ghcr.io/se2-machi-koro/server:${IMAGE_TAG:-latest}`.
-
-## Frontend dependencies (Subresource Integrity)
-
-The static landing page at [`src/main/resources/static/index.html`](src/main/resources/static/index.html)
-loads three pinned assets from the cdnjs CDN (Bootstrap 4.6.0, SockJS-client 1.1.4,
-stomp.js 2.3.3). Each `<link>`/`<script>` tag includes a `sha512` Subresource Integrity
-(SRI) hash plus `crossorigin="anonymous"` and `referrerpolicy="no-referrer"`, so the
-browser refuses to execute any payload that does not match the pinned hash. This
-satisfies SonarCloud rule *"Make sure not using resource integrity feature is safe here"*
-(CWE / former-hotspot) and protects users if the CDN is ever compromised.
-
-When bumping any of these CDN versions, regenerate the matching hash:
-
-```bash
-curl -sSL <new-cdn-url> | openssl dgst -sha512 -binary | openssl base64 -A
-```
-
-Replace the `integrity="sha512-..."` value on the same tag and verify in the browser
-DevTools console that no *"Failed to find a valid digest in the 'integrity' attribute"*
-error is logged.
 
 ---
 *Last Updated: 26.06.2026* — Documented backend reliability config (graceful shutdown, DB-aware readiness probe, HikariCP connection resilience)
