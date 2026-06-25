@@ -500,4 +500,4 @@ docker compose ps
 To roll back to a previous image, edit the production `.env` on the server and set `IMAGE_TAG=sha-<short-commit>` (or any other tag published to GHCR), then trigger a manual `docker compose up -d` or a doco-cd reconcile. The `compose.yaml` resolves the image as `ghcr.io/se2-machi-koro/server:${IMAGE_TAG:-latest}`.
 
 ---
-*Last Updated: 26.06.2026* — Documented backend reliability config (graceful shutdown, DB-aware readiness probe, HikariCP connection resilience)
+Last Updated: 26.06.2026
