@@ -17,6 +17,7 @@ PostgreSQL. Designed for reliability, scalability, and developer productivity.
   e.g., landmark completion).
 - **Authoritative Turns:** Clients request roll, resolve, purchase, and end-turn actions; only the server advances legal phases.
 - **In-Game Chat:** Built-in chat system for players in the lobby and during the game.
+- **Cheating & Accusations:** Optional Insider Trading cheat with a player-vs-player accusation flow; the server adjudicates and penalizes the caught cheater or a wrong accuser. In the client, the **"rules"** text opens the game's rulebook PDF and the cheating function.
 - **Accounts & Authentication:** REST registration, login, and logout with token-based session authentication, enforced
   for both REST calls and STOMP WebSocket sessions.
 - **Leaderboard:** REST endpoint exposing player rankings across finished games.
