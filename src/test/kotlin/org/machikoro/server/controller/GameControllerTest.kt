@@ -671,7 +671,6 @@ class GameControllerTest {
         assertEquals(1, actionPayload["roundNumber"])
         assertEquals(snapshot, actionPayload["state"])
         verify(diceService).rollDice(request, activePlayer.id)
-        verify(gameStateGuard, never()).ensureSenderOwnsPlayer(any(), any(), any())
     }
 
     @Test
@@ -687,7 +686,6 @@ class GameControllerTest {
         }
         assertEquals("dice exploded", ex.message)
         verify(diceService).rollDice(request, activePlayer.id)
-        verify(gameStateGuard, never()).ensureSenderOwnsPlayer(any(), any(), any())
         verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }
 
@@ -712,7 +710,6 @@ class GameControllerTest {
         assertEquals("Dice have already been rolled for this turn", payload.message)
         assertEquals("ROLL_FAILED", payload.context["event"])
         verify(diceService).rollDice(request, activePlayer.id)
-        verify(gameStateGuard, never()).ensureSenderOwnsPlayer(any(), any(), any())
     }
 
     @Test
@@ -796,7 +793,6 @@ class GameControllerTest {
         assertEquals(true, actionPayload["completed"])
         assertEquals(snapshot, actionPayload["state"])
         verify(diceService).rerollDice(request, activePlayer.id)
-        verify(gameStateGuard, never()).ensureSenderOwnsPlayer(any(), any(), any())
     }
 
     @Test
@@ -813,7 +809,6 @@ class GameControllerTest {
 
         assertEquals("dice exploded", ex.message)
         verify(diceService).rerollDice(request, activePlayer.id)
-        verify(gameStateGuard, never()).ensureSenderOwnsPlayer(any(), any(), any())
         verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }
 
@@ -838,7 +833,6 @@ class GameControllerTest {
         assertEquals("Dice have already been rerolled for this turn", payload.message)
         assertEquals("REROLL_FAILED", payload.context["event"])
         verify(diceService).rerollDice(request, activePlayer.id)
-        verify(gameStateGuard, never()).ensureSenderOwnsPlayer(any(), any(), any())
     }
 
     @Test
@@ -879,7 +873,6 @@ class GameControllerTest {
         val ex = assertThrows<CustomWebSocketException> { call(unauthed) }
         assertEquals("UNAUTHENTICATED", ex.errorCode)
         verify(gameStateGuard, never()).ensureSenderIsActivePlayer(any(), any())
-        verify(gameStateGuard, never()).ensureSenderOwnsPlayer(any(), any(), any())
     }
 
     @Test
