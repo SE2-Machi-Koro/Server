@@ -87,26 +87,4 @@ class GameStateGuard(
         return active
     }
 
-    /**
-     * Verifies that [user] owns the player identified by [playerId] within
-     * [gameId]. Used for `/game.leave` so a user can only remove their own seat
-     * from a finished game, not another player's.
-     *
-     * Throws [CustomWebSocketException] with one of:
-     *  - `PLAYER_NOT_IN_GAME`  — [playerId] does not exist in [gameId].
-     *  - `NOT_YOUR_PLAYER`     — caller is authenticated but does not own the player.
-     */
-    fun ensureSenderOwnsPlayer(gameId: Int, playerId: Int, user: UserPrincipal) {
-        val player = playerDao.getPlayers(gameId).firstOrNull { it.id == playerId }
-            ?: throw CustomWebSocketException(
-                errorCode = "PLAYER_NOT_IN_GAME",
-                message = "Player $playerId is not in game $gameId",
-            )
-        if (player.userId != user.userId) {
-            throw CustomWebSocketException(
-                errorCode = "NOT_YOUR_PLAYER",
-                message = "You do not own player $playerId",
-            )
-        }
-    }
 }

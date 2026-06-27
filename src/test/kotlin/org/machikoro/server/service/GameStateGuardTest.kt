@@ -217,46 +217,4 @@ class GameStateGuardTest {
         assertEquals("GAME_NOT_STARTED", ex.errorCode)
     }
 
-    // ── ensureSenderOwnsPlayer ────────────────────────────────────────────────
-
-    @Test
-    fun `ensureSenderOwnsPlayer succeeds when caller owns the player`() {
-        val gameId = 1
-        val playerId = 10
-        whenever(playerDao.getPlayers(gameId)).thenReturn(
-            listOf(player(id = playerId, userId = 7), player(id = 11, userId = 8, turnOrder = 1)),
-        )
-        val user = UserPrincipal(userId = 7, username = "alice")
-
-        guard.ensureSenderOwnsPlayer(gameId, playerId, user)
-    }
-
-    @Test
-    fun `ensureSenderOwnsPlayer throws NOT_YOUR_PLAYER when player belongs to a different user`() {
-        val gameId = 1
-        val playerId = 10
-        whenever(playerDao.getPlayers(gameId)).thenReturn(
-            listOf(player(id = playerId, userId = 7), player(id = 11, userId = 8, turnOrder = 1)),
-        )
-        val user = UserPrincipal(userId = 8, username = "bob")
-
-        val ex = assertThrows(CustomWebSocketException::class.java) {
-            guard.ensureSenderOwnsPlayer(gameId, playerId, user)
-        }
-        assertEquals("NOT_YOUR_PLAYER", ex.errorCode)
-    }
-
-    @Test
-    fun `ensureSenderOwnsPlayer throws PLAYER_NOT_IN_GAME when playerId is not part of this game`() {
-        val gameId = 1
-        whenever(playerDao.getPlayers(gameId)).thenReturn(
-            listOf(player(id = 11, userId = 8, turnOrder = 1)),
-        )
-        val user = UserPrincipal(userId = 7, username = "alice")
-
-        val ex = assertThrows(CustomWebSocketException::class.java) {
-            guard.ensureSenderOwnsPlayer(gameId, playerId = 99, user)
-        }
-        assertEquals("PLAYER_NOT_IN_GAME", ex.errorCode)
-    }
 }
