@@ -17,6 +17,7 @@ PostgreSQL. Designed for reliability, scalability, and developer productivity.
   e.g., landmark completion).
 - **Authoritative Turns:** Clients request roll, resolve, purchase, and end-turn actions; only the server advances legal phases.
 - **In-Game Chat:** Built-in chat system for players in the lobby and during the game.
+- **Cheating & Accusations:** Optional Insider Trading cheat with a player-vs-player accusation flow; the server adjudicates and penalizes the caught cheater or a wrong accuser, broadcasting an `ACCUSATION_RESULT` (`caught`, `penaltyCoins`, …). In the client, the **"rules"** text opens the game's rulebook PDF and the cheating function, and a correct accusation (`caught = true`) plays Cristiano Ronaldo's "siuuu" sound effect.
 - **Accounts & Authentication:** REST registration, login, and logout with token-based session authentication, enforced
   for both REST calls and STOMP WebSocket sessions.
 - **Leaderboard:** REST endpoint exposing player rankings across finished games.
@@ -336,7 +337,16 @@ For advanced usage, message formats, and integration details, refer to the dedic
 
 ## Health Check
 
-To verify the server is running:
+The server exposes the aggregate health endpoint plus dedicated Spring Boot
+liveness and readiness probes (`management.endpoint.health.probes.enabled=true`):
+
+| Endpoint                         | Purpose                                                                                                                          |
+|----------------------------------|---------------------------------------------------------------------------------------------------------------------------------|
+| `GET /actuator/health`           | Aggregate status (`UP`/`DOWN`) — a quick "is it running" check.                                                                  |
+| `GET /actuator/health/liveness`  | Liveness probe. Deliberately **excludes** the database, so a transient DB blip does not restart the container.                   |
+| `GET /actuator/health/readiness` | Readiness probe. **Includes** the database (`readinessState,db`), so traffic is gated until Postgres is reachable. Railway probes this path. |
+
+To verify the server is running locally:
 
 ```
 GET http://localhost:8080/actuator/health
@@ -362,7 +372,7 @@ flowchart LR
 ```
 
 1. A push to `main` triggers a Railway deploy. Railway builds the backend directly from the [`Dockerfile`](Dockerfile) (`builder = "DOCKERFILE"` in [`railway.toml`](railway.toml)); with no target override it builds the `final` stage (`runtime-from-builder`), which compiles the jar from source inside the image.
-2. Railway runs the new container, waits for the `healthcheckPath` (`/actuator/health`) to pass, then cuts over traffic. On failure it applies the `ON_FAILURE` restart policy (up to 10 retries).
+2. Railway runs the new container, waits for the `healthcheckPath` (`/actuator/health/readiness` — the DB-aware readiness probe, set in [`railway.toml`](railway.toml)) to pass, then cuts over traffic. Because readiness includes the database, traffic is only switched to the new container once it can reach Postgres. On failure it applies the `ON_FAILURE` restart policy (up to 10 retries).
 3. The PostgreSQL database and backend run together in Railway; the backend is published on Railway's auto-generated HTTPS domain.
 
 In parallel — and independently of the Railway deploy — the [`Publish Docker image to GHCR`](.github/workflows/docker-publish.yml) workflow builds and pushes a versioned, multi-arch image (`linux/amd64`, `linux/arm64`) to `ghcr.io/se2-machi-koro/server` with the tags:
@@ -371,6 +381,26 @@ In parallel — and independently of the Railway deploy — the [`Publish Docker
 - `v*` (when a Git tag matching `v*` is pushed)
 
 These images are for rollback and other consumers; Railway does not pull them.
+
+### Reliability
+
+The backend is configured to ride out routine platform events — redeploys and
+brief database blips — without dropping game state or client connections:
+
+- **Graceful shutdown** — on `SIGTERM` (e.g. a Railway redeploy) the server stops
+  accepting new work but lets in-flight requests finish and WebSocket sessions
+  close cleanly, up to a 30s grace period (`server.shutdown=graceful`,
+  `spring.lifecycle.timeout-per-shutdown-phase=30s`).
+- **DB-aware readiness, DB-agnostic liveness** — Railway's health check targets
+  the **readiness** probe (`/actuator/health/readiness`), which includes the
+  database, so a fresh container only receives traffic once Postgres is
+  reachable. The **liveness** probe (`/actuator/health/liveness`) excludes the
+  DB, so a transient database blip does not trigger a container restart. See
+  [Health Check](#health-check).
+- **DB connection resilience** — the HikariCP pool retires connections before a
+  managed Postgres or proxy can drop them idle, and keeps idle connections
+  validated: `max-lifetime=10m`, `keepalive-time=5m`, `connection-timeout=30s`,
+  `validation-timeout=5s` (`spring.datasource.hikari.*`).
 
 ### Setting up Railway (First Time)
 
@@ -413,6 +443,7 @@ Railway provides an auto-generated HTTPS domain. Check the Railway dashboard for
 |--------------|------------------------------------------------------|
 | Backend      | `https://<railway-domain>`                           |
 | Health check | `https://<railway-domain>/actuator/health`           |
+| Readiness    | `https://<railway-domain>/actuator/health/readiness` (Railway healthcheck) |
 | WebSocket    | `wss://<railway-domain>/ws`                          |
 | Swagger UI   | `https://<railway-domain>/swagger-ui.html`           |
 | AsyncAPI UI  | `https://<railway-domain>/springwolf/asyncapi-ui.html` |
@@ -468,25 +499,5 @@ docker compose ps
 
 To roll back to a previous image, edit the production `.env` on the server and set `IMAGE_TAG=sha-<short-commit>` (or any other tag published to GHCR), then trigger a manual `docker compose up -d` or a doco-cd reconcile. The `compose.yaml` resolves the image as `ghcr.io/se2-machi-koro/server:${IMAGE_TAG:-latest}`.
 
-## Frontend dependencies (Subresource Integrity)
-
-The static landing page at [`src/main/resources/static/index.html`](src/main/resources/static/index.html)
-loads three pinned assets from the cdnjs CDN (Bootstrap 4.6.0, SockJS-client 1.1.4,
-stomp.js 2.3.3). Each `<link>`/`<script>` tag includes a `sha512` Subresource Integrity
-(SRI) hash plus `crossorigin="anonymous"` and `referrerpolicy="no-referrer"`, so the
-browser refuses to execute any payload that does not match the pinned hash. This
-satisfies SonarCloud rule *"Make sure not using resource integrity feature is safe here"*
-(CWE / former-hotspot) and protects users if the CDN is ever compromised.
-
-When bumping any of these CDN versions, regenerate the matching hash:
-
-```bash
-curl -sSL <new-cdn-url> | openssl dgst -sha512 -binary | openssl base64 -A
-```
-
-Replace the `integrity="sha512-..."` value on the same tag and verify in the browser
-DevTools console that no *"Failed to find a valid digest in the 'integrity' attribute"*
-error is logged.
-
 ---
-*Last Updated: 17.06.2026* — Deployment migrated from AAU doco-cd to Railway
+Last Updated: 26.06.2026
