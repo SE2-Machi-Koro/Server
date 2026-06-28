@@ -183,7 +183,7 @@ class WebSocketExceptionAdviceIntegrationTest {
      * Resending defeats the STOMP subscription race: a subscription registers
      * asynchronously, and the broker silently drops a reply sent before it is
      * live. Each send re-exercises the real production path — handler throws →
-     * `@ControllerAdvice` catches → `@SendToUser` replies to this session — so the
+     * `@ControllerAdvice` catches → session-scoped send replies to this session — so the
      * first frame received proves the advice is wired in.
      */
     private fun sendEndTurnUntilErrorReceived(
