@@ -5,9 +5,19 @@ import org.machikoro.server.exception.CustomWebSocketException
 import org.slf4j.LoggerFactory
 import org.springframework.messaging.handler.annotation.MessageExceptionHandler
 import org.springframework.messaging.simp.annotation.SendToUser
-import org.springframework.stereotype.Controller
+import org.springframework.web.bind.annotation.ControllerAdvice
 
-@Controller
+/**
+ * Global handler for exceptions thrown by `@MessageMapping` controllers.
+ *
+ * Must be `@ControllerAdvice` (not `@Controller`): Spring only applies
+ * `@MessageExceptionHandler` methods across other controllers when the bean is
+ * registered as advice. As a plain `@Controller` with no `@MessageMapping`
+ * methods, these handlers caught nothing — domain exceptions were logged at
+ * ERROR with a stack trace by Spring's fallback and the error reply never
+ * reached the client. See issue #427.
+ */
+@ControllerAdvice
 class GlobalWebSocketExceptionHandler {
     private val logger = LoggerFactory.getLogger(GlobalWebSocketExceptionHandler::class.java)
 

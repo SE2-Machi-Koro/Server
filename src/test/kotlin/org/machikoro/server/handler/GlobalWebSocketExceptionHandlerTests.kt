@@ -5,10 +5,22 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.machikoro.server.exception.CustomWebSocketException
+import org.springframework.web.bind.annotation.ControllerAdvice
 
 class GlobalWebSocketExceptionHandlerTests {
 
     private val handler = GlobalWebSocketExceptionHandler()
+
+    @Test
+    fun shouldBeRegisteredAsControllerAdviceSoHandlersApplyGlobally() {
+        // Regression guard for #427: as a plain @Controller, the
+        // @MessageExceptionHandler methods are scoped to this bean only and
+        // never catch exceptions from other @MessageMapping controllers.
+        assertTrue(
+            GlobalWebSocketExceptionHandler::class.java.isAnnotationPresent(ControllerAdvice::class.java),
+            "GlobalWebSocketExceptionHandler must be @ControllerAdvice for its handlers to apply globally",
+        )
+    }
 
     @Test
     fun handleCustomExceptionShouldReturnDomainErrorPayload() {
