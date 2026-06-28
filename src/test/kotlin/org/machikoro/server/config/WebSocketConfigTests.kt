@@ -1,12 +1,15 @@
 package org.machikoro.server.config
 
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.machikoro.server.auth.StompAuthChannelInterceptor
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
+import org.mockito.kotlin.any
 import org.springframework.messaging.simp.config.ChannelRegistration
 import org.springframework.messaging.simp.config.MessageBrokerRegistry
+import org.springframework.messaging.simp.config.SimpleBrokerRegistration
 import org.springframework.web.socket.config.annotation.SockJsServiceRegistration
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry
 import org.springframework.web.socket.config.annotation.StompWebSocketEndpointRegistration
@@ -21,11 +24,38 @@ class WebSocketConfigTests {
     @Test
     fun configureMessageBrokerShouldEnableExpectedDestinations() {
         val registry = mock(MessageBrokerRegistry::class.java)
+        val brokerRegistration = mock(SimpleBrokerRegistration::class.java)
+        `when`(registry.enableSimpleBroker("/topic", "/queue")).thenReturn(brokerRegistration)
+        `when`(brokerRegistration.setHeartbeatValue(any())).thenReturn(brokerRegistration)
+        `when`(brokerRegistration.setTaskScheduler(any())).thenReturn(brokerRegistration)
 
         config.configureMessageBroker(registry)
 
         verify(registry).enableSimpleBroker("/topic", "/queue")
         verify(registry).setApplicationDestinationPrefixes("/app")
+        verify(brokerRegistration).setTaskScheduler(any())
+        verify(brokerRegistration).setHeartbeatValue(
+            org.mockito.kotlin.check {
+                assertArrayEquals(
+                    longArrayOf(
+                        WebSocketConfig.HEARTBEAT_INTERVAL_MS,
+                        WebSocketConfig.HEARTBEAT_INTERVAL_MS,
+                    ),
+                    it,
+                )
+            },
+        )
+    }
+
+    @Test
+    fun brokerHeartbeatSchedulerShouldBeInitialized() {
+        val scheduler = config.brokerHeartbeatScheduler() as org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
+        scheduler.initialize()
+        try {
+            scheduler.schedule({ }, java.time.Instant.now())
+        } finally {
+            scheduler.destroy()
+        }
     }
 
     @Test
