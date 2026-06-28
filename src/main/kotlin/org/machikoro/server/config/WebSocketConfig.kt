@@ -60,7 +60,6 @@ class WebSocketConfig(
         ThreadPoolTaskScheduler().apply {
             poolSize = 1
             setThreadNamePrefix("ws-heartbeat-")
-            initialize()
         }
 
     /**

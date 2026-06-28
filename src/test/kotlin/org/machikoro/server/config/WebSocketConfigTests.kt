@@ -49,10 +49,13 @@ class WebSocketConfigTests {
 
     @Test
     fun brokerHeartbeatSchedulerShouldBeInitialized() {
-        val scheduler = config.brokerHeartbeatScheduler()
-
-        // A running scheduler accepts work; this verifies it was initialized.
-        scheduler.schedule({ }, java.time.Instant.now())
+        val scheduler = config.brokerHeartbeatScheduler() as org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
+        scheduler.initialize()
+        try {
+            scheduler.schedule({ }, java.time.Instant.now())
+        } finally {
+            scheduler.destroy()
+        }
     }
 
     @Test
