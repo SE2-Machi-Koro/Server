@@ -171,7 +171,9 @@ class GameDaoTest : AbstractDBSetup() {
     @Test
     fun `advanceTurn resets to ROLL_DICE clears dice roll and purchase state`() {
         val id = gameDao.create(hostId)
-        gameDao.tryRecordDiceRoll(id, diceRoll = 4, diceCount = 1)
+        check(gameDao.tryRecordDiceRoll(id, diceRoll = 4, diceCount = 1)) {
+            "fixture: game not in ROLL_DICE"
+        }
         gameDao.updateHasPurchasedThisTurn(id, true)
         assertTrue(gameDao.tryMarkBusinessCenterUsedThisTurn(id))
         gameDao.advanceTurn(id, nextTurnIndex = 1, roundNumber = 2)
@@ -335,7 +337,9 @@ class GameDaoTest : AbstractDBSetup() {
     fun `tryMarkRerolledThisTurn succeeds once and then rejects repeats`() {
         val id = gameDao.create(hostId)
 
-        gameDao.tryRecordDiceRoll(id, diceRoll = 4, diceCount = 1)
+        check(gameDao.tryRecordDiceRoll(id, diceRoll = 4, diceCount = 1)) {
+            "fixture: game not in ROLL_DICE"
+        }
         // First attempt should flip false -> true
         assertTrue(gameDao.tryRerollThisTurn(id, 5))
         // Subsequent attempts should fail (already true)

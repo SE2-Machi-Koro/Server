@@ -136,8 +136,12 @@ class SpringContextRestartRecoveryIntegrationTest {
         
         playerDao.updateCoins(firstPlayerId, 42)
         gameDao.advanceTurn(sharedGameId, nextTurnIndex = 1, roundNumber = 5)
-        gameDao.tryRecordDiceRoll(sharedGameId, diceRoll = 9, diceCount = 2)
-        gameDao.updateTurnPhase(sharedGameId, TurnPhase.BUY_OR_BUILD)
+        check(gameDao.tryRecordDiceRoll(sharedGameId, diceRoll = 9, diceCount = 2)) {
+            "fixture: game not in ROLL_DICE"
+        }
+        check(gameDao.tryTransitionPhase(sharedGameId, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD)) {
+            "fixture: game not in RESOLVE_EFFECTS"
+        }
         
         gameMarketplaceDao.decrementQuantity(sharedGameId, CardType.CAFE)
         playerCardDao.upsert(firstPlayerId, CardType.CAFE, quantity = 3)

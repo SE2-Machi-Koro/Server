@@ -206,6 +206,10 @@ class GameDao {
      *
      * On success, sets the new dice roll and marks rerolledThisTurn = true in a single transaction.
      * Returns true if the update succeeded, false if any condition failed.
+     *
+     * lastDiceCount is intentionally left untouched: a reroll replays the same number of dice as the
+     * initial roll, so the count recorded by [tryRecordDiceRoll] must be preserved (DiceService reads
+     * lastDiceCount at reroll time to know how many dice to roll).
      */
     fun tryRerollThisTurn(id: Int, newDiceRoll: Int): Boolean = transaction {
         Games.update({
@@ -216,6 +220,7 @@ class GameDao {
         }) {
             it[Games.lastDiceRoll] = newDiceRoll
             it[Games.rerolledThisTurn] = true
+            // lastDiceCount deliberately not updated — the reroll keeps the initial roll's dice count.
         } > 0
     }
 
