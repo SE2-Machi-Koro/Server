@@ -1128,19 +1128,17 @@ class EarningsServiceImplTest {
     }
 
     @Test
-    fun `resolveTvStationTarget moves no coins when the chosen opponent is broke`() {
+    fun `resolveTvStationTarget rejects a broke target`() {
         whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.AWAIT_TV_TARGET, 6))
         whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 0), player(3, 4)))
-        whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(tvStationCard()))
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.TV_STATION, 1)))
-        whenever(gameDao.tryTransitionPhase(1, TurnPhase.AWAIT_TV_TARGET, TurnPhase.BUY_OR_BUILD))
-            .thenReturn(true)
 
-        val deltas = service.resolveTvStationTarget(1, 2)
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            service.resolveTvStationTarget(1, 2)
+        }
 
-        verify(gameDao).tryTransitionPhase(1, TurnPhase.AWAIT_TV_TARGET, TurnPhase.BUY_OR_BUILD)
+        assertEquals("INVALID_TV_STATION_TARGET", ex.errorCode)
+        verify(gameDao, never()).tryTransitionPhase(anyInt(), any(), any())
         verify(playerDao, never()).updateCoins(anyInt(), anyInt())
-        assertEquals(emptyMap<Int, Int>(), deltas)
     }
 
     @Test

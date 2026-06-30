@@ -42,15 +42,20 @@ class EarningsServiceImpl(
     @Transactional
     override fun processEarnings(gameId: Int, diceRoll: Int, activePlayerId: Int): Map<Int, Int> {
         val players = playerDao.getPlayers(gameId)
-        val finalCoins = calculateFinalCoins(players, diceRoll, activePlayerId)
-        return applyCoinChanges(players, finalCoins)
+        val earnings = calculateEarnings(players, diceRoll, activePlayerId)
+        return applyCoinChanges(players, earnings.finalCoins)
     }
 
-    private fun calculateFinalCoins(
+    private data class EarningsCalculation(
+        val finalCoins: Map<Int, Int>,
+        val tvStationStealAmount: Int,
+    )
+
+    private fun calculateEarnings(
         players: List<PlayerModel>,
         diceRoll: Int,
         activePlayerId: Int,
-    ): Map<Int, Int> {
+    ): EarningsCalculation {
         val activatingCards = cardDao.findByActivationNumber(diceRoll)
             .associateBy { it.cardType }
 
@@ -85,7 +90,11 @@ class EarningsServiceImpl(
         )
         processPurpleCards(players, activePlayerId, matchedCardsByPlayer, finalCoins)
 
-        return finalCoins
+        val tvStationStealAmount = matchedCardsByPlayer[activePlayerId].orEmpty()
+            .filter { (_, card) -> card.paymentSource == PaymentSource.CHOSEN_PLAYER }
+            .sumOf { (playerCard, card) -> playerCard.quantity * card.income }
+
+        return EarningsCalculation(finalCoins, tvStationStealAmount)
     }
 
     private fun applyCoinChanges(
@@ -285,14 +294,20 @@ class EarningsServiceImpl(
         }
         val (diceRoll, players, activePlayer) = requireActiveTurn(gameId, game.lastDiceRoll, game.currentTurnIndex)
 
-        val finalCoins = calculateFinalCoins(players, diceRoll, activePlayer.id)
+        val earnings = calculateEarnings(players, diceRoll, activePlayer.id)
 
         // A TV Station steal needs the active player to pick a victim, so when one
         // is pending after the automatic earnings pass we park the turn in
         // AWAIT_TV_TARGET instead of advancing to BUY_OR_BUILD. The destination is
         // chosen *before* transitioning so the optimistic phase lock still guards
         // against concurrent double-resolution.
-        val nextPhase = if (isTvStationStealPending(players, finalCoins, diceRoll, activePlayer.id)) {
+        val nextPhase = if (isTvStationStealPending(
+                players,
+                earnings.finalCoins,
+                earnings.tvStationStealAmount,
+                activePlayer.id,
+            )
+        ) {
             TurnPhase.AWAIT_TV_TARGET
         } else {
             TurnPhase.BUY_OR_BUILD
@@ -302,7 +317,7 @@ class EarningsServiceImpl(
             throw effectsAlreadyResolved()
         }
 
-        applyCoinChanges(players, finalCoins)
+        applyCoinChanges(players, earnings.finalCoins)
     }
 
     /**
@@ -329,6 +344,12 @@ class EarningsServiceImpl(
                     "INVALID_TV_STATION_TARGET",
                     "Player $targetPlayerId is not a valid TV Station target in game $gameId",
                 )
+            if (target.coins <= 0) {
+                throw CustomWebSocketException(
+                    "INVALID_TV_STATION_TARGET",
+                    "Player $targetPlayerId has no coins to steal in game $gameId",
+                )
+            }
 
             val transfer = minOf(tvStationStealAmount(diceRoll, activePlayer.id), target.coins)
 
@@ -399,10 +420,10 @@ class EarningsServiceImpl(
     private fun isTvStationStealPending(
         players: List<PlayerModel>,
         finalCoins: Map<Int, Int>,
-        diceRoll: Int,
+        tvStationStealAmount: Int,
         activePlayerId: Int,
     ): Boolean {
-        if (tvStationStealAmount(diceRoll, activePlayerId) <= 0) return false
+        if (tvStationStealAmount <= 0) return false
         return players.any { it.id != activePlayerId && finalCoins.getValue(it.id) > 0 }
     }
 
