@@ -13,11 +13,13 @@ import org.springframework.messaging.simp.config.SimpleBrokerRegistration
 import org.springframework.web.socket.config.annotation.SockJsServiceRegistration
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry
 import org.springframework.web.socket.config.annotation.StompWebSocketEndpointRegistration
+import tools.jackson.databind.json.JsonMapper
 
 class WebSocketConfigTests {
 
     private val authInterceptor = mock(StompAuthChannelInterceptor::class.java)
-    private val config = WebSocketConfig(authInterceptor).apply {
+    // Use a real JsonMapper — mocking it is fragile and the converter constructor inspects it.
+    private val config = WebSocketConfig(authInterceptor, JsonMapper.builder().build()).apply {
         allowedOrigins = "http://localhost:8080,http://localhost:3000"
     }
 
