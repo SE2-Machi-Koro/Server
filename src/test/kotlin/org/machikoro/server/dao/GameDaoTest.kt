@@ -116,23 +116,6 @@ class GameDaoTest : AbstractDBSetup() {
     }
 
     @Test
-    fun `updateAfterRoll sets dice result and phase`() {
-        val id = gameDao.create(hostId)
-        gameDao.updateAfterRoll(id, diceRoll = 6, phase = TurnPhase.RESOLVE_EFFECTS)
-        val game = gameDao.findById(id)!!
-        assertEquals(6, game.lastDiceRoll)
-        assertEquals(TurnPhase.RESOLVE_EFFECTS, game.turnPhase)
-        assertFalse(game.hasPurchasedThisTurn)
-    }
-
-    @Test
-    fun `updateAfterRoll throws when game does not exist`() {
-        assertThrows<GameNotFoundException> {
-            gameDao.updateAfterRoll(999999, diceRoll = 6, phase = TurnPhase.RESOLVE_EFFECTS)
-        }
-    }
-
-    @Test
     fun `tryRecordDiceRoll records exactly one roll in a turn`() {
         val id = gameDao.create(hostId)
 
@@ -178,7 +161,7 @@ class GameDaoTest : AbstractDBSetup() {
     @Test
     fun `advanceTurn resets to ROLL_DICE clears dice roll and purchase state`() {
         val id = gameDao.create(hostId)
-        gameDao.updateAfterRoll(id, diceRoll = 4, phase = TurnPhase.RESOLVE_EFFECTS)
+        gameDao.tryRecordDiceRoll(id, diceRoll = 4, diceCount = 1)
         gameDao.updateHasPurchasedThisTurn(id, true)
         gameDao.advanceTurn(id, nextTurnIndex = 1, roundNumber = 2)
         val game = gameDao.findById(id)!!
@@ -337,26 +320,10 @@ class GameDaoTest : AbstractDBSetup() {
     }
 
     @Test
-    fun `updateRerolledThisTurn changes rerolled flag when game exists`() {
-        val id = gameDao.create(hostId)
-        // Initially created game has rerolledThisTurn = false
-        gameDao.updateRerolledThisTurn(id, true)
-        val game = gameDao.findById(id)!!
-        assertTrue(game.rerolledThisTurn)
-    }
-
-    @Test
-    fun `updateRerolledThisTurn throws when game does not exist`() {
-        assertThrows<GameNotFoundException> {
-            gameDao.updateRerolledThisTurn(999999, true)
-        }
-    }
-
-    @Test
     fun `tryMarkRerolledThisTurn succeeds once and then rejects repeats`() {
         val id = gameDao.create(hostId)
 
-        gameDao.updateAfterRoll(id, diceRoll = 4, phase = TurnPhase.RESOLVE_EFFECTS)
+        gameDao.tryRecordDiceRoll(id, diceRoll = 4, diceCount = 1)
         // First attempt should flip false -> true
         assertTrue(gameDao.tryRerollThisTurn(id, 5))
         // Subsequent attempts should fail (already true)

@@ -141,17 +141,6 @@ class GameDao {
     }
 
     /**
-     * Updates game state after a dice roll
-     */
-    fun updateAfterRoll(id: Int, diceRoll: Int, phase: TurnPhase): Unit = transaction {
-        val updatedRows = Games.update({ Games.id eq id }) {
-            it[Games.lastDiceRoll] = diceRoll
-            it[Games.turnPhase] = phase
-        }
-        if (updatedRows == 0) throw GameNotFoundException("Game $id not found")
-    }
-
-    /**
      * Persists the only legal transition out of ROLL_DICE. The conditional
      * update prevents two simultaneous requests from recording separate rolls.
      */
@@ -207,16 +196,6 @@ class GameDao {
         }) {
             it[Games.turnPhase] = next
         } > 0
-    }
-
-    /**
-     * Updates the rerolled_this_turn flag for a game.
-     */
-    fun updateRerolledThisTurn(id: Int, rerolledThisTurn: Boolean): Unit = transaction {
-        val updatedRows = Games.update({ Games.id eq id }) {
-            it[Games.rerolledThisTurn] = rerolledThisTurn
-        }
-        if (updatedRows == 0) throw GameNotFoundException("Game $id not found")
     }
 
     /**

@@ -201,7 +201,7 @@ class PurchaseServiceIntegrationTest : AbstractDBSetup() {
         // cycle back to active player's turn
         gameDao.advanceTurn(gameId, nextTurnIndex = 1, roundNumber = 1)
         gameDao.advanceTurn(gameId, nextTurnIndex = 0, roundNumber = 2)
-        gameDao.updateAfterRoll(gameId, diceRoll = 2, phase = TurnPhase.RESOLVE_EFFECTS)
+        gameDao.tryRecordDiceRoll(gameId, diceRoll = 2, diceCount = 1)
 
         val coinsBefore = playerDao.findById(activePlayerId)!!.coins
         earningsService.resolveEffects(gameId)
@@ -216,7 +216,7 @@ class PurchaseServiceIntegrationTest : AbstractDBSetup() {
 
         gameDao.advanceTurn(gameId, nextTurnIndex = 1, roundNumber = 1)
         gameDao.advanceTurn(gameId, nextTurnIndex = 0, roundNumber = 2)
-        gameDao.updateAfterRoll(gameId, diceRoll = 2, phase = TurnPhase.RESOLVE_EFFECTS)
+        gameDao.tryRecordDiceRoll(gameId, diceRoll = 2, diceCount = 1)
 
         val inactiveBefore = playerDao.findById(inactivePlayerId)!!.coins
         earningsService.resolveEffects(gameId)
