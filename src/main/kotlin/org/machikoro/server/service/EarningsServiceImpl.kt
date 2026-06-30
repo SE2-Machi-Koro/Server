@@ -6,6 +6,7 @@ import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.domain.enums.CardColor
+import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.EstablishmentType
 import org.machikoro.server.domain.enums.LandmarkType
 import org.machikoro.server.domain.enums.PaymentSource
@@ -166,7 +167,9 @@ class EarningsServiceImpl(
             .filter { (_, card) -> card.color == CardColor.PURPLE }
 
         val bankEarned = purpleCards
-            .filter { (_, card) -> card.paymentSource != PaymentSource.ALL_PLAYERS }
+            .filter { (_, card) ->
+                card.paymentSource == PaymentSource.BANK || card.paymentSource == PaymentSource.CHOSEN_PLAYER
+            }
             .sumOf { (playerCard, card) -> playerCard.quantity * card.income }
 
         if (bankEarned > 0) {
@@ -225,5 +228,83 @@ class EarningsServiceImpl(
             ?: throw CustomWebSocketException("NO_ACTIVE_PLAYER", "Game $gameId has no active player")
 
         processEarnings(gameId, diceRoll, activePlayer.id)
+    }
+
+    override fun swapBusinessCenterCard(
+        gameId: Int,
+        activePlayerId: Int,
+        targetPlayerId: Int,
+        offeredCardType: CardType,
+        requestedCardType: CardType,
+    ): Unit = gameTransactionRunner.inTransaction {
+        val game = gameStateGuard.ensureGameIsRunning(gameId)
+        if (game.turnPhase != TurnPhase.BUY_OR_BUILD || game.lastDiceRoll != 6) {
+            throw CustomWebSocketException(
+                "BUSINESS_CENTER_NOT_ACTIVE",
+                "Business Center can only be used after resolving a roll of 6",
+            )
+        }
+
+        val players = playerDao.getPlayers(gameId)
+        val activePlayer = players.getOrNull(game.currentTurnIndex)
+            ?: throw CustomWebSocketException("NO_ACTIVE_PLAYER", "Game $gameId has no active player")
+        if (activePlayer.id != activePlayerId) {
+            throw CustomWebSocketException("NOT_YOUR_TURN", "It is not your turn")
+        }
+        if (players.none { it.id == targetPlayerId } || targetPlayerId == activePlayerId) {
+            throw CustomWebSocketException(
+                "INVALID_SWAP_TARGET",
+                "Business Center requires a different target player in the same game",
+            )
+        }
+        if (offeredCardType == requestedCardType) {
+            throw CustomWebSocketException(
+                "INVALID_BUSINESS_CENTER_CARD",
+                "Business Center must exchange two different card types",
+            )
+        }
+
+        val activeCards = playerCardDao.findByPlayerId(activePlayerId)
+        val targetCards = playerCardDao.findByPlayerId(targetPlayerId)
+        val businessCenterQuantity = activeCards.firstOrNull { it.cardType == CardType.BUSINESS_CENTER }?.quantity ?: 0
+        if (businessCenterQuantity <= 0) {
+            throw CustomWebSocketException(
+                "BUSINESS_CENTER_NOT_OWNED",
+                "Active player does not own Business Center",
+            )
+        }
+
+        val offeredCard = cardDao.findByCardType(offeredCardType)
+            ?: throw CustomWebSocketException("CARD_NOT_FOUND", "Offered card $offeredCardType not found")
+        val requestedCard = cardDao.findByCardType(requestedCardType)
+            ?: throw CustomWebSocketException("CARD_NOT_FOUND", "Requested card $requestedCardType not found")
+        if (offeredCard.establishmentType == EstablishmentType.MAJOR || requestedCard.establishmentType == EstablishmentType.MAJOR) {
+            throw CustomWebSocketException(
+                "INVALID_BUSINESS_CENTER_CARD",
+                "Business Center cannot exchange major establishments",
+            )
+        }
+
+        val offeredQuantity = activeCards.firstOrNull { it.cardType == offeredCardType }?.quantity ?: 0
+        val requestedQuantity = targetCards.firstOrNull { it.cardType == requestedCardType }?.quantity ?: 0
+        if (offeredQuantity <= 0 || requestedQuantity <= 0) {
+            throw CustomWebSocketException(
+                "CARD_NOT_OWNED",
+                "Both players must own the cards being exchanged",
+            )
+        }
+
+        playerCardDao.upsert(activePlayerId, offeredCardType, offeredQuantity - 1)
+        playerCardDao.upsert(targetPlayerId, requestedCardType, requestedQuantity - 1)
+        playerCardDao.upsert(
+            activePlayerId,
+            requestedCardType,
+            activeCards.firstOrNull { it.cardType == requestedCardType }?.quantity?.plus(1) ?: 1,
+        )
+        playerCardDao.upsert(
+            targetPlayerId,
+            offeredCardType,
+            targetCards.firstOrNull { it.cardType == offeredCardType }?.quantity?.plus(1) ?: 1,
+        )
     }
 }
