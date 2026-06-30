@@ -35,6 +35,8 @@ class OpenApiConfig {
     ### Authoritative Turn Loop
     The server advances phases only after successful domain actions:
     `ROLL_DICE --rollDice--> RESOLVE_EFFECTS --resolveEffects--> BUY_OR_BUILD --endTurn--> ROLL_DICE`.
+    When the active player activates a TV Station, `resolveEffects` parks the turn in `AWAIT_TV_TARGET`
+    until they choose a victim: `RESOLVE_EFFECTS --resolveEffects--> AWAIT_TV_TARGET --chooseTvStationTarget--> BUY_OR_BUILD`.
     A purchase is optional during `BUY_OR_BUILD` and at most one purchase is accepted per turn.
     `/app/game.advancePhase` is retained for compatibility only and rejects gameplay requests with `DIRECT_PHASE_ADVANCE_FORBIDDEN`.
     
@@ -45,6 +47,7 @@ class OpenApiConfig {
     | `/app/game.start` | `StartGameRequest` | `GAME_STARTED`, `GAME_ACTION` to `/topic/game/{gameId}` |
     | `/app/game.rollDice` | `RollDiceRequest` | `ROLL_DICE`, `GAME_ACTION` to `/topic/game/{gameId}` |
     | `/app/game.resolveEffects` | `ResolveEffectsRequest` | `GAME_ACTION` to `/topic/game/{gameId}` |
+    | `/app/game.chooseTvStationTarget` | `TvStationTargetRequest` | `GAME_ACTION` with `payload.event = TV_STATION_RESOLVED`, or `ERROR` with `payload.context.event = TV_STATION_FAILED`, to `/topic/game/{gameId}` |
     | `/app/game.businessCenter.swap` | `BusinessCenterSwapRequest` | `GAME_ACTION`, or `ERROR` with `payload.context.event = BUSINESS_CENTER_SWAP_FAILED`, to `/topic/game/{gameId}` |
     | `/app/game.advancePhase` | `AdvancePhaseRequest` | `DIRECT_PHASE_ADVANCE_FORBIDDEN` to `/user/queue/errors`; no state changes |
     | `/app/game.purchase` | `PurchaseRequest` | `GAME_ACTION`, or `ERROR` with `payload.context.event = PURCHASE_FAILED`, to `/topic/game/{gameId}` |
