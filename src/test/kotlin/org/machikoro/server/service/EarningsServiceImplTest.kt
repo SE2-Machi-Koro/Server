@@ -282,13 +282,33 @@ class EarningsServiceImplTest {
     }
 
     @Test
-    fun `business center swaps one non-major card with target player`() {
-        val game = GameModel(
-            id = 1, status = GameStatus.IN_PROGRESS, hostUserId = 1, lobbyCode = "TEST",
-            maxPlayers = 4, currentTurnIndex = 0, turnPhase = TurnPhase.BUY_OR_BUILD,
-            lastDiceRoll = 6, roundNumber = 1, hasPurchasedThisTurn = false, rerolledThisTurn = false
+    fun `purple chosen player payment source does not award bank coins`() {
+        val players = listOf(
+            player(1, 3),
+            player(2, 3)
         )
-        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(game)
+
+        val tvStation = card(
+            cardType = CardType.TV_STATION,
+            color = CardColor.PURPLE,
+            income = 5,
+            paymentSource = PaymentSource.CHOSEN_PLAYER
+        )
+
+        whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(tvStation))
+        whenever(playerDao.getPlayers(1)).thenReturn(players)
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.TV_STATION, 1)))
+        whenever(playerCardDao.findByPlayerId(2)).thenReturn(emptyList())
+
+        val deltas = service.processEarnings(1, 6, 1)
+
+        assertEquals(emptyMap<Int, Int>(), deltas)
+        verify(playerDao, never()).updateCoins(anyInt(), anyInt())
+    }
+
+    @Test
+    fun `business center swaps one non-major card with target player`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(businessCenterGame())
         whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 3)))
         whenever(playerCardDao.findByPlayerId(1)).thenReturn(
             listOf(
@@ -303,9 +323,11 @@ class EarningsServiceImplTest {
         whenever(cardDao.findByCardType(CardType.RANCH)).thenReturn(
             card(CardType.RANCH, CardColor.BLUE, 1).copy(establishmentType = EstablishmentType.COW)
         )
+        whenever(gameDao.tryMarkBusinessCenterUsedThisTurn(1)).thenReturn(true)
 
         service.swapBusinessCenterCard(1, 1, 2, CardType.BAKERY, CardType.RANCH)
 
+        verify(gameDao).tryMarkBusinessCenterUsedThisTurn(1)
         verify(playerCardDao).upsert(1, CardType.BAKERY, 0)
         verify(playerCardDao).upsert(2, CardType.RANCH, 1)
         verify(playerCardDao).upsert(1, CardType.RANCH, 1)
@@ -314,12 +336,7 @@ class EarningsServiceImplTest {
 
     @Test
     fun `business center rejects major establishment swaps`() {
-        val game = GameModel(
-            id = 1, status = GameStatus.IN_PROGRESS, hostUserId = 1, lobbyCode = "TEST",
-            maxPlayers = 4, currentTurnIndex = 0, turnPhase = TurnPhase.BUY_OR_BUILD,
-            lastDiceRoll = 6, roundNumber = 1, hasPurchasedThisTurn = false, rerolledThisTurn = false
-        )
-        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(game)
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(businessCenterGame())
         whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 3)))
         whenever(playerCardDao.findByPlayerId(1)).thenReturn(
             listOf(
@@ -341,6 +358,249 @@ class EarningsServiceImplTest {
 
         assertEquals("INVALID_BUSINESS_CENTER_CARD", ex.errorCode)
         verify(playerCardDao, never()).upsert(anyInt(), any(), anyInt())
+    }
+
+    @Test
+    fun `business center rejects already used turn flag`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(
+            businessCenterGame(businessCenterUsedThisTurn = true)
+        )
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            service.swapBusinessCenterCard(1, 1, 2, CardType.BAKERY, CardType.RANCH)
+        }
+
+        assertEquals("BUSINESS_CENTER_ALREADY_USED", ex.errorCode)
+        verify(playerDao, never()).getPlayers(anyInt())
+        verify(gameDao, never()).tryMarkBusinessCenterUsedThisTurn(anyInt())
+    }
+
+    @Test
+    fun `business center rejects swap before it is active`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(
+            businessCenterGame(turnPhase = TurnPhase.RESOLVE_EFFECTS, lastDiceRoll = 6)
+        )
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            service.swapBusinessCenterCard(1, 1, 2, CardType.BAKERY, CardType.RANCH)
+        }
+
+        assertEquals("BUSINESS_CENTER_NOT_ACTIVE", ex.errorCode)
+        verify(playerDao, never()).getPlayers(anyInt())
+    }
+
+    @Test
+    fun `business center rejects swap when roll was not six`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(businessCenterGame(lastDiceRoll = 5))
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            service.swapBusinessCenterCard(1, 1, 2, CardType.BAKERY, CardType.RANCH)
+        }
+
+        assertEquals("BUSINESS_CENTER_NOT_ACTIVE", ex.errorCode)
+        verify(playerDao, never()).getPlayers(anyInt())
+    }
+
+    @Test
+    fun `business center rejects missing active player`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(businessCenterGame(currentTurnIndex = 2))
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 3)))
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            service.swapBusinessCenterCard(1, 1, 2, CardType.BAKERY, CardType.RANCH)
+        }
+
+        assertEquals("NO_ACTIVE_PLAYER", ex.errorCode)
+        verify(playerCardDao, never()).findByPlayerId(anyInt())
+    }
+
+    @Test
+    fun `business center rejects non active player caller`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(businessCenterGame())
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 3)))
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            service.swapBusinessCenterCard(1, 2, 1, CardType.BAKERY, CardType.RANCH)
+        }
+
+        assertEquals("NOT_YOUR_TURN", ex.errorCode)
+        verify(playerCardDao, never()).findByPlayerId(anyInt())
+    }
+
+    @Test
+    fun `business center rejects target outside game`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(businessCenterGame())
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 3)))
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            service.swapBusinessCenterCard(1, 1, 99, CardType.BAKERY, CardType.RANCH)
+        }
+
+        assertEquals("INVALID_SWAP_TARGET", ex.errorCode)
+        verify(playerCardDao, never()).findByPlayerId(anyInt())
+    }
+
+    @Test
+    fun `business center rejects active player as target`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(businessCenterGame())
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 3)))
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            service.swapBusinessCenterCard(1, 1, 1, CardType.BAKERY, CardType.RANCH)
+        }
+
+        assertEquals("INVALID_SWAP_TARGET", ex.errorCode)
+        verify(playerCardDao, never()).findByPlayerId(anyInt())
+    }
+
+    @Test
+    fun `business center rejects same card type exchange`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(businessCenterGame())
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 3)))
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            service.swapBusinessCenterCard(1, 1, 2, CardType.BAKERY, CardType.BAKERY)
+        }
+
+        assertEquals("INVALID_BUSINESS_CENTER_CARD", ex.errorCode)
+        verify(playerCardDao, never()).findByPlayerId(anyInt())
+    }
+
+    @Test
+    fun `business center rejects player without business center`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(businessCenterGame())
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 3)))
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.BAKERY, 1)))
+        whenever(playerCardDao.findByPlayerId(2)).thenReturn(listOf(playerCard(CardType.RANCH, 1)))
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            service.swapBusinessCenterCard(1, 1, 2, CardType.BAKERY, CardType.RANCH)
+        }
+
+        assertEquals("BUSINESS_CENTER_NOT_OWNED", ex.errorCode)
+        verify(cardDao, never()).findByCardType(any())
+        verify(playerCardDao, never()).upsert(anyInt(), any(), anyInt())
+    }
+
+    @Test
+    fun `business center rejects unknown offered card definition`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(businessCenterGame())
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 3)))
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(
+            listOf(playerCard(CardType.BUSINESS_CENTER, 1), playerCard(CardType.BAKERY, 1))
+        )
+        whenever(playerCardDao.findByPlayerId(2)).thenReturn(listOf(playerCard(CardType.RANCH, 1)))
+        whenever(cardDao.findByCardType(CardType.BAKERY)).thenReturn(null)
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            service.swapBusinessCenterCard(1, 1, 2, CardType.BAKERY, CardType.RANCH)
+        }
+
+        assertEquals("CARD_NOT_FOUND", ex.errorCode)
+        verify(playerCardDao, never()).upsert(anyInt(), any(), anyInt())
+    }
+
+    @Test
+    fun `business center rejects unknown requested card definition`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(businessCenterGame())
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 3)))
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(
+            listOf(playerCard(CardType.BUSINESS_CENTER, 1), playerCard(CardType.BAKERY, 1))
+        )
+        whenever(playerCardDao.findByPlayerId(2)).thenReturn(listOf(playerCard(CardType.RANCH, 1)))
+        whenever(cardDao.findByCardType(CardType.BAKERY)).thenReturn(
+            card(CardType.BAKERY, CardColor.GREEN, 1).copy(establishmentType = EstablishmentType.BREAD)
+        )
+        whenever(cardDao.findByCardType(CardType.RANCH)).thenReturn(null)
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            service.swapBusinessCenterCard(1, 1, 2, CardType.BAKERY, CardType.RANCH)
+        }
+
+        assertEquals("CARD_NOT_FOUND", ex.errorCode)
+        verify(playerCardDao, never()).upsert(anyInt(), any(), anyInt())
+    }
+
+    @Test
+    fun `business center rejects cards not owned by both players`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(businessCenterGame())
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 3)))
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.BUSINESS_CENTER, 1)))
+        whenever(playerCardDao.findByPlayerId(2)).thenReturn(listOf(playerCard(CardType.RANCH, 1)))
+        whenever(cardDao.findByCardType(CardType.BAKERY)).thenReturn(
+            card(CardType.BAKERY, CardColor.GREEN, 1).copy(establishmentType = EstablishmentType.BREAD)
+        )
+        whenever(cardDao.findByCardType(CardType.RANCH)).thenReturn(
+            card(CardType.RANCH, CardColor.BLUE, 1).copy(establishmentType = EstablishmentType.COW)
+        )
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            service.swapBusinessCenterCard(1, 1, 2, CardType.BAKERY, CardType.RANCH)
+        }
+
+        assertEquals("CARD_NOT_OWNED", ex.errorCode)
+        verify(playerCardDao, never()).upsert(anyInt(), any(), anyInt())
+        verify(gameDao, never()).tryMarkBusinessCenterUsedThisTurn(anyInt())
+    }
+
+    @Test
+    fun `business center rejects second swap when mark fails`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(businessCenterGame())
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 3)))
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(
+            listOf(
+                playerCard(CardType.BUSINESS_CENTER, 1),
+                playerCard(CardType.BAKERY, 1),
+            )
+        )
+        whenever(playerCardDao.findByPlayerId(2)).thenReturn(listOf(playerCard(CardType.RANCH, 1)))
+        whenever(cardDao.findByCardType(CardType.BAKERY)).thenReturn(
+            card(CardType.BAKERY, CardColor.GREEN, 1).copy(establishmentType = EstablishmentType.BREAD)
+        )
+        whenever(cardDao.findByCardType(CardType.RANCH)).thenReturn(
+            card(CardType.RANCH, CardColor.BLUE, 1).copy(establishmentType = EstablishmentType.COW)
+        )
+        whenever(gameDao.tryMarkBusinessCenterUsedThisTurn(1)).thenReturn(false)
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            service.swapBusinessCenterCard(1, 1, 2, CardType.BAKERY, CardType.RANCH)
+        }
+
+        assertEquals("BUSINESS_CENTER_ALREADY_USED", ex.errorCode)
+        verify(playerCardDao, never()).upsert(anyInt(), any(), anyInt())
+    }
+
+    @Test
+    fun `business center increments existing swapped card quantities`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(businessCenterGame())
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 3)))
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(
+            listOf(
+                playerCard(CardType.BUSINESS_CENTER, 1),
+                playerCard(CardType.BAKERY, 2),
+                playerCard(CardType.RANCH, 3),
+            )
+        )
+        whenever(playerCardDao.findByPlayerId(2)).thenReturn(
+            listOf(
+                playerCard(CardType.RANCH, 4),
+                playerCard(CardType.BAKERY, 5),
+            )
+        )
+        whenever(cardDao.findByCardType(CardType.BAKERY)).thenReturn(
+            card(CardType.BAKERY, CardColor.GREEN, 1).copy(establishmentType = EstablishmentType.BREAD)
+        )
+        whenever(cardDao.findByCardType(CardType.RANCH)).thenReturn(
+            card(CardType.RANCH, CardColor.BLUE, 1).copy(establishmentType = EstablishmentType.COW)
+        )
+        whenever(gameDao.tryMarkBusinessCenterUsedThisTurn(1)).thenReturn(true)
+
+        service.swapBusinessCenterCard(1, 1, 2, CardType.BAKERY, CardType.RANCH)
+
+        verify(playerCardDao).upsert(1, CardType.BAKERY, 1)
+        verify(playerCardDao).upsert(2, CardType.RANCH, 3)
+        verify(playerCardDao).upsert(1, CardType.RANCH, 4)
+        verify(playerCardDao).upsert(2, CardType.BAKERY, 6)
     }
 
     // After resolving effects the game should enter buy phase
@@ -753,6 +1013,27 @@ class EarningsServiceImplTest {
 
     private fun playerCard(cardType: CardType, quantity: Int): PlayerCardModel =
         PlayerCardModel(playerId = 1, cardType = cardType, quantity = quantity)
+
+    private fun businessCenterGame(
+        currentTurnIndex: Int = 0,
+        turnPhase: TurnPhase = TurnPhase.BUY_OR_BUILD,
+        lastDiceRoll: Int? = 6,
+        businessCenterUsedThisTurn: Boolean = false,
+    ): GameModel =
+        GameModel(
+            id = 1,
+            status = GameStatus.IN_PROGRESS,
+            hostUserId = 1,
+            lobbyCode = "TEST",
+            maxPlayers = 4,
+            currentTurnIndex = currentTurnIndex,
+            turnPhase = turnPhase,
+            lastDiceRoll = lastDiceRoll,
+            roundNumber = 1,
+            hasPurchasedThisTurn = false,
+            businessCenterUsedThisTurn = businessCenterUsedThisTurn,
+            rerolledThisTurn = false,
+        )
 
     private fun card(
         cardType: CardType,
