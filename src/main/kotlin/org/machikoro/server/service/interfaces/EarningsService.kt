@@ -4,13 +4,6 @@ import org.machikoro.server.domain.enums.CardType
 
 interface EarningsService {
     /**
-     * Applies the dice-roll earnings and returns the per-player coin change as
-     * `playerId -> signed delta`, including only players whose balance changed.
-     * Clients use these deltas to drive coin sound effects (issue #389).
-     */
-    fun processEarnings(gameId: Int, diceRoll: Int, activePlayerId: Int): Map<Int, Int>
-
-    /**
      * Resolves card effects for the current turn. Advances to BUY_OR_BUILD, or to
      * AWAIT_TV_TARGET when the active player must still pick a TV Station victim
      * ([resolveTvStationTarget]). Returns the per-player coin change as

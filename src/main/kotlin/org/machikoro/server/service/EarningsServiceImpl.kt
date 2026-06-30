@@ -17,7 +17,6 @@ import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.service.interfaces.EarningsService
 import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Transactional
 
 /**
  * Service responsible for core economic of the game
@@ -38,13 +37,6 @@ class EarningsServiceImpl(
 
     fun computeEarnings(pairs: List<Pair<Int, Int>>): Int =
         pairs.sumOf { (quantity, income) -> quantity * income }
-
-    @Transactional
-    override fun processEarnings(gameId: Int, diceRoll: Int, activePlayerId: Int): Map<Int, Int> {
-        val players = playerDao.getPlayers(gameId)
-        val earnings = calculateEarnings(players, diceRoll, activePlayerId)
-        return applyCoinChanges(players, earnings.finalCoins)
-    }
 
     private data class EarningsCalculation(
         val finalCoins: Map<Int, Int>,
@@ -90,9 +82,7 @@ class EarningsServiceImpl(
         )
         processPurpleCards(players, activePlayerId, matchedCardsByPlayer, finalCoins)
 
-        val tvStationStealAmount = matchedCardsByPlayer[activePlayerId].orEmpty()
-            .filter { (_, card) -> card.paymentSource == PaymentSource.CHOSEN_PLAYER }
-            .sumOf { (playerCard, card) -> playerCard.quantity * card.income }
+        val tvStationStealAmount = chosenPlayerIncome(matchedCardsByPlayer[activePlayerId].orEmpty())
 
         return EarningsCalculation(finalCoins, tvStationStealAmount)
     }
@@ -406,11 +396,16 @@ class EarningsServiceImpl(
      */
     private fun tvStationStealAmount(diceRoll: Int, activePlayerId: Int): Int {
         val activatingCards = cardDao.findByActivationNumber(diceRoll).associateBy { it.cardType }
-        return playerCardDao.findByPlayerId(activePlayerId)
+        val matchedCards = playerCardDao.findByPlayerId(activePlayerId)
             .mapNotNull { playerCard -> activatingCards[playerCard.cardType]?.let { playerCard to it } }
+
+        return chosenPlayerIncome(matchedCards)
+    }
+
+    private fun chosenPlayerIncome(matchedCards: List<Pair<PlayerCardModel, CardModel>>): Int =
+        matchedCards
             .filter { (_, card) -> card.paymentSource == PaymentSource.CHOSEN_PLAYER }
             .sumOf { (playerCard, card) -> playerCard.quantity * card.income }
-    }
 
     /**
      * True when the active player activated a TV Station with coins to steal and

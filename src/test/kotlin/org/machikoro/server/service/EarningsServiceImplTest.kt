@@ -110,7 +110,7 @@ class EarningsServiceImplTest {
         whenever(playerCardDao.findByPlayerId(2))
             .thenReturn(listOf(playerCard(CardType.WHEAT_FIELD, 1)))
 
-        val deltas = service.processEarnings(1, 1, 1)
+        val deltas = resolveEarnings(1, 1)
 
         verify(playerDao).updateCoins(1, 5)
         verify(playerDao).updateCoins(2, 6)
@@ -145,7 +145,7 @@ class EarningsServiceImplTest {
         whenever(playerCardDao.findByPlayerId(2))
             .thenReturn(listOf(playerCard(CardType.BAKERY, 1)))
 
-        service.processEarnings(1, 2, 1)
+        resolveEarnings(2, 1)
 
         verify(playerDao).updateCoins(1, 5)
         verify(playerDao, never()).updateCoins(2, 5)
@@ -178,7 +178,7 @@ class EarningsServiceImplTest {
         whenever(playerCardDao.findByPlayerId(2))
             .thenReturn(listOf(playerCard(CardType.CAFE, 1)))
 
-        service.processEarnings(1, 3, 1)
+        resolveEarnings(3, 1)
 
         verify(playerDao).updateCoins(1, 3)
         verify(playerDao).updateCoins(2, 3)
@@ -211,7 +211,7 @@ class EarningsServiceImplTest {
         whenever(playerCardDao.findByPlayerId(2))
             .thenReturn(listOf(playerCard(CardType.CAFE, 1)))
 
-        service.processEarnings(1, 3, 1)
+        resolveEarnings(3, 1)
 
         verify(playerDao).updateCoins(1, 0)
         verify(playerDao).updateCoins(2, 1)
@@ -249,7 +249,7 @@ class EarningsServiceImplTest {
         whenever(playerCardDao.findByPlayerId(3))
             .thenReturn(emptyList())
 
-        service.processEarnings(1, 6, 1)
+        resolveEarnings(6, 1)
 
         verify(playerDao).updateCoins(1, 6)
         verify(playerDao).updateCoins(2, 1)
@@ -275,14 +275,14 @@ class EarningsServiceImplTest {
         whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.BUSINESS_CENTER, 1)))
         whenever(playerCardDao.findByPlayerId(2)).thenReturn(emptyList())
 
-        val deltas = service.processEarnings(1, 6, 1)
+        val deltas = resolveEarnings(6, 1)
 
         assertEquals(emptyMap<Int, Int>(), deltas)
         verify(playerDao, never()).updateCoins(anyInt(), anyInt())
     }
 
     // Note: TV Station (CHOSEN_PLAYER) no longer credits the bank during
-    // processEarnings — the steal is deferred to the interaction round-trip.
+    // automatic effect resolution; the steal is deferred to the interaction round-trip.
     // See `TV station does not pay the active player from the bank` and the
     // resolveTvStationTarget tests below (issue #433).
 
@@ -754,7 +754,7 @@ class EarningsServiceImplTest {
         whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.SHOPPING_MALL))
             .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = true))
 
-        service.processEarnings(1, 3, 1)
+        resolveEarnings(3, 1)
 
         // Transfer should be 3 from P1 to P2
         verify(playerDao).updateCoins(1, 2) // 5 - 3 = 2
@@ -787,7 +787,7 @@ class EarningsServiceImplTest {
         whenever(playerLandmarkDao.findByPlayerIdAndType(1, LandmarkType.SHOPPING_MALL))
             .thenReturn(PlayerLandmarkModel(playerId = 1, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = true))
 
-        service.processEarnings(1, 3, 1)
+        resolveEarnings(3, 1)
 
         // Transfer should be 0 from P2 to P1
         verify(playerDao, never()).updateCoins(eq(1), any())
@@ -821,7 +821,7 @@ class EarningsServiceImplTest {
         whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.SHOPPING_MALL))
             .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = true))
 
-        service.processEarnings(1, 3, 1)
+        resolveEarnings(3, 1)
 
         // Transfer should be (2+1)*3 = 9 from P1 to P2
         verify(playerDao).updateCoins(1, 1) // 10 - 9 = 1
@@ -854,7 +854,7 @@ class EarningsServiceImplTest {
         whenever(playerLandmarkDao.findByPlayerIdAndType(1, LandmarkType.SHOPPING_MALL))
             .thenReturn(PlayerLandmarkModel(playerId = 1, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = true))
 
-        service.processEarnings(1, 2, 1)
+        resolveEarnings(2, 1)
 
         // P1 should receive (1 + 1) = 2 from their green Bread; P2 unchanged
         verify(playerDao).updateCoins(1, 5) // 3 + 2 = 5
@@ -887,7 +887,7 @@ class EarningsServiceImplTest {
         whenever(playerLandmarkDao.findByPlayerIdAndType(1, LandmarkType.SHOPPING_MALL))
             .thenReturn(PlayerLandmarkModel(playerId = 1, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = true))
 
-        service.processEarnings(1, 2, 1)
+        resolveEarnings(2, 1)
 
         // P1 should receive (1 + 1)*3 = 6 from their green Bread; P2 unchanged
         verify(playerDao).updateCoins(1, 9) // 3 + 6 = 9
@@ -919,7 +919,7 @@ class EarningsServiceImplTest {
         whenever(playerLandmarkDao.findByPlayerIdAndType(1, LandmarkType.SHOPPING_MALL))
             .thenReturn(PlayerLandmarkModel(playerId = 1, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = true))
 
-        service.processEarnings(1, 2, 2)
+        resolveEarnings(2, 2)
 
         // P1 should not receive bonus from their green Bread; P2 receives +1
         verify(playerDao, never()).updateCoins(1, 5) // 3 + 2 = 5
@@ -952,7 +952,7 @@ class EarningsServiceImplTest {
         whenever(playerLandmarkDao.findByPlayerIdAndType(1, LandmarkType.SHOPPING_MALL))
             .thenReturn(PlayerLandmarkModel(playerId = 1, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = false))
 
-        service.processEarnings(1, 2, 1)
+        resolveEarnings(2, 1)
 
         // P1 should receive 1 from their green Bread (no bonus); P2 unchanged
         verify(playerDao).updateCoins(1, 4) // 3 + 1 = 4
@@ -985,7 +985,7 @@ class EarningsServiceImplTest {
         whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.SHOPPING_MALL))
             .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = false))
 
-        service.processEarnings(1, 2, 1)
+        resolveEarnings(2, 1)
 
         // P2 should receive 2 from their red CUP (no bonus); P1 loses 2
         verify(playerDao).updateCoins(1, 3) // 5 - 2 = 3
@@ -994,11 +994,26 @@ class EarningsServiceImplTest {
 
     // TV Station (CHOSEN_PLAYER) — issue #433
 
-    private fun runningGame(phase: TurnPhase, diceRoll: Int?): GameModel = GameModel(
+    private fun runningGame(
+        phase: TurnPhase,
+        diceRoll: Int?,
+        currentTurnIndex: Int = 0,
+    ): GameModel = GameModel(
         id = 1, status = GameStatus.IN_PROGRESS, hostUserId = 1, lobbyCode = "TEST",
-        maxPlayers = 4, currentTurnIndex = 0, turnPhase = phase,
+        maxPlayers = 4, currentTurnIndex = currentTurnIndex, turnPhase = phase,
         lastDiceRoll = diceRoll, roundNumber = 1, hasPurchasedThisTurn = false, rerolledThisTurn = false
     )
+
+    private fun resolveEarnings(diceRoll: Int, activePlayerId: Int): Map<Int, Int> {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(
+            runningGame(TurnPhase.RESOLVE_EFFECTS, diceRoll, activePlayerId - 1)
+        )
+        whenever(gameDao.tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD))
+            .thenReturn(true)
+        whenever(gameDao.tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.AWAIT_TV_TARGET))
+            .thenReturn(true)
+        return service.resolveEffects(1)
+    }
 
     private fun tvStationCard() = card(
         cardType = CardType.TV_STATION,
@@ -1014,9 +1029,9 @@ class EarningsServiceImplTest {
         whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.TV_STATION, 1)))
         whenever(playerCardDao.findByPlayerId(2)).thenReturn(emptyList())
 
-        val deltas = service.processEarnings(1, 6, 1)
+        val deltas = resolveEarnings(6, 1)
 
-        // The steal is deferred to the target-choice round-trip, so processEarnings
+        // The steal is deferred to the target-choice round-trip, so automatic resolution
         // moves no coins — previously the active player got 5 free coins from the bank.
         verify(playerDao, never()).updateCoins(anyInt(), anyInt())
         assertEquals(emptyMap<Int, Int>(), deltas)
@@ -1220,7 +1235,7 @@ class EarningsServiceImplTest {
             )
         )
 
-        service.processEarnings(1, 7, 1)
+        resolveEarnings(7, 1)
 
         verify(playerDao).updateCoins(1, 6)
     }
@@ -1246,7 +1261,7 @@ class EarningsServiceImplTest {
             )
         )
 
-        service.processEarnings(1, 7, 1)
+        resolveEarnings(7, 1)
 
         verify(playerDao).updateCoins(1, 18)
     }
@@ -1266,7 +1281,7 @@ class EarningsServiceImplTest {
         whenever(playerDao.getPlayers(1)).thenReturn(players)
         whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.CHEESE_FACTORY, 1)))
 
-        val deltas = service.processEarnings(1, 7, 1)
+        val deltas = resolveEarnings(7, 1)
 
         assertEquals(emptyMap<Int, Int>(), deltas)
         verify(playerDao, never()).updateCoins(anyInt(), anyInt())
@@ -1294,7 +1309,7 @@ class EarningsServiceImplTest {
             )
         )
 
-        service.processEarnings(1, 8, 1)
+        resolveEarnings(8, 1)
 
         verify(playerDao).updateCoins(1, 6)
     }
@@ -1321,7 +1336,7 @@ class EarningsServiceImplTest {
             )
         )
 
-        service.processEarnings(1, 11, 1)
+        resolveEarnings(11, 1)
 
         verify(playerDao).updateCoins(1, 4)
     }
