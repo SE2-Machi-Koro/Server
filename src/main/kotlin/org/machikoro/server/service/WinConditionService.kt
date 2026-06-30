@@ -5,7 +5,6 @@ import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.PlayerModel
-import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.exception.GameNotFoundException
 import org.springframework.stereotype.Service
 
@@ -20,17 +19,17 @@ class WinConditionService(
     private fun hasPlayerWon(playerId: Int): Boolean =
         playerLandmarkDao.allBuilt(playerId)
 
-    /** Returns the winner in the given game, or null if nobody has won yet. */
+    /**
+     * Returns the winner in the given game, or null if nobody has won yet.
+     *
+     * This check is phase-agnostic: a winner is whoever has built all landmarks,
+     * regardless of the game's current [TurnPhase]. It is typically invoked right
+     * after transitioning to [TurnPhase.END_TURN], but may also be called from
+     * other paths (e.g. a debug or mid-turn check) without restriction.
+     */
     fun detectWinner(gameId: Int): PlayerModel? {
-        val game = gameDao.findById(gameId)
+        gameDao.findById(gameId)
             ?: throw GameNotFoundException("Game $gameId not found")
-
-        if (game.turnPhase != TurnPhase.END_TURN) {
-            throw CustomWebSocketException(
-                errorCode = "NOT_END_TURN_PHASE",
-                message = "Game ${game.id} must be in END_TURN State to determine a winner",
-            )
-        }
 
         return playerDao.getPlayers(gameId)
             .firstOrNull {
