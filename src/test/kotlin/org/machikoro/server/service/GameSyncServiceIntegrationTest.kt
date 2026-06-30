@@ -12,6 +12,7 @@ import org.machikoro.server.dao.GameMarketplaceDao
 import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
+import org.machikoro.server.dao.advanceToBuyOrBuild
 import org.machikoro.server.database.AbstractDBSetup
 import org.machikoro.server.database.Cards
 import org.machikoro.server.database.TestDataSeeder
@@ -109,12 +110,7 @@ class GameSyncServiceIntegrationTest : AbstractDBSetup() {
         // clears hasPurchasedThisTurn — so apply it FIRST, then layer the
         // roll / phase / purchase state on top.
         gameDao.advanceTurn(gameId, nextTurnIndex = 1, roundNumber = 3)
-        check(gameDao.tryRecordDiceRoll(gameId, diceRoll = 8, diceCount = 2)) {
-            "fixture: game not in ROLL_DICE"
-        }
-        check(gameDao.tryTransitionPhase(gameId, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD)) {
-            "fixture: game not in RESOLVE_EFFECTS"
-        }
+        gameDao.advanceToBuyOrBuild(gameId, diceRoll = 8, diceCount = 2)
         gameDao.updateHasPurchasedThisTurn(gameId, hasPurchasedThisTurn = true)
 
         // Simulate the first player buying a BAKERY: decrement marketplace,
