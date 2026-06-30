@@ -321,7 +321,7 @@ class BackendContainerRestartRecoverySmokeTest {
             CardSeed(CardType.FAMILY_RESTAURANT, 3, 2, "RED", "CUP", "ACTIVE_PLAYER", listOf(9, 10)),
             CardSeed(CardType.STADIUM, 6, 2, "PURPLE", "MAJOR", "ALL_PLAYERS", listOf(6)),
             CardSeed(CardType.TV_STATION, 7, 5, "PURPLE", "MAJOR", "CHOSEN_PLAYER", listOf(6)),
-            CardSeed(CardType.BUSINESS_CENTER, 8, 0, "PURPLE", "MAJOR", "CHOSEN_PLAYER", listOf(6)),
+            CardSeed(CardType.BUSINESS_CENTER, 8, 0, "PURPLE", "MAJOR", "NONE", listOf(6)),
         )
         val landmarks = mapOf(
             LandmarkType.TRAIN_STATION to 4,
