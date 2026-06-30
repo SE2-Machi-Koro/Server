@@ -98,6 +98,7 @@ object Games : IntIdTable("games") {
     val rerolledThisTurn = bool("rerolled_this_turn").default(false)
     val roundNumber = integer("round_number").default(1)
     val hasPurchasedThisTurn = bool("has_purchased_this_turn").default(false)
+    val businessCenterUsedThisTurn = bool("business_center_used_this_turn").default(false)
     val extraTurnPlayerId = integer("extra_turn_player_id").nullable()
     val extraTurnRoundNumber = integer("extra_turn_round_number").nullable()
     // True once the pending extra turn has been consumed; prevents re-grant in the same round

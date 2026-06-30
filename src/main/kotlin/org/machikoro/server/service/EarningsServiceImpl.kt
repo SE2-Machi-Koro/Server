@@ -167,9 +167,7 @@ class EarningsServiceImpl(
             .filter { (_, card) -> card.color == CardColor.PURPLE }
 
         val bankEarned = purpleCards
-            .filter { (_, card) ->
-                card.paymentSource == PaymentSource.BANK || card.paymentSource == PaymentSource.CHOSEN_PLAYER
-            }
+            .filter { (_, card) -> card.paymentSource == PaymentSource.BANK }
             .sumOf { (playerCard, card) -> playerCard.quantity * card.income }
 
         if (bankEarned > 0) {
@@ -244,6 +242,12 @@ class EarningsServiceImpl(
                 "Business Center can only be used after resolving a roll of 6",
             )
         }
+        if (game.businessCenterUsedThisTurn) {
+            throw CustomWebSocketException(
+                "BUSINESS_CENTER_ALREADY_USED",
+                "Business Center has already been used this turn",
+            )
+        }
 
         val players = playerDao.getPlayers(gameId)
         val activePlayer = players.getOrNull(game.currentTurnIndex)
@@ -291,6 +295,12 @@ class EarningsServiceImpl(
             throw CustomWebSocketException(
                 "CARD_NOT_OWNED",
                 "Both players must own the cards being exchanged",
+            )
+        }
+        if (!gameDao.tryMarkBusinessCenterUsedThisTurn(gameId)) {
+            throw CustomWebSocketException(
+                "BUSINESS_CENTER_ALREADY_USED",
+                "Business Center has already been used this turn",
             )
         }
 
