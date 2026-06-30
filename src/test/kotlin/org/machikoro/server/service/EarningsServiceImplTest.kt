@@ -1170,6 +1170,147 @@ class EarningsServiceImplTest {
         verify(playerDao, never()).updateCoins(anyInt(), anyInt())
     }
 
+    // Factory / market green cards multiply income by owned establishments (issue #432)
+
+    @Test
+    fun `cheese factory pays three coins per owned cow card`() {
+        val players = listOf(player(1, 0))
+
+        val cheeseFactory = card(
+            cardType = CardType.CHEESE_FACTORY,
+            color = CardColor.GREEN,
+            income = 3
+        ).copy(establishmentType = EstablishmentType.FACTORY)
+
+        whenever(cardDao.findByActivationNumber(7)).thenReturn(listOf(cheeseFactory))
+        whenever(cardDao.findAll()).thenReturn(seededCards)
+        whenever(playerDao.getPlayers(1)).thenReturn(players)
+        // 1 Cheese Factory + 2 Ranch (COW): income = 3 * 2 cows = 6.
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(
+            listOf(
+                playerCard(CardType.CHEESE_FACTORY, 1),
+                playerCard(CardType.RANCH, 2),
+            )
+        )
+
+        service.processEarnings(1, 7, 1)
+
+        verify(playerDao).updateCoins(1, 6)
+    }
+
+    @Test
+    fun `cheese factory multiplies by both quantity and cow count`() {
+        val players = listOf(player(1, 0))
+
+        val cheeseFactory = card(
+            cardType = CardType.CHEESE_FACTORY,
+            color = CardColor.GREEN,
+            income = 3
+        ).copy(establishmentType = EstablishmentType.FACTORY)
+
+        whenever(cardDao.findByActivationNumber(7)).thenReturn(listOf(cheeseFactory))
+        whenever(cardDao.findAll()).thenReturn(seededCards)
+        whenever(playerDao.getPlayers(1)).thenReturn(players)
+        // 2 Cheese Factories + 3 Ranch (COW): income = 2 * 3 * 3 = 18.
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(
+            listOf(
+                playerCard(CardType.CHEESE_FACTORY, 2),
+                playerCard(CardType.RANCH, 3),
+            )
+        )
+
+        service.processEarnings(1, 7, 1)
+
+        verify(playerDao).updateCoins(1, 18)
+    }
+
+    @Test
+    fun `cheese factory pays nothing without any cow cards`() {
+        val players = listOf(player(1, 0))
+
+        val cheeseFactory = card(
+            cardType = CardType.CHEESE_FACTORY,
+            color = CardColor.GREEN,
+            income = 3
+        ).copy(establishmentType = EstablishmentType.FACTORY)
+
+        whenever(cardDao.findByActivationNumber(7)).thenReturn(listOf(cheeseFactory))
+        whenever(cardDao.findAll()).thenReturn(seededCards)
+        whenever(playerDao.getPlayers(1)).thenReturn(players)
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.CHEESE_FACTORY, 1)))
+
+        val deltas = service.processEarnings(1, 7, 1)
+
+        assertEquals(emptyMap<Int, Int>(), deltas)
+        verify(playerDao, never()).updateCoins(anyInt(), anyInt())
+    }
+
+    @Test
+    fun `furniture factory pays three coins per owned gear card`() {
+        val players = listOf(player(1, 0))
+
+        val furnitureFactory = card(
+            cardType = CardType.FURNITURE_FACTORY,
+            color = CardColor.GREEN,
+            income = 3
+        ).copy(establishmentType = EstablishmentType.FACTORY)
+
+        whenever(cardDao.findByActivationNumber(8)).thenReturn(listOf(furnitureFactory))
+        whenever(cardDao.findAll()).thenReturn(seededCards)
+        whenever(playerDao.getPlayers(1)).thenReturn(players)
+        // 1 Furniture Factory + 1 Forest + 1 Mine (both GEAR): income = 3 * 2 gears = 6.
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(
+            listOf(
+                playerCard(CardType.FURNITURE_FACTORY, 1),
+                playerCard(CardType.FOREST, 1),
+                playerCard(CardType.MINE, 1),
+            )
+        )
+
+        service.processEarnings(1, 8, 1)
+
+        verify(playerDao).updateCoins(1, 6)
+    }
+
+    @Test
+    fun `fruit and vegetable market pays two coins per owned wheat card`() {
+        val players = listOf(player(1, 0))
+
+        val market = card(
+            cardType = CardType.FRUIT_AND_VEGETABLE_MARKET,
+            color = CardColor.GREEN,
+            income = 2
+        ).copy(establishmentType = EstablishmentType.FRUIT)
+
+        whenever(cardDao.findByActivationNumber(11)).thenReturn(listOf(market))
+        whenever(cardDao.findAll()).thenReturn(seededCards)
+        whenever(playerDao.getPlayers(1)).thenReturn(players)
+        // 1 Market + 1 Wheat Field + 1 Apple Orchard (both WHEAT): income = 2 * 2 wheat = 4.
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(
+            listOf(
+                playerCard(CardType.FRUIT_AND_VEGETABLE_MARKET, 1),
+                playerCard(CardType.WHEAT_FIELD, 1),
+                playerCard(CardType.APPLE_ORCHARD, 1),
+            )
+        )
+
+        service.processEarnings(1, 11, 1)
+
+        verify(playerDao).updateCoins(1, 4)
+    }
+
+    // Card definitions covering every establishment symbol used by the multiplier tests.
+    private val seededCards: List<CardModel> = listOf(
+        card(CardType.WHEAT_FIELD, CardColor.BLUE, 1).copy(establishmentType = EstablishmentType.WHEAT),
+        card(CardType.RANCH, CardColor.BLUE, 1).copy(establishmentType = EstablishmentType.COW),
+        card(CardType.FOREST, CardColor.BLUE, 1).copy(establishmentType = EstablishmentType.GEAR),
+        card(CardType.MINE, CardColor.BLUE, 5).copy(establishmentType = EstablishmentType.GEAR),
+        card(CardType.APPLE_ORCHARD, CardColor.BLUE, 3).copy(establishmentType = EstablishmentType.WHEAT),
+        card(CardType.CHEESE_FACTORY, CardColor.GREEN, 3).copy(establishmentType = EstablishmentType.FACTORY),
+        card(CardType.FURNITURE_FACTORY, CardColor.GREEN, 3).copy(establishmentType = EstablishmentType.FACTORY),
+        card(CardType.FRUIT_AND_VEGETABLE_MARKET, CardColor.GREEN, 2).copy(establishmentType = EstablishmentType.FRUIT),
+    )
+
     private fun player(id: Int, coins: Int): PlayerModel =
         PlayerModel(id = id, gameId = 1, userId = id, turnOrder = 0, coins = coins, lastSeenAt = null)
 
