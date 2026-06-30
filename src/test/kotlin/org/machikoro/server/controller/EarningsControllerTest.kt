@@ -3,10 +3,12 @@ package org.machikoro.server.controller
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.machikoro.server.auth.UserPrincipal
+import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
+import org.machikoro.server.dto.BusinessCenterSwapRequest
 import org.machikoro.server.dto.GameStateDto
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.ResolveEffectsRequest
@@ -242,5 +244,94 @@ class EarningsControllerTest {
         assertEquals("UNAUTHENTICATED", ex.errorCode)
         verify(gameStateGuard, never()).ensureSenderIsActivePlayer(any(), any())
         verify(earningsService, never()).resolveEffects(any())
+    }
+
+    @Test
+    fun `businessCenter swap calls service and broadcasts success`() {
+        val request = BusinessCenterSwapRequest(
+            gameId = 1,
+            targetPlayerId = 2,
+            offeredCardType = CardType.BAKERY,
+            requestedCardType = CardType.RANCH,
+        )
+        val activePlayer = PlayerModel(id = 1, gameId = 1, userId = 1, turnOrder = 0, coins = 5, lastSeenAt = null)
+        val snapshot = gameStateDto(1)
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(1, alice)).thenReturn(activePlayer)
+        whenever(gameSyncService.buildSnapshot(1)).thenReturn(snapshot)
+
+        controller.swapBusinessCenterCard(request, authedAccessor())
+
+        verify(earningsService).swapBusinessCenterCard(1, 1, 2, CardType.BAKERY, CardType.RANCH)
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/1"), captor.capture())
+
+        val message = captor.firstValue
+        assertEquals(MessageType.GAME_ACTION, message.type)
+        val payload = message.payload as Map<*, *>
+        assertEquals("BUSINESS_CENTER_SWAP_APPLIED", payload["event"])
+        assertEquals(snapshot, payload["state"])
+    }
+
+    @Test
+    fun `businessCenter swap broadcasts domain rejection`() {
+        val request = BusinessCenterSwapRequest(
+            gameId = 1,
+            targetPlayerId = 2,
+            offeredCardType = CardType.BAKERY,
+            requestedCardType = CardType.STADIUM,
+        )
+        val activePlayer = PlayerModel(id = 1, gameId = 1, userId = 1, turnOrder = 0, coins = 5, lastSeenAt = null)
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(1, alice)).thenReturn(activePlayer)
+        doThrow(CustomWebSocketException("INVALID_BUSINESS_CENTER_CARD", "Business Center cannot exchange major establishments"))
+            .whenever(earningsService).swapBusinessCenterCard(1, 1, 2, CardType.BAKERY, CardType.STADIUM)
+
+        controller.swapBusinessCenterCard(request, authedAccessor())
+
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/1"), captor.capture())
+        val message = captor.firstValue
+        assertEquals(MessageType.ERROR, message.type)
+        val payload = message.payload as WebSocketErrorDto
+        assertEquals("INVALID_BUSINESS_CENTER_CARD", payload.code)
+        assertEquals("BUSINESS_CENTER_SWAP_FAILED", payload.context["event"])
+    }
+
+    @Test
+    fun `businessCenter swap propagates NOT_YOUR_TURN and does not call service or broadcast`() {
+        val request = BusinessCenterSwapRequest(
+            gameId = 1,
+            targetPlayerId = 2,
+            offeredCardType = CardType.BAKERY,
+            requestedCardType = CardType.RANCH,
+        )
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(1, alice))
+            .thenThrow(CustomWebSocketException("NOT_YOUR_TURN", "It is not your turn"))
+
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.swapBusinessCenterCard(request, authedAccessor())
+        }
+
+        assertEquals("NOT_YOUR_TURN", ex.errorCode)
+        verify(earningsService, never()).swapBusinessCenterCard(any(), any(), any(), any(), any())
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+    }
+
+    @Test
+    fun `businessCenter swap throws UNAUTHENTICATED when accessor has no principal`() {
+        val request = BusinessCenterSwapRequest(
+            gameId = 1,
+            targetPlayerId = 2,
+            offeredCardType = CardType.BAKERY,
+            requestedCardType = CardType.RANCH,
+        )
+        val unauthed = SimpMessageHeaderAccessor.create()
+
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.swapBusinessCenterCard(request, unauthed)
+        }
+
+        assertEquals("UNAUTHENTICATED", ex.errorCode)
+        verify(gameStateGuard, never()).ensureSenderIsActivePlayer(any(), any())
+        verify(earningsService, never()).swapBusinessCenterCard(any(), any(), any(), any(), any())
     }
 }
