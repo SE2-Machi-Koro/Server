@@ -143,17 +143,6 @@ class GameDao {
     }
 
     /**
-     * Updates game state after a dice roll
-     */
-    fun updateAfterRoll(id: Int, diceRoll: Int, phase: TurnPhase): Unit = transaction {
-        val updatedRows = Games.update({ Games.id eq id }) {
-            it[Games.lastDiceRoll] = diceRoll
-            it[Games.turnPhase] = phase
-        }
-        if (updatedRows == 0) throw GameNotFoundException("Game $id not found")
-    }
-
-    /**
      * Persists the only legal transition out of ROLL_DICE. The conditional
      * update prevents two simultaneous requests from recording separate rolls.
      */
@@ -212,21 +201,15 @@ class GameDao {
     }
 
     /**
-     * Updates the rerolled_this_turn flag for a game.
-     */
-    fun updateRerolledThisTurn(id: Int, rerolledThisTurn: Boolean): Unit = transaction {
-        val updatedRows = Games.update({ Games.id eq id }) {
-            it[Games.rerolledThisTurn] = rerolledThisTurn
-        }
-        if (updatedRows == 0) throw GameNotFoundException("Game $id not found")
-    }
-
-    /**
      * Atomically attempts to reroll: succeeds only if the game is still in RESOLVE_EFFECTS,
      * has an active dice roll, and has not yet rerolled this turn.
      *
      * On success, sets the new dice roll and marks rerolledThisTurn = true in a single transaction.
      * Returns true if the update succeeded, false if any condition failed.
+     *
+     * lastDiceCount is intentionally left untouched: a reroll replays the same number of dice as the
+     * initial roll, so the count recorded by [tryRecordDiceRoll] must be preserved (DiceService reads
+     * lastDiceCount at reroll time to know how many dice to roll).
      */
     fun tryRerollThisTurn(id: Int, newDiceRoll: Int): Boolean = transaction {
         Games.update({
@@ -237,6 +220,7 @@ class GameDao {
         }) {
             it[Games.lastDiceRoll] = newDiceRoll
             it[Games.rerolledThisTurn] = true
+            // lastDiceCount deliberately not updated — the reroll keeps the initial roll's dice count.
         } > 0
     }
 
