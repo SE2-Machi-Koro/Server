@@ -110,7 +110,7 @@ class EarningsServiceImplTest {
         whenever(playerCardDao.findByPlayerId(2))
             .thenReturn(listOf(playerCard(CardType.WHEAT_FIELD, 1)))
 
-        val deltas = service.processEarnings(1, 1, 1)
+        val deltas = resolveEarnings(1, 1)
 
         verify(playerDao).updateCoins(1, 5)
         verify(playerDao).updateCoins(2, 6)
@@ -145,7 +145,7 @@ class EarningsServiceImplTest {
         whenever(playerCardDao.findByPlayerId(2))
             .thenReturn(listOf(playerCard(CardType.BAKERY, 1)))
 
-        service.processEarnings(1, 2, 1)
+        resolveEarnings(2, 1)
 
         verify(playerDao).updateCoins(1, 5)
         verify(playerDao, never()).updateCoins(2, 5)
@@ -178,7 +178,7 @@ class EarningsServiceImplTest {
         whenever(playerCardDao.findByPlayerId(2))
             .thenReturn(listOf(playerCard(CardType.CAFE, 1)))
 
-        service.processEarnings(1, 3, 1)
+        resolveEarnings(3, 1)
 
         verify(playerDao).updateCoins(1, 3)
         verify(playerDao).updateCoins(2, 3)
@@ -211,7 +211,7 @@ class EarningsServiceImplTest {
         whenever(playerCardDao.findByPlayerId(2))
             .thenReturn(listOf(playerCard(CardType.CAFE, 1)))
 
-        service.processEarnings(1, 3, 1)
+        resolveEarnings(3, 1)
 
         verify(playerDao).updateCoins(1, 0)
         verify(playerDao).updateCoins(2, 1)
@@ -249,7 +249,7 @@ class EarningsServiceImplTest {
         whenever(playerCardDao.findByPlayerId(3))
             .thenReturn(emptyList())
 
-        service.processEarnings(1, 6, 1)
+        resolveEarnings(6, 1)
 
         verify(playerDao).updateCoins(1, 6)
         verify(playerDao).updateCoins(2, 1)
@@ -275,41 +275,16 @@ class EarningsServiceImplTest {
         whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.BUSINESS_CENTER, 1)))
         whenever(playerCardDao.findByPlayerId(2)).thenReturn(emptyList())
 
-        val deltas = service.processEarnings(1, 6, 1)
+        val deltas = resolveEarnings(6, 1)
 
         assertEquals(emptyMap<Int, Int>(), deltas)
         verify(playerDao, never()).updateCoins(anyInt(), anyInt())
     }
 
-    @Test
-    fun `purple chosen player payment source still credits bank pending tv station steal`() {
-        // TV Station (CHOSEN_PLAYER) is intentionally left on the pre-existing
-        // bank-credit path here; the proper steal is handled by #433. Business
-        // Center must not regress this card, so it keeps awarding the active
-        // player from the bank.
-        val players = listOf(
-            player(1, 3),
-            player(2, 3)
-        )
-
-        val tvStation = card(
-            cardType = CardType.TV_STATION,
-            color = CardColor.PURPLE,
-            income = 5,
-            paymentSource = PaymentSource.CHOSEN_PLAYER
-        )
-
-        whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(tvStation))
-        whenever(playerDao.getPlayers(1)).thenReturn(players)
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.TV_STATION, 1)))
-        whenever(playerCardDao.findByPlayerId(2)).thenReturn(emptyList())
-
-        val deltas = service.processEarnings(1, 6, 1)
-
-        assertEquals(mapOf(1 to 5), deltas)
-        verify(playerDao).updateCoins(1, 8)
-        verify(playerDao, never()).updateCoins(eq(2), anyInt())
-    }
+    // Note: TV Station (CHOSEN_PLAYER) no longer credits the bank during
+    // automatic effect resolution; the steal is deferred to the interaction round-trip.
+    // See `TV station does not pay the active player from the bank` and the
+    // resolveTvStationTarget tests below (issue #433).
 
     @Test
     fun `business center swaps one non-major card with target player`() {
@@ -718,6 +693,9 @@ class EarningsServiceImplTest {
             lastDiceRoll = 4, roundNumber = 1, hasPurchasedThisTurn = false, rerolledThisTurn = false
         )
         whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(game)
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3)))
+        whenever(cardDao.findByActivationNumber(anyInt())).thenReturn(emptyList())
+        whenever(playerCardDao.findByPlayerId(anyInt())).thenReturn(emptyList())
         whenever(gameDao.tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD))
             .thenReturn(false)
 
@@ -726,7 +704,8 @@ class EarningsServiceImplTest {
         }
 
         assertEquals("EFFECTS_ALREADY_RESOLVED", ex.errorCode)
-        verify(playerDao, never()).getPlayers(anyInt())
+        // A lost phase race must not move any coins.
+        verify(playerDao, never()).updateCoins(anyInt(), anyInt())
     }
 
     @Test
@@ -775,7 +754,7 @@ class EarningsServiceImplTest {
         whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.SHOPPING_MALL))
             .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = true))
 
-        service.processEarnings(1, 3, 1)
+        resolveEarnings(3, 1)
 
         // Transfer should be 3 from P1 to P2
         verify(playerDao).updateCoins(1, 2) // 5 - 3 = 2
@@ -808,7 +787,7 @@ class EarningsServiceImplTest {
         whenever(playerLandmarkDao.findByPlayerIdAndType(1, LandmarkType.SHOPPING_MALL))
             .thenReturn(PlayerLandmarkModel(playerId = 1, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = true))
 
-        service.processEarnings(1, 3, 1)
+        resolveEarnings(3, 1)
 
         // Transfer should be 0 from P2 to P1
         verify(playerDao, never()).updateCoins(eq(1), any())
@@ -842,7 +821,7 @@ class EarningsServiceImplTest {
         whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.SHOPPING_MALL))
             .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = true))
 
-        service.processEarnings(1, 3, 1)
+        resolveEarnings(3, 1)
 
         // Transfer should be (2+1)*3 = 9 from P1 to P2
         verify(playerDao).updateCoins(1, 1) // 10 - 9 = 1
@@ -875,7 +854,7 @@ class EarningsServiceImplTest {
         whenever(playerLandmarkDao.findByPlayerIdAndType(1, LandmarkType.SHOPPING_MALL))
             .thenReturn(PlayerLandmarkModel(playerId = 1, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = true))
 
-        service.processEarnings(1, 2, 1)
+        resolveEarnings(2, 1)
 
         // P1 should receive (1 + 1) = 2 from their green Bread; P2 unchanged
         verify(playerDao).updateCoins(1, 5) // 3 + 2 = 5
@@ -908,7 +887,7 @@ class EarningsServiceImplTest {
         whenever(playerLandmarkDao.findByPlayerIdAndType(1, LandmarkType.SHOPPING_MALL))
             .thenReturn(PlayerLandmarkModel(playerId = 1, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = true))
 
-        service.processEarnings(1, 2, 1)
+        resolveEarnings(2, 1)
 
         // P1 should receive (1 + 1)*3 = 6 from their green Bread; P2 unchanged
         verify(playerDao).updateCoins(1, 9) // 3 + 6 = 9
@@ -940,7 +919,7 @@ class EarningsServiceImplTest {
         whenever(playerLandmarkDao.findByPlayerIdAndType(1, LandmarkType.SHOPPING_MALL))
             .thenReturn(PlayerLandmarkModel(playerId = 1, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = true))
 
-        service.processEarnings(1, 2, 2)
+        resolveEarnings(2, 2)
 
         // P1 should not receive bonus from their green Bread; P2 receives +1
         verify(playerDao, never()).updateCoins(1, 5) // 3 + 2 = 5
@@ -973,7 +952,7 @@ class EarningsServiceImplTest {
         whenever(playerLandmarkDao.findByPlayerIdAndType(1, LandmarkType.SHOPPING_MALL))
             .thenReturn(PlayerLandmarkModel(playerId = 1, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = false))
 
-        service.processEarnings(1, 2, 1)
+        resolveEarnings(2, 1)
 
         // P1 should receive 1 from their green Bread (no bonus); P2 unchanged
         verify(playerDao).updateCoins(1, 4) // 3 + 1 = 4
@@ -1006,11 +985,231 @@ class EarningsServiceImplTest {
         whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.SHOPPING_MALL))
             .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = false))
 
-        service.processEarnings(1, 2, 1)
+        resolveEarnings(2, 1)
 
         // P2 should receive 2 from their red CUP (no bonus); P1 loses 2
         verify(playerDao).updateCoins(1, 3) // 5 - 2 = 3
         verify(playerDao).updateCoins(2, 5) // 3 + 2 = 5
+    }
+
+    // TV Station (CHOSEN_PLAYER) — issue #433
+
+    private fun runningGame(
+        phase: TurnPhase,
+        diceRoll: Int?,
+        currentTurnIndex: Int = 0,
+    ): GameModel = GameModel(
+        id = 1, status = GameStatus.IN_PROGRESS, hostUserId = 1, lobbyCode = "TEST",
+        maxPlayers = 4, currentTurnIndex = currentTurnIndex, turnPhase = phase,
+        lastDiceRoll = diceRoll, roundNumber = 1, hasPurchasedThisTurn = false, rerolledThisTurn = false
+    )
+
+    private fun resolveEarnings(diceRoll: Int, activePlayerId: Int): Map<Int, Int> {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(
+            runningGame(TurnPhase.RESOLVE_EFFECTS, diceRoll, activePlayerId - 1)
+        )
+        whenever(gameDao.tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD))
+            .thenReturn(true)
+        whenever(gameDao.tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.AWAIT_TV_TARGET))
+            .thenReturn(true)
+        return service.resolveEffects(1)
+    }
+
+    private fun tvStationCard() = card(
+        cardType = CardType.TV_STATION,
+        color = CardColor.PURPLE,
+        income = 5,
+        paymentSource = PaymentSource.CHOSEN_PLAYER
+    )
+
+    @Test
+    fun `TV station does not pay the active player from the bank`() {
+        whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(tvStationCard()))
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 4)))
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.TV_STATION, 1)))
+        whenever(playerCardDao.findByPlayerId(2)).thenReturn(emptyList())
+
+        val deltas = resolveEarnings(6, 1)
+
+        // The steal is deferred to the target-choice round-trip, so automatic resolution
+        // moves no coins — previously the active player got 5 free coins from the bank.
+        verify(playerDao, never()).updateCoins(anyInt(), anyInt())
+        assertEquals(emptyMap<Int, Int>(), deltas)
+    }
+
+    @Test
+    fun `resolveEffects parks turn in AWAIT_TV_TARGET when TV station activates`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.RESOLVE_EFFECTS, 6))
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 4)))
+        whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(tvStationCard()))
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.TV_STATION, 1)))
+        whenever(playerCardDao.findByPlayerId(2)).thenReturn(emptyList())
+        whenever(gameDao.tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.AWAIT_TV_TARGET))
+            .thenReturn(true)
+
+        service.resolveEffects(1)
+
+        verify(gameDao).tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.AWAIT_TV_TARGET)
+        verify(gameDao, never()).tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD)
+    }
+
+    @Test
+    fun `resolveEffects skips the round-trip and advances when no opponent has coins`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.RESOLVE_EFFECTS, 6))
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 0)))
+        whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(tvStationCard()))
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.TV_STATION, 1)))
+        whenever(playerCardDao.findByPlayerId(2)).thenReturn(emptyList())
+        whenever(gameDao.tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD))
+            .thenReturn(true)
+
+        service.resolveEffects(1)
+
+        verify(gameDao).tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD)
+        verify(gameDao, never()).tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.AWAIT_TV_TARGET)
+    }
+
+    @Test
+    fun `resolveEffects skips TV target when stadium drains every opponent`() {
+        val stadium = card(
+            cardType = CardType.STADIUM,
+            color = CardColor.PURPLE,
+            income = 2,
+            paymentSource = PaymentSource.ALL_PLAYERS
+        )
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.RESOLVE_EFFECTS, 6))
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 2), player(3, 1)))
+        whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(stadium, tvStationCard()))
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(
+            listOf(playerCard(CardType.STADIUM, 1), playerCard(CardType.TV_STATION, 1))
+        )
+        whenever(playerCardDao.findByPlayerId(2)).thenReturn(emptyList())
+        whenever(playerCardDao.findByPlayerId(3)).thenReturn(emptyList())
+        whenever(gameDao.tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD))
+            .thenReturn(true)
+
+        val deltas = service.resolveEffects(1)
+
+        verify(gameDao).tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD)
+        verify(gameDao, never()).tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.AWAIT_TV_TARGET)
+        verify(playerDao).updateCoins(1, 6)
+        verify(playerDao).updateCoins(2, 0)
+        verify(playerDao).updateCoins(3, 0)
+        assertEquals(mapOf(1 to 3, 2 to -2, 3 to -1), deltas)
+    }
+
+    @Test
+    fun `resolveEffects rejects resolution while awaiting TV target`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.AWAIT_TV_TARGET, 6))
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            service.resolveEffects(1)
+        }
+
+        assertEquals("EFFECTS_ALREADY_RESOLVED", ex.errorCode)
+        verify(playerDao, never()).getPlayers(anyInt())
+    }
+
+    @Test
+    fun `resolveTvStationTarget steals from the chosen opponent and advances phase`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.AWAIT_TV_TARGET, 6))
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 10)))
+        whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(tvStationCard()))
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.TV_STATION, 1)))
+        whenever(gameDao.tryTransitionPhase(1, TurnPhase.AWAIT_TV_TARGET, TurnPhase.BUY_OR_BUILD))
+            .thenReturn(true)
+
+        val deltas = service.resolveTvStationTarget(1, 2)
+
+        verify(playerDao).updateCoins(1, 8)
+        verify(playerDao).updateCoins(2, 5)
+        assertEquals(mapOf(1 to 5, 2 to -5), deltas)
+    }
+
+    @Test
+    fun `resolveTvStationTarget caps the steal at the target balance`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.AWAIT_TV_TARGET, 6))
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 2)))
+        whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(tvStationCard()))
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.TV_STATION, 1)))
+        whenever(gameDao.tryTransitionPhase(1, TurnPhase.AWAIT_TV_TARGET, TurnPhase.BUY_OR_BUILD))
+            .thenReturn(true)
+
+        val deltas = service.resolveTvStationTarget(1, 2)
+
+        verify(playerDao).updateCoins(1, 5)
+        verify(playerDao).updateCoins(2, 0)
+        assertEquals(mapOf(1 to 2, 2 to -2), deltas)
+    }
+
+    @Test
+    fun `resolveTvStationTarget rejects a broke target`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.AWAIT_TV_TARGET, 6))
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 0), player(3, 4)))
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            service.resolveTvStationTarget(1, 2)
+        }
+
+        assertEquals("INVALID_TV_STATION_TARGET", ex.errorCode)
+        verify(gameDao, never()).tryTransitionPhase(anyInt(), any(), any())
+        verify(playerDao, never()).updateCoins(anyInt(), anyInt())
+    }
+
+    @Test
+    fun `resolveTvStationTarget rejects a target that is not an opponent`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.AWAIT_TV_TARGET, 6))
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 4)))
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            service.resolveTvStationTarget(1, 99)
+        }
+
+        assertEquals("INVALID_TV_STATION_TARGET", ex.errorCode)
+        verify(gameDao, never()).tryTransitionPhase(anyInt(), any(), any())
+        verify(playerDao, never()).updateCoins(anyInt(), anyInt())
+    }
+
+    @Test
+    fun `resolveTvStationTarget rejects choosing the active player as the target`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.AWAIT_TV_TARGET, 6))
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 4)))
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            service.resolveTvStationTarget(1, 1)
+        }
+
+        assertEquals("INVALID_TV_STATION_TARGET", ex.errorCode)
+        verify(playerDao, never()).updateCoins(anyInt(), anyInt())
+    }
+
+    @Test
+    fun `resolveTvStationTarget rejects when the game is not awaiting a TV target`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.BUY_OR_BUILD, 6))
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            service.resolveTvStationTarget(1, 2)
+        }
+
+        assertEquals("NO_PENDING_TV_STATION", ex.errorCode)
+        verify(playerDao, never()).getPlayers(anyInt())
+    }
+
+    @Test
+    fun `resolveTvStationTarget rejects a stale phase transition without moving coins`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.AWAIT_TV_TARGET, 6))
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 4)))
+        whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(tvStationCard()))
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.TV_STATION, 1)))
+        whenever(gameDao.tryTransitionPhase(1, TurnPhase.AWAIT_TV_TARGET, TurnPhase.BUY_OR_BUILD))
+            .thenReturn(false)
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            service.resolveTvStationTarget(1, 2)
+        }
+
+        assertEquals("EFFECTS_ALREADY_RESOLVED", ex.errorCode)
+        verify(playerDao, never()).updateCoins(anyInt(), anyInt())
     }
 
     // Factory / market green cards multiply income by owned establishments (issue #432)
@@ -1036,7 +1235,7 @@ class EarningsServiceImplTest {
             )
         )
 
-        service.processEarnings(1, 7, 1)
+        resolveEarnings(7, 1)
 
         verify(playerDao).updateCoins(1, 6)
     }
@@ -1062,7 +1261,7 @@ class EarningsServiceImplTest {
             )
         )
 
-        service.processEarnings(1, 7, 1)
+        resolveEarnings(7, 1)
 
         verify(playerDao).updateCoins(1, 18)
     }
@@ -1082,7 +1281,7 @@ class EarningsServiceImplTest {
         whenever(playerDao.getPlayers(1)).thenReturn(players)
         whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.CHEESE_FACTORY, 1)))
 
-        val deltas = service.processEarnings(1, 7, 1)
+        val deltas = resolveEarnings(7, 1)
 
         assertEquals(emptyMap<Int, Int>(), deltas)
         verify(playerDao, never()).updateCoins(anyInt(), anyInt())
@@ -1110,7 +1309,7 @@ class EarningsServiceImplTest {
             )
         )
 
-        service.processEarnings(1, 8, 1)
+        resolveEarnings(8, 1)
 
         verify(playerDao).updateCoins(1, 6)
     }
@@ -1137,7 +1336,7 @@ class EarningsServiceImplTest {
             )
         )
 
-        service.processEarnings(1, 11, 1)
+        resolveEarnings(11, 1)
 
         verify(playerDao).updateCoins(1, 4)
     }
