@@ -256,6 +256,93 @@ class EarningsServiceImplTest {
         verify(playerDao).updateCoins(3, 0)
     }
 
+    @Test
+    fun `purple none payment source does not award coins`() {
+        val players = listOf(
+            player(1, 3),
+            player(2, 3)
+        )
+
+        val businessCenter = card(
+            cardType = CardType.BUSINESS_CENTER,
+            color = CardColor.PURPLE,
+            income = 0,
+            paymentSource = PaymentSource.NONE
+        )
+
+        whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(businessCenter))
+        whenever(playerDao.getPlayers(1)).thenReturn(players)
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.BUSINESS_CENTER, 1)))
+        whenever(playerCardDao.findByPlayerId(2)).thenReturn(emptyList())
+
+        val deltas = service.processEarnings(1, 6, 1)
+
+        assertEquals(emptyMap<Int, Int>(), deltas)
+        verify(playerDao, never()).updateCoins(anyInt(), anyInt())
+    }
+
+    @Test
+    fun `business center swaps one non-major card with target player`() {
+        val game = GameModel(
+            id = 1, status = GameStatus.IN_PROGRESS, hostUserId = 1, lobbyCode = "TEST",
+            maxPlayers = 4, currentTurnIndex = 0, turnPhase = TurnPhase.BUY_OR_BUILD,
+            lastDiceRoll = 6, roundNumber = 1, hasPurchasedThisTurn = false, rerolledThisTurn = false
+        )
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(game)
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 3)))
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(
+            listOf(
+                playerCard(CardType.BUSINESS_CENTER, 1),
+                playerCard(CardType.BAKERY, 1),
+            )
+        )
+        whenever(playerCardDao.findByPlayerId(2)).thenReturn(listOf(playerCard(CardType.RANCH, 2)))
+        whenever(cardDao.findByCardType(CardType.BAKERY)).thenReturn(
+            card(CardType.BAKERY, CardColor.GREEN, 1).copy(establishmentType = EstablishmentType.BREAD)
+        )
+        whenever(cardDao.findByCardType(CardType.RANCH)).thenReturn(
+            card(CardType.RANCH, CardColor.BLUE, 1).copy(establishmentType = EstablishmentType.COW)
+        )
+
+        service.swapBusinessCenterCard(1, 1, 2, CardType.BAKERY, CardType.RANCH)
+
+        verify(playerCardDao).upsert(1, CardType.BAKERY, 0)
+        verify(playerCardDao).upsert(2, CardType.RANCH, 1)
+        verify(playerCardDao).upsert(1, CardType.RANCH, 1)
+        verify(playerCardDao).upsert(2, CardType.BAKERY, 1)
+    }
+
+    @Test
+    fun `business center rejects major establishment swaps`() {
+        val game = GameModel(
+            id = 1, status = GameStatus.IN_PROGRESS, hostUserId = 1, lobbyCode = "TEST",
+            maxPlayers = 4, currentTurnIndex = 0, turnPhase = TurnPhase.BUY_OR_BUILD,
+            lastDiceRoll = 6, roundNumber = 1, hasPurchasedThisTurn = false, rerolledThisTurn = false
+        )
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(game)
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 3)))
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(
+            listOf(
+                playerCard(CardType.BUSINESS_CENTER, 1),
+                playerCard(CardType.BAKERY, 1),
+            )
+        )
+        whenever(playerCardDao.findByPlayerId(2)).thenReturn(listOf(playerCard(CardType.STADIUM, 1)))
+        whenever(cardDao.findByCardType(CardType.BAKERY)).thenReturn(
+            card(CardType.BAKERY, CardColor.GREEN, 1).copy(establishmentType = EstablishmentType.BREAD)
+        )
+        whenever(cardDao.findByCardType(CardType.STADIUM)).thenReturn(
+            card(CardType.STADIUM, CardColor.PURPLE, 2).copy(establishmentType = EstablishmentType.MAJOR)
+        )
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            service.swapBusinessCenterCard(1, 1, 2, CardType.BAKERY, CardType.STADIUM)
+        }
+
+        assertEquals("INVALID_BUSINESS_CENTER_CARD", ex.errorCode)
+        verify(playerCardDao, never()).upsert(anyInt(), any(), anyInt())
+    }
+
     // After resolving effects the game should enter buy phase
 
     @Test
