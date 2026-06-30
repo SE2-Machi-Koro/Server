@@ -14,12 +14,13 @@ import org.springframework.web.socket.config.annotation.SockJsServiceRegistratio
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry
 import org.springframework.web.socket.config.annotation.StompWebSocketEndpointRegistration
 import tools.jackson.databind.json.JsonMapper
+import tools.jackson.module.kotlin.KotlinModule
 
 class WebSocketConfigTests {
 
     private val authInterceptor = mock(StompAuthChannelInterceptor::class.java)
-    // Use a real JsonMapper — mocking it is fragile and the converter constructor inspects it.
-    private val config = WebSocketConfig(authInterceptor, JsonMapper.builder().build()).apply {
+    // KotlinModule preserves is-prefixed boolean names (isBuilt, isReady) — mirrors production setup.
+    private val config = WebSocketConfig(authInterceptor, JsonMapper.builder().addModule(KotlinModule.Builder().build()).build()).apply {
         allowedOrigins = "http://localhost:8080,http://localhost:3000"
     }
 
