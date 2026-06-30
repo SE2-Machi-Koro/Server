@@ -10,7 +10,6 @@ import org.machikoro.server.domain.enums.GameStatus
 import org.machikoro.server.domain.enums.TurnPhase
 import org.machikoro.server.domain.models.GameModel
 import org.machikoro.server.domain.models.PlayerModel
-import org.machikoro.server.exception.CustomWebSocketException
 import org.machikoro.server.exception.GameNotFoundException
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -111,17 +110,20 @@ class WinConditionServiceTest {
     }
 
     @Test
-    fun `detectWinner throws if not in END_TURN phase`() {
+    fun `detectWinner is phase-agnostic and detects a winner outside END_TURN`() {
         val gameId = 1
+        val winner = player(2)
 
         whenever(gameDao.findById(gameId))
             .thenReturn(gameInPhase(TurnPhase.BUY_OR_BUILD))
+        whenever(playerDao.getPlayers(gameId))
+            .thenReturn(listOf(player(1), winner))
+        whenever(playerLandmarkDao.allBuilt(1)).thenReturn(false)
+        whenever(playerLandmarkDao.allBuilt(2)).thenReturn(true)
 
-        val ex = assertThrows<CustomWebSocketException> {
-            service.detectWinner(gameId)
-        }
+        val result = service.detectWinner(gameId)
 
-        assertEquals("NOT_END_TURN_PHASE", ex.errorCode)
+        assertEquals(winner, result)
         verify(gameDao).findById(gameId)
     }
 
