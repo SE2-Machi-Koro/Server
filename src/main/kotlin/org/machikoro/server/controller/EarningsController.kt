@@ -44,41 +44,8 @@ class EarningsController(
     fun resolveEffects(@Payload request: ResolveEffectsRequest, headerAccessor: SimpMessageHeaderAccessor) {
         val user = headerAccessor.requireUserPrincipal()
         gameStateGuard.ensureSenderIsActivePlayer(request.gameId, user)
-        val gameTopic = "/topic/game/${request.gameId}"
-        try {
-            val coinDeltas = earningsService.resolveEffects(request.gameId)
-            val state = gameSyncService.buildSnapshot(request.gameId)
-            logger.info("Resolved effects for game ${request.gameId}")
-            messagingTemplate.convertAndSend(
-                gameTopic,
-                WebSocketMessage(
-                    type = MessageType.GAME_ACTION,
-                    sender = "server",
-                    payload = mapOf(
-                        "event" to "EFFECTS_RESOLVED",
-                        "gameId" to request.gameId,
-                        "turnPhase" to state.game.turnPhase.name,
-                        "activePlayerId" to state.activePlayerId,
-                        // playerId -> signed coin delta; client uses it for the
-                        // coin / coin-drawer sound effects (issue #389).
-                        "coinDeltas" to coinDeltas,
-                        "state" to state,
-                    ),
-                    gameId = request.gameId,
-                )
-            )
-        } catch (e: CustomWebSocketException) {
-            // Known effect-resolution rejections are broadcast to the game topic so clients reset pending actions.
-            logger.warn("Resolve effects rejected for game {} [{}]: {}", request.gameId, e.errorCode, e.message)
-            messagingTemplate.convertAndSend(
-                gameTopic,
-                WebSocketMessage(
-                    type = MessageType.ERROR,
-                    sender = "server",
-                    payload = WebSocketErrorDto.from(e, mapOf("event" to "EFFECTS_FAILED")),
-                    gameId = request.gameId,
-                )
-            )
+        resolveAndBroadcast(request.gameId, "EFFECTS_RESOLVED", "EFFECTS_FAILED") {
+            earningsService.resolveEffects(request.gameId)
         }
     }
 
@@ -97,39 +64,54 @@ class EarningsController(
     fun chooseTvStationTarget(@Payload request: TvStationTargetRequest, headerAccessor: SimpMessageHeaderAccessor) {
         val user = headerAccessor.requireUserPrincipal()
         gameStateGuard.ensureSenderIsActivePlayer(request.gameId, user)
-        val gameTopic = "/topic/game/${request.gameId}"
+        resolveAndBroadcast(request.gameId, "TV_STATION_RESOLVED", "TV_STATION_FAILED") {
+            earningsService.resolveTvStationTarget(request.gameId, request.targetPlayerId)
+        }
+    }
+
+    /**
+     * Runs an earnings-resolving [action] and broadcasts the outcome to the game topic:
+     * on success a [successEvent] GAME_ACTION carrying the fresh snapshot plus the
+     * per-player coin deltas (used for the coin sound effects, issue #389); on a known
+     * domain rejection a [failureEvent] ERROR so clients can reset pending actions.
+     * Unknown failures propagate to the global WebSocket exception handler.
+     */
+    private fun resolveAndBroadcast(
+        gameId: Int,
+        successEvent: String,
+        failureEvent: String,
+        action: () -> Map<Int, Int>,
+    ) {
+        val gameTopic = "/topic/game/$gameId"
         try {
-            val coinDeltas = earningsService.resolveTvStationTarget(request.gameId, request.targetPlayerId)
-            val state = gameSyncService.buildSnapshot(request.gameId)
-            logger.info("Resolved TV Station target {} for game {}", request.targetPlayerId, request.gameId)
+            val coinDeltas = action()
+            val state = gameSyncService.buildSnapshot(gameId)
+            logger.info("Broadcasting {} for game {}", successEvent, gameId)
             messagingTemplate.convertAndSend(
                 gameTopic,
                 WebSocketMessage(
                     type = MessageType.GAME_ACTION,
                     sender = "server",
                     payload = mapOf(
-                        "event" to "TV_STATION_RESOLVED",
-                        "gameId" to request.gameId,
+                        "event" to successEvent,
+                        "gameId" to gameId,
                         "turnPhase" to state.game.turnPhase.name,
                         "activePlayerId" to state.activePlayerId,
-                        // playerId -> signed coin delta; client uses it for the
-                        // coin / coin-drawer sound effects (issue #389).
                         "coinDeltas" to coinDeltas,
                         "state" to state,
                     ),
-                    gameId = request.gameId,
+                    gameId = gameId,
                 )
             )
         } catch (e: CustomWebSocketException) {
-            // Known rejections are broadcast to the game topic so clients reset pending actions.
-            logger.warn("TV Station target rejected for game {} [{}]: {}", request.gameId, e.errorCode, e.message)
+            logger.warn("{} rejected for game {} [{}]: {}", failureEvent, gameId, e.errorCode, e.message)
             messagingTemplate.convertAndSend(
                 gameTopic,
                 WebSocketMessage(
                     type = MessageType.ERROR,
                     sender = "server",
-                    payload = WebSocketErrorDto.from(e, mapOf("event" to "TV_STATION_FAILED")),
-                    gameId = request.gameId,
+                    payload = WebSocketErrorDto.from(e, mapOf("event" to failureEvent)),
+                    gameId = gameId,
                 )
             )
         }

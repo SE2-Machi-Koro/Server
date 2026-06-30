@@ -214,14 +214,7 @@ class EarningsServiceImpl(
             )
             TurnPhase.RESOLVE_EFFECTS -> Unit
         }
-        val diceRoll = game.lastDiceRoll ?: throw CustomWebSocketException(
-            "DICE_ROLL_REQUIRED",
-            "Effects require a stored dice roll",
-        )
-
-        val players = playerDao.getPlayers(gameId)
-        val activePlayer = players.getOrNull(game.currentTurnIndex)
-            ?: throw CustomWebSocketException("NO_ACTIVE_PLAYER", "Game $gameId has no active player")
+        val (diceRoll, players, activePlayer) = requireActiveTurn(gameId, game.lastDiceRoll, game.currentTurnIndex)
 
         // A TV Station steal needs the active player to pick a victim, so when one
         // is pending we park the turn in AWAIT_TV_TARGET instead of advancing to
@@ -260,14 +253,7 @@ class EarningsServiceImpl(
                     "There is no TV Station target to choose for this turn",
                 )
             }
-            val diceRoll = game.lastDiceRoll ?: throw CustomWebSocketException(
-                "DICE_ROLL_REQUIRED",
-                "Effects require a stored dice roll",
-            )
-
-            val players = playerDao.getPlayers(gameId)
-            val activePlayer = players.getOrNull(game.currentTurnIndex)
-                ?: throw CustomWebSocketException("NO_ACTIVE_PLAYER", "Game $gameId has no active player")
+            val (diceRoll, players, activePlayer) = requireActiveTurn(gameId, game.lastDiceRoll, game.currentTurnIndex)
 
             val target = players.firstOrNull { it.id == targetPlayerId && it.id != activePlayer.id }
                 ?: throw CustomWebSocketException(
@@ -296,6 +282,24 @@ class EarningsServiceImpl(
             // Signed per-player coin deltas drive the client coin sounds (#389).
             mapOf(activePlayer.id to transfer, target.id to -transfer)
         }
+
+    private data class ActiveTurn(val diceRoll: Int, val players: List<PlayerModel>, val activePlayer: PlayerModel)
+
+    /**
+     * Loads the stored dice roll, the game's players, and the active player, rejecting
+     * a turn with no recorded roll or no resolvable active player. Shared by the two
+     * effect-resolution entry points.
+     */
+    private fun requireActiveTurn(gameId: Int, lastDiceRoll: Int?, currentTurnIndex: Int): ActiveTurn {
+        val diceRoll = lastDiceRoll ?: throw CustomWebSocketException(
+            "DICE_ROLL_REQUIRED",
+            "Effects require a stored dice roll",
+        )
+        val players = playerDao.getPlayers(gameId)
+        val activePlayer = players.getOrNull(currentTurnIndex)
+            ?: throw CustomWebSocketException("NO_ACTIVE_PLAYER", "Game $gameId has no active player")
+        return ActiveTurn(diceRoll, players, activePlayer)
+    }
 
     /**
      * Coins a TV Station steal would move: `income × quantity` summed over the
