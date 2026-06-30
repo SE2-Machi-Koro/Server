@@ -264,10 +264,7 @@ class EarningsServiceImpl(
                 "DICE_ROLL_REQUIRED",
                 "Effects cannot be resolved before dice are rolled",
             )
-            TurnPhase.AWAIT_TV_TARGET, TurnPhase.BUY_OR_BUILD, TurnPhase.END_TURN -> throw CustomWebSocketException(
-                "EFFECTS_ALREADY_RESOLVED",
-                "Effects have already been resolved for this turn",
-            )
+            TurnPhase.AWAIT_TV_TARGET, TurnPhase.BUY_OR_BUILD, TurnPhase.END_TURN -> throw effectsAlreadyResolved()
             TurnPhase.RESOLVE_EFFECTS -> Unit
         }
         val (diceRoll, players, activePlayer) = requireActiveTurn(gameId, game.lastDiceRoll, game.currentTurnIndex)
@@ -283,10 +280,7 @@ class EarningsServiceImpl(
         }
 
         if (!gameDao.tryTransitionPhase(gameId, TurnPhase.RESOLVE_EFFECTS, nextPhase)) {
-            throw CustomWebSocketException(
-                "EFFECTS_ALREADY_RESOLVED",
-                "Effects have already been resolved for this turn",
-            )
+            throw effectsAlreadyResolved()
         }
 
         processEarnings(gameId, diceRoll, activePlayer.id)
@@ -322,10 +316,7 @@ class EarningsServiceImpl(
             // Transition first so the optimistic phase lock rejects a concurrent
             // duplicate choice before any coins move.
             if (!gameDao.tryTransitionPhase(gameId, TurnPhase.AWAIT_TV_TARGET, TurnPhase.BUY_OR_BUILD)) {
-                throw CustomWebSocketException(
-                    "EFFECTS_ALREADY_RESOLVED",
-                    "Effects have already been resolved for this turn",
-                )
+                throw effectsAlreadyResolved()
             }
 
             if (transfer <= 0) {
@@ -340,6 +331,17 @@ class EarningsServiceImpl(
         }
 
     private data class ActiveTurn(val diceRoll: Int, val players: List<PlayerModel>, val activePlayer: PlayerModel)
+
+    /**
+     * Rejection used wherever a turn's effects are already resolved: the eager phase
+     * guard in [resolveEffects] and the optimistic phase-transition CAS in both
+     * [resolveEffects] and [resolveTvStationTarget] (a lost race against a concurrent
+     * duplicate). Centralised so the code and message live in one place.
+     */
+    private fun effectsAlreadyResolved() = CustomWebSocketException(
+        "EFFECTS_ALREADY_RESOLVED",
+        "Effects have already been resolved for this turn",
+    )
 
     /**
      * Loads the stored dice roll, the game's players, and the active player, rejecting
