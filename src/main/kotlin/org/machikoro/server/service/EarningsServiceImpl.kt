@@ -6,6 +6,7 @@ import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
 import org.machikoro.server.domain.enums.CardColor
+import org.machikoro.server.domain.enums.CardType
 import org.machikoro.server.domain.enums.EstablishmentType
 import org.machikoro.server.domain.enums.LandmarkType
 import org.machikoro.server.domain.enums.PaymentSource
@@ -46,18 +47,33 @@ class EarningsServiceImpl(
         val players = playerDao.getPlayers(gameId)
         val finalCoins = players.associate { it.id to it.coins }.toMutableMap()
 
-        val matchedCardsByPlayer = players.associate { player ->
+        val inventoryByPlayer = players.associate { player ->
             player.id to playerCardDao.findByPlayerId(player.id)
-                .mapNotNull { playerCard -> activatingCards[playerCard.cardType]?.let { playerCard to it } }
+        }
+
+        val matchedCardsByPlayer = inventoryByPlayer.mapValues { (_, cards) ->
+            cards.mapNotNull { playerCard -> activatingCards[playerCard.cardType]?.let { playerCard to it } }
         }
 
         val hasShoppingMallByPlayerId = players.associate { player ->
             player.id to (playerLandmarkDao.findByPlayerIdAndType(player.id, LandmarkType.SHOPPING_MALL)?.isBuilt == true)
         }
 
+        // Cheese/Furniture Factory and Fruit & Vegetable Market pay per matching
+        // establishment the active player owns (issue #432), so we need a count of
+        // every establishment type in the active player's full inventory.
+        val activeEstablishmentCounts = establishmentCounts(inventoryByPlayer[activePlayerId].orEmpty())
+
         processRedCards(players, activePlayerId, matchedCardsByPlayer, finalCoins, hasShoppingMallByPlayerId)
         processBlueCards(players, matchedCardsByPlayer, finalCoins)
-        processGreenCards(players, activePlayerId, matchedCardsByPlayer, finalCoins, hasShoppingMallByPlayerId)
+        processGreenCards(
+            players,
+            activePlayerId,
+            matchedCardsByPlayer,
+            finalCoins,
+            hasShoppingMallByPlayerId,
+            activeEstablishmentCounts,
+        )
         processPurpleCards(players, activePlayerId, matchedCardsByPlayer, finalCoins)
 
         players.forEach { player ->
@@ -127,13 +143,18 @@ class EarningsServiceImpl(
 
     /**
      * GREEN cards (OWN_TURN): only the active player receives income from the bank.
+     *
+     * Most green cards pay a flat `quantity × income`. Cheese Factory, Furniture
+     * Factory and Fruit & Vegetable Market instead pay `income` for each matching
+     * establishment the active player owns (see [factoryMultiplier]).
      */
     private fun processGreenCards(
         players: List<PlayerModel>,
         activePlayerId: Int,
         matchedCardsByPlayer: Map<Int, List<Pair<PlayerCardModel, CardModel>>>,
         finalCoins: MutableMap<Int, Int>,
-        hasShoppingMallByPlayerId: Map<Int, Boolean>
+        hasShoppingMallByPlayerId: Map<Int, Boolean>,
+        activeEstablishmentCounts: Map<EstablishmentType, Int>,
     ) {
         val activePlayer = players.find { it.id == activePlayerId } ?: return
         val earned = matchedCardsByPlayer[activePlayer.id].orEmpty()
@@ -141,12 +162,46 @@ class EarningsServiceImpl(
             .sumOf { (playerCard, card) ->
                 val extra = if (card.establishmentType == EstablishmentType.BREAD && hasShoppingMallByPlayerId[activePlayer.id] == true)
                     1 else 0
-                playerCard.quantity * (card.income + extra)
+                val multiplier = factoryMultiplier(card, activeEstablishmentCounts)
+                playerCard.quantity * (card.income + extra) * multiplier
             }
 
         if (earned > 0) {
             finalCoins[activePlayerId] = finalCoins.getValue(activePlayerId) + earned
         }
+    }
+
+    /**
+     * Per Machi Koro rules, factory/market green cards multiply their income by
+     * the number of a specific other establishment the active player owns:
+     * - Cheese Factory → owned COW cards (Ranch)
+     * - Furniture Factory → owned GEAR cards (Forest, Mine)
+     * - Fruit & Vegetable Market → owned WHEAT cards (Wheat Field, Apple Orchard)
+     *
+     * Every other green card pays its flat income, i.e. a multiplier of 1.
+     */
+    private fun factoryMultiplier(
+        card: CardModel,
+        establishmentCounts: Map<EstablishmentType, Int>,
+    ): Int = when (card.cardType) {
+        CardType.CHEESE_FACTORY -> establishmentCounts[EstablishmentType.COW] ?: 0
+        CardType.FURNITURE_FACTORY -> establishmentCounts[EstablishmentType.GEAR] ?: 0
+        CardType.FRUIT_AND_VEGETABLE_MARKET -> establishmentCounts[EstablishmentType.WHEAT] ?: 0
+        else -> 1
+    }
+
+    /**
+     * Counts how many establishments of each [EstablishmentType] a player owns,
+     * resolving each owned card's symbol from the card definitions. Used to drive
+     * the factory/market income multipliers (issue #432).
+     */
+    private fun establishmentCounts(inventory: List<PlayerCardModel>): Map<EstablishmentType, Int> {
+        if (inventory.isEmpty()) return emptyMap()
+        val establishmentTypeByCard = cardDao.findAll().associate { it.cardType to it.establishmentType }
+        return inventory
+            .groupBy { establishmentTypeByCard[it.cardType] }
+            .mapNotNull { (type, cards) -> type?.let { it to cards.sumOf { card -> card.quantity } } }
+            .toMap()
     }
 
     /**
