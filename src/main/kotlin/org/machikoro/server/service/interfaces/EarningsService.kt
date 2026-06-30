@@ -1,5 +1,7 @@
 package org.machikoro.server.service.interfaces
 
+import org.machikoro.server.domain.enums.CardType
+
 interface EarningsService {
     /**
      * Applies the dice-roll earnings and returns the per-player coin change as
@@ -14,4 +16,15 @@ interface EarningsService {
      * players only) so the broadcast can carry sound-relevant metadata (#389).
      */
     fun resolveEffects(gameId: Int): Map<Int, Int>
+
+    /**
+     * Applies the Business Center card-swap action for the active player.
+     */
+    fun swapBusinessCenterCard(
+        gameId: Int,
+        activePlayerId: Int,
+        targetPlayerId: Int,
+        offeredCardType: CardType,
+        requestedCardType: CardType,
+    )
 }

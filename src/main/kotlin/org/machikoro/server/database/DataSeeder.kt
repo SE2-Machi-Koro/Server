@@ -129,7 +129,7 @@ class DataSeeder : CommandLineRunner {
                 0,
                 CardColor.PURPLE,
                 EstablishmentType.MAJOR,
-                PaymentSource.CHOSEN_PLAYER,
+                PaymentSource.NONE,
                 listOf(6)
             ),
         )
