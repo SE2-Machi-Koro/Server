@@ -282,7 +282,11 @@ class EarningsServiceImplTest {
     }
 
     @Test
-    fun `purple chosen player payment source does not award bank coins`() {
+    fun `purple chosen player payment source still credits bank pending tv station steal`() {
+        // TV Station (CHOSEN_PLAYER) is intentionally left on the pre-existing
+        // bank-credit path here; the proper steal is handled by #433. Business
+        // Center must not regress this card, so it keeps awarding the active
+        // player from the bank.
         val players = listOf(
             player(1, 3),
             player(2, 3)
@@ -302,8 +306,9 @@ class EarningsServiceImplTest {
 
         val deltas = service.processEarnings(1, 6, 1)
 
-        assertEquals(emptyMap<Int, Int>(), deltas)
-        verify(playerDao, never()).updateCoins(anyInt(), anyInt())
+        assertEquals(mapOf(1 to 5), deltas)
+        verify(playerDao).updateCoins(1, 8)
+        verify(playerDao, never()).updateCoins(eq(2), anyInt())
     }
 
     @Test

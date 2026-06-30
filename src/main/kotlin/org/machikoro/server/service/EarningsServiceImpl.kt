@@ -155,6 +155,12 @@ class EarningsServiceImpl(
      * - BANK-sourced: active player receives income from the bank.
      * - ALL_PLAYERS-sourced (e.g. Stadium): active player steals from each opponent,
      *   capped at each opponent's actual balance to avoid creating coins.
+     * - CHOSEN_PLAYER-sourced (TV Station): currently credited from the bank here,
+     *   matching pre-existing behaviour. The proper "steal from a chosen player"
+     *   resolution is handled separately by #433; this card is intentionally left
+     *   untouched by the Business Center change so the two PRs don't conflict.
+     * - NONE-sourced (Business Center): no coin movement; its effect is the card
+     *   swap handled by [swapBusinessCenterCard], so it is excluded from bank income.
      */
     private fun processPurpleCards(
         players: List<PlayerModel>,
@@ -167,7 +173,9 @@ class EarningsServiceImpl(
             .filter { (_, card) -> card.color == CardColor.PURPLE }
 
         val bankEarned = purpleCards
-            .filter { (_, card) -> card.paymentSource == PaymentSource.BANK }
+            .filter { (_, card) ->
+                card.paymentSource == PaymentSource.BANK || card.paymentSource == PaymentSource.CHOSEN_PLAYER
+            }
             .sumOf { (playerCard, card) -> playerCard.quantity * card.income }
 
         if (bankEarned > 0) {
