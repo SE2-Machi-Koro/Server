@@ -5,6 +5,7 @@ import io.github.springwolf.core.asyncapi.annotations.AsyncOperation
 import org.machikoro.server.auth.requireUserPrincipal
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.ResolveEffectsRequest
+import org.machikoro.server.dto.TvStationTargetRequest
 import org.machikoro.server.dto.WebSocketErrorDto
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.CustomWebSocketException
@@ -75,6 +76,59 @@ class EarningsController(
                     type = MessageType.ERROR,
                     sender = "server",
                     payload = WebSocketErrorDto.from(e, mapOf("event" to "EFFECTS_FAILED")),
+                    gameId = request.gameId,
+                )
+            )
+        }
+    }
+
+    /**
+     * Completes a TV Station steal: the active player picks an opponent to take
+     * 5 coins from while the game is in AWAIT_TV_TARGET, then the turn advances to
+     * BUY_OR_BUILD. See issue #433.
+     */
+    @MessageMapping("/game.chooseTvStationTarget")
+    @AsyncListener(
+        operation = AsyncOperation(
+            channelName = "/game.chooseTvStationTarget",
+            description = "Resolves a pending TV Station steal against the chosen opponent."
+        )
+    )
+    fun chooseTvStationTarget(@Payload request: TvStationTargetRequest, headerAccessor: SimpMessageHeaderAccessor) {
+        val user = headerAccessor.requireUserPrincipal()
+        gameStateGuard.ensureSenderIsActivePlayer(request.gameId, user)
+        val gameTopic = "/topic/game/${request.gameId}"
+        try {
+            val coinDeltas = earningsService.resolveTvStationTarget(request.gameId, request.targetPlayerId)
+            val state = gameSyncService.buildSnapshot(request.gameId)
+            logger.info("Resolved TV Station target {} for game {}", request.targetPlayerId, request.gameId)
+            messagingTemplate.convertAndSend(
+                gameTopic,
+                WebSocketMessage(
+                    type = MessageType.GAME_ACTION,
+                    sender = "server",
+                    payload = mapOf(
+                        "event" to "TV_STATION_RESOLVED",
+                        "gameId" to request.gameId,
+                        "turnPhase" to state.game.turnPhase.name,
+                        "activePlayerId" to state.activePlayerId,
+                        // playerId -> signed coin delta; client uses it for the
+                        // coin / coin-drawer sound effects (issue #389).
+                        "coinDeltas" to coinDeltas,
+                        "state" to state,
+                    ),
+                    gameId = request.gameId,
+                )
+            )
+        } catch (e: CustomWebSocketException) {
+            // Known rejections are broadcast to the game topic so clients reset pending actions.
+            logger.warn("TV Station target rejected for game {} [{}]: {}", request.gameId, e.errorCode, e.message)
+            messagingTemplate.convertAndSend(
+                gameTopic,
+                WebSocketMessage(
+                    type = MessageType.ERROR,
+                    sender = "server",
+                    payload = WebSocketErrorDto.from(e, mapOf("event" to "TV_STATION_FAILED")),
                     gameId = request.gameId,
                 )
             )

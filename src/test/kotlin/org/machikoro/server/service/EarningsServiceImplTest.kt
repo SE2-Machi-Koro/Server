@@ -366,6 +366,9 @@ class EarningsServiceImplTest {
             lastDiceRoll = 4, roundNumber = 1, hasPurchasedThisTurn = false, rerolledThisTurn = false
         )
         whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(game)
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3)))
+        whenever(cardDao.findByActivationNumber(anyInt())).thenReturn(emptyList())
+        whenever(playerCardDao.findByPlayerId(anyInt())).thenReturn(emptyList())
         whenever(gameDao.tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD))
             .thenReturn(false)
 
@@ -374,7 +377,8 @@ class EarningsServiceImplTest {
         }
 
         assertEquals("EFFECTS_ALREADY_RESOLVED", ex.errorCode)
-        verify(playerDao, never()).getPlayers(anyInt())
+        // A lost phase race must not move any coins.
+        verify(playerDao, never()).updateCoins(anyInt(), anyInt())
     }
 
     @Test
@@ -659,6 +663,184 @@ class EarningsServiceImplTest {
         // P2 should receive 2 from their red CUP (no bonus); P1 loses 2
         verify(playerDao).updateCoins(1, 3) // 5 - 2 = 3
         verify(playerDao).updateCoins(2, 5) // 3 + 2 = 5
+    }
+
+    // TV Station (CHOSEN_PLAYER) — issue #433
+
+    private fun runningGame(phase: TurnPhase, diceRoll: Int?): GameModel = GameModel(
+        id = 1, status = GameStatus.IN_PROGRESS, hostUserId = 1, lobbyCode = "TEST",
+        maxPlayers = 4, currentTurnIndex = 0, turnPhase = phase,
+        lastDiceRoll = diceRoll, roundNumber = 1, hasPurchasedThisTurn = false, rerolledThisTurn = false
+    )
+
+    private fun tvStationCard() = card(
+        cardType = CardType.TV_STATION,
+        color = CardColor.PURPLE,
+        income = 5,
+        paymentSource = PaymentSource.CHOSEN_PLAYER
+    )
+
+    @Test
+    fun `TV station does not pay the active player from the bank`() {
+        whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(tvStationCard()))
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 4)))
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.TV_STATION, 1)))
+        whenever(playerCardDao.findByPlayerId(2)).thenReturn(emptyList())
+
+        val deltas = service.processEarnings(1, 6, 1)
+
+        // The steal is deferred to the target-choice round-trip, so processEarnings
+        // moves no coins — previously the active player got 5 free coins from the bank.
+        verify(playerDao, never()).updateCoins(anyInt(), anyInt())
+        assertEquals(emptyMap<Int, Int>(), deltas)
+    }
+
+    @Test
+    fun `resolveEffects parks turn in AWAIT_TV_TARGET when TV station activates`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.RESOLVE_EFFECTS, 6))
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 4)))
+        whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(tvStationCard()))
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.TV_STATION, 1)))
+        whenever(playerCardDao.findByPlayerId(2)).thenReturn(emptyList())
+        whenever(gameDao.tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.AWAIT_TV_TARGET))
+            .thenReturn(true)
+
+        service.resolveEffects(1)
+
+        verify(gameDao).tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.AWAIT_TV_TARGET)
+        verify(gameDao, never()).tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD)
+    }
+
+    @Test
+    fun `resolveEffects skips the round-trip and advances when no opponent has coins`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.RESOLVE_EFFECTS, 6))
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 0)))
+        whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(tvStationCard()))
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.TV_STATION, 1)))
+        whenever(playerCardDao.findByPlayerId(2)).thenReturn(emptyList())
+        whenever(gameDao.tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD))
+            .thenReturn(true)
+
+        service.resolveEffects(1)
+
+        verify(gameDao).tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD)
+        verify(gameDao, never()).tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.AWAIT_TV_TARGET)
+    }
+
+    @Test
+    fun `resolveEffects rejects resolution while awaiting TV target`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.AWAIT_TV_TARGET, 6))
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            service.resolveEffects(1)
+        }
+
+        assertEquals("EFFECTS_ALREADY_RESOLVED", ex.errorCode)
+        verify(playerDao, never()).getPlayers(anyInt())
+    }
+
+    @Test
+    fun `resolveTvStationTarget steals from the chosen opponent and advances phase`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.AWAIT_TV_TARGET, 6))
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 10)))
+        whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(tvStationCard()))
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.TV_STATION, 1)))
+        whenever(gameDao.tryTransitionPhase(1, TurnPhase.AWAIT_TV_TARGET, TurnPhase.BUY_OR_BUILD))
+            .thenReturn(true)
+
+        val deltas = service.resolveTvStationTarget(1, 2)
+
+        verify(playerDao).updateCoins(1, 8)
+        verify(playerDao).updateCoins(2, 5)
+        assertEquals(mapOf(1 to 5, 2 to -5), deltas)
+    }
+
+    @Test
+    fun `resolveTvStationTarget caps the steal at the target balance`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.AWAIT_TV_TARGET, 6))
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 2)))
+        whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(tvStationCard()))
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.TV_STATION, 1)))
+        whenever(gameDao.tryTransitionPhase(1, TurnPhase.AWAIT_TV_TARGET, TurnPhase.BUY_OR_BUILD))
+            .thenReturn(true)
+
+        val deltas = service.resolveTvStationTarget(1, 2)
+
+        verify(playerDao).updateCoins(1, 5)
+        verify(playerDao).updateCoins(2, 0)
+        assertEquals(mapOf(1 to 2, 2 to -2), deltas)
+    }
+
+    @Test
+    fun `resolveTvStationTarget moves no coins when the chosen opponent is broke`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.AWAIT_TV_TARGET, 6))
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 0), player(3, 4)))
+        whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(tvStationCard()))
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.TV_STATION, 1)))
+        whenever(gameDao.tryTransitionPhase(1, TurnPhase.AWAIT_TV_TARGET, TurnPhase.BUY_OR_BUILD))
+            .thenReturn(true)
+
+        val deltas = service.resolveTvStationTarget(1, 2)
+
+        verify(gameDao).tryTransitionPhase(1, TurnPhase.AWAIT_TV_TARGET, TurnPhase.BUY_OR_BUILD)
+        verify(playerDao, never()).updateCoins(anyInt(), anyInt())
+        assertEquals(emptyMap<Int, Int>(), deltas)
+    }
+
+    @Test
+    fun `resolveTvStationTarget rejects a target that is not an opponent`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.AWAIT_TV_TARGET, 6))
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 4)))
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            service.resolveTvStationTarget(1, 99)
+        }
+
+        assertEquals("INVALID_TV_STATION_TARGET", ex.errorCode)
+        verify(gameDao, never()).tryTransitionPhase(anyInt(), any(), any())
+        verify(playerDao, never()).updateCoins(anyInt(), anyInt())
+    }
+
+    @Test
+    fun `resolveTvStationTarget rejects choosing the active player as the target`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.AWAIT_TV_TARGET, 6))
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 4)))
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            service.resolveTvStationTarget(1, 1)
+        }
+
+        assertEquals("INVALID_TV_STATION_TARGET", ex.errorCode)
+        verify(playerDao, never()).updateCoins(anyInt(), anyInt())
+    }
+
+    @Test
+    fun `resolveTvStationTarget rejects when the game is not awaiting a TV target`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.BUY_OR_BUILD, 6))
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            service.resolveTvStationTarget(1, 2)
+        }
+
+        assertEquals("NO_PENDING_TV_STATION", ex.errorCode)
+        verify(playerDao, never()).getPlayers(anyInt())
+    }
+
+    @Test
+    fun `resolveTvStationTarget rejects a stale phase transition without moving coins`() {
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.AWAIT_TV_TARGET, 6))
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 4)))
+        whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(tvStationCard()))
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.TV_STATION, 1)))
+        whenever(gameDao.tryTransitionPhase(1, TurnPhase.AWAIT_TV_TARGET, TurnPhase.BUY_OR_BUILD))
+            .thenReturn(false)
+
+        val ex = assertThrows(CustomWebSocketException::class.java) {
+            service.resolveTvStationTarget(1, 2)
+        }
+
+        assertEquals("EFFECTS_ALREADY_RESOLVED", ex.errorCode)
+        verify(playerDao, never()).updateCoins(anyInt(), anyInt())
     }
 
     private fun player(id: Int, coins: Int): PlayerModel =

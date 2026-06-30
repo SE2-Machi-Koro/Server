@@ -10,6 +10,7 @@ import org.machikoro.server.domain.models.PlayerModel
 import org.machikoro.server.dto.GameStateDto
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.ResolveEffectsRequest
+import org.machikoro.server.dto.TvStationTargetRequest
 import org.machikoro.server.dto.WebSocketErrorDto
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.CustomWebSocketException
@@ -169,6 +170,64 @@ class EarningsControllerTest {
         }
         assertEquals("GAME_NOT_STARTED", ex.errorCode)
         verify(earningsService, never()).resolveEffects(any())
+        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
+    }
+
+    @Test
+    fun `chooseTvStationTarget calls service and broadcasts success`() {
+        val request = TvStationTargetRequest(gameId = 1, targetPlayerId = 2)
+        val snapshot = gameStateDto(1)
+        val coinDeltas = mapOf(1 to 5, 2 to -5)
+        whenever(gameSyncService.buildSnapshot(1)).thenReturn(snapshot)
+        whenever(earningsService.resolveTvStationTarget(1, 2)).thenReturn(coinDeltas)
+
+        controller.chooseTvStationTarget(request, authedAccessor())
+
+        verify(gameStateGuard).ensureSenderIsActivePlayer(1, alice)
+        verify(earningsService).resolveTvStationTarget(1, 2)
+
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/1"), captor.capture())
+
+        val message = captor.firstValue
+        assertEquals(MessageType.GAME_ACTION, message.type)
+        val payload = message.payload as Map<*, *>
+        assertEquals("TV_STATION_RESOLVED", payload["event"])
+        assertEquals(1, payload["gameId"])
+        assertEquals("BUY_OR_BUILD", payload["turnPhase"])
+        assertEquals(1, payload["activePlayerId"])
+        assertEquals(coinDeltas, payload["coinDeltas"])
+        assertEquals(snapshot, payload["state"])
+    }
+
+    @Test
+    fun `chooseTvStationTarget broadcasts domain rejection for invalid target`() {
+        val request = TvStationTargetRequest(gameId = 1, targetPlayerId = 2)
+        doThrow(CustomWebSocketException("INVALID_TV_STATION_TARGET", "Player 2 is not a valid TV Station target"))
+            .whenever(earningsService).resolveTvStationTarget(1, 2)
+
+        controller.chooseTvStationTarget(request, authedAccessor())
+
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/1"), captor.capture())
+        val message = captor.firstValue
+        assertEquals(MessageType.ERROR, message.type)
+        val payload = message.payload as WebSocketErrorDto
+        assertEquals("INVALID_TV_STATION_TARGET", payload.code)
+        assertEquals("TV_STATION_FAILED", payload.context["event"])
+    }
+
+    @Test
+    fun `chooseTvStationTarget propagates NOT_YOUR_TURN and does not call service or broadcast`() {
+        val request = TvStationTargetRequest(gameId = 1, targetPlayerId = 2)
+        whenever(gameStateGuard.ensureSenderIsActivePlayer(1, alice))
+            .thenThrow(CustomWebSocketException("NOT_YOUR_TURN", "It is not your turn"))
+
+        val ex = assertThrows<CustomWebSocketException> {
+            controller.chooseTvStationTarget(request, authedAccessor())
+        }
+        assertEquals("NOT_YOUR_TURN", ex.errorCode)
+        verify(earningsService, never()).resolveTvStationTarget(any(), any())
         verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }
 
