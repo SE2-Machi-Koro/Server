@@ -674,19 +674,25 @@ class GameControllerTest {
     }
 
     @Test
-    fun `rollDice propagates unexpected service failure to global websocket handler`() {
+    fun `rollDice broadcasts INTERNAL_ERROR to game topic on unexpected service failure`() {
         val gameId = 1
         val activePlayer = PlayerModel(id = 9, gameId = gameId, userId = alice.userId, turnOrder = 0, coins = 3, lastSeenAt = null)
         val request = RollDiceRequest(gameId = gameId, playerId = null)
         whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice)).thenReturn(activePlayer)
         whenever(diceService.rollDice(request, activePlayer.id)).thenThrow(RuntimeException("dice exploded"))
 
-        val ex = assertThrows<RuntimeException> {
-            controller.rollDice(request, authedAccessor())
-        }
-        assertEquals("dice exploded", ex.message)
+        // Exception is swallowed; all clients receive an error broadcast instead
+        controller.rollDice(request, authedAccessor())
+
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+        val message = captor.firstValue
+        assertEquals(MessageType.ERROR, message.type)
+        assertEquals("SERVER", message.sender)
+        val payload = message.payload as WebSocketErrorDto
+        assertEquals("INTERNAL_ERROR", payload.code)
+        assertEquals("ROLL_FAILED", payload.context["event"])
         verify(diceService).rollDice(request, activePlayer.id)
-        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }
 
     @Test
@@ -796,20 +802,25 @@ class GameControllerTest {
     }
 
     @Test
-    fun `rerollDice propagates unexpected service failure to global websocket handler`() {
+    fun `rerollDice broadcasts INTERNAL_ERROR to game topic on unexpected service failure`() {
         val gameId = 1
         val activePlayer = PlayerModel(id = 9, gameId = gameId, userId = alice.userId, turnOrder = 0, coins = 3, lastSeenAt = null)
         val request = RollDiceRequest(gameId = gameId, playerId = null)
         whenever(gameStateGuard.ensureSenderIsActivePlayer(gameId, alice)).thenReturn(activePlayer)
         whenever(diceService.rerollDice(request, activePlayer.id)).thenThrow(RuntimeException("dice exploded"))
 
-        val ex = assertThrows<RuntimeException> {
-            controller.rerollDice(request, authedAccessor())
-        }
+        // Exception is swallowed; all clients receive an error broadcast instead
+        controller.rerollDice(request, authedAccessor())
 
-        assertEquals("dice exploded", ex.message)
+        val captor = argumentCaptor<WebSocketMessage>()
+        verify(messagingTemplate).convertAndSend(eq("/topic/game/$gameId"), captor.capture())
+        val message = captor.firstValue
+        assertEquals(MessageType.ERROR, message.type)
+        assertEquals("SERVER", message.sender)
+        val payload = message.payload as WebSocketErrorDto
+        assertEquals("INTERNAL_ERROR", payload.code)
+        assertEquals("REROLL_FAILED", payload.context["event"])
         verify(diceService).rerollDice(request, activePlayer.id)
-        verify(messagingTemplate, never()).convertAndSend(any<String>(), any<WebSocketMessage>())
     }
 
     @Test
