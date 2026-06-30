@@ -41,10 +41,19 @@ class EarningsServiceImpl(
 
     @Transactional
     override fun processEarnings(gameId: Int, diceRoll: Int, activePlayerId: Int): Map<Int, Int> {
+        val players = playerDao.getPlayers(gameId)
+        val finalCoins = calculateFinalCoins(players, diceRoll, activePlayerId)
+        return applyCoinChanges(players, finalCoins)
+    }
+
+    private fun calculateFinalCoins(
+        players: List<PlayerModel>,
+        diceRoll: Int,
+        activePlayerId: Int,
+    ): Map<Int, Int> {
         val activatingCards = cardDao.findByActivationNumber(diceRoll)
             .associateBy { it.cardType }
 
-        val players = playerDao.getPlayers(gameId)
         val finalCoins = players.associate { it.id to it.coins }.toMutableMap()
 
         val inventoryByPlayer = players.associate { player ->
@@ -76,6 +85,13 @@ class EarningsServiceImpl(
         )
         processPurpleCards(players, activePlayerId, matchedCardsByPlayer, finalCoins)
 
+        return finalCoins
+    }
+
+    private fun applyCoinChanges(
+        players: List<PlayerModel>,
+        finalCoins: Map<Int, Int>,
+    ): Map<Int, Int> {
         players.forEach { player ->
             if (finalCoins[player.id] != player.coins) {
                 playerDao.updateCoins(player.id, finalCoins.getValue(player.id))
@@ -269,11 +285,14 @@ class EarningsServiceImpl(
         }
         val (diceRoll, players, activePlayer) = requireActiveTurn(gameId, game.lastDiceRoll, game.currentTurnIndex)
 
+        val finalCoins = calculateFinalCoins(players, diceRoll, activePlayer.id)
+
         // A TV Station steal needs the active player to pick a victim, so when one
-        // is pending we park the turn in AWAIT_TV_TARGET instead of advancing to
-        // BUY_OR_BUILD. The destination is chosen *before* transitioning so the
-        // optimistic phase lock still guards against concurrent double-resolution.
-        val nextPhase = if (isTvStationStealPending(players, diceRoll, activePlayer.id)) {
+        // is pending after the automatic earnings pass we park the turn in
+        // AWAIT_TV_TARGET instead of advancing to BUY_OR_BUILD. The destination is
+        // chosen *before* transitioning so the optimistic phase lock still guards
+        // against concurrent double-resolution.
+        val nextPhase = if (isTvStationStealPending(players, finalCoins, diceRoll, activePlayer.id)) {
             TurnPhase.AWAIT_TV_TARGET
         } else {
             TurnPhase.BUY_OR_BUILD
@@ -283,7 +302,7 @@ class EarningsServiceImpl(
             throw effectsAlreadyResolved()
         }
 
-        processEarnings(gameId, diceRoll, activePlayer.id)
+        applyCoinChanges(players, finalCoins)
     }
 
     /**
@@ -377,9 +396,14 @@ class EarningsServiceImpl(
      * at least one opponent has a non-zero balance. When no opponent has coins the
      * steal would be a no-op, so the interaction round-trip is skipped entirely.
      */
-    private fun isTvStationStealPending(players: List<PlayerModel>, diceRoll: Int, activePlayerId: Int): Boolean {
+    private fun isTvStationStealPending(
+        players: List<PlayerModel>,
+        finalCoins: Map<Int, Int>,
+        diceRoll: Int,
+        activePlayerId: Int,
+    ): Boolean {
         if (tvStationStealAmount(diceRoll, activePlayerId) <= 0) return false
-        return players.any { it.id != activePlayerId && it.coins > 0 }
+        return players.any { it.id != activePlayerId && finalCoins.getValue(it.id) > 0 }
     }
 
     override fun swapBusinessCenterCard(

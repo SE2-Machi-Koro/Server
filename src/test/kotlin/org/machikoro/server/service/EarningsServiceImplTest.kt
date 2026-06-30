@@ -1055,6 +1055,35 @@ class EarningsServiceImplTest {
     }
 
     @Test
+    fun `resolveEffects skips TV target when stadium drains every opponent`() {
+        val stadium = card(
+            cardType = CardType.STADIUM,
+            color = CardColor.PURPLE,
+            income = 2,
+            paymentSource = PaymentSource.ALL_PLAYERS
+        )
+        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.RESOLVE_EFFECTS, 6))
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 2), player(3, 1)))
+        whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(stadium, tvStationCard()))
+        whenever(playerCardDao.findByPlayerId(1)).thenReturn(
+            listOf(playerCard(CardType.STADIUM, 1), playerCard(CardType.TV_STATION, 1))
+        )
+        whenever(playerCardDao.findByPlayerId(2)).thenReturn(emptyList())
+        whenever(playerCardDao.findByPlayerId(3)).thenReturn(emptyList())
+        whenever(gameDao.tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD))
+            .thenReturn(true)
+
+        val deltas = service.resolveEffects(1)
+
+        verify(gameDao).tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD)
+        verify(gameDao, never()).tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.AWAIT_TV_TARGET)
+        verify(playerDao).updateCoins(1, 6)
+        verify(playerDao).updateCoins(2, 0)
+        verify(playerDao).updateCoins(3, 0)
+        assertEquals(mapOf(1 to 3, 2 to -2, 3 to -1), deltas)
+    }
+
+    @Test
     fun `resolveEffects rejects resolution while awaiting TV target`() {
         whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.AWAIT_TV_TARGET, 6))
 
