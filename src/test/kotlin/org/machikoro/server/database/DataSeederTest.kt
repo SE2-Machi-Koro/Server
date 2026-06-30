@@ -113,6 +113,14 @@ class DataSeederTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `business center has no payment source for swap action`() {
+        val card = cardDao.findByCardType(CardType.BUSINESS_CENTER)
+        assertNotNull(card)
+        assertEquals(0, card!!.income)
+        assertEquals(PaymentSource.NONE, card.paymentSource)
+    }
+
+    @Test
     fun `red cards take payment from active player`() {
         val redCards = cardDao.findByColor(CardColor.RED)
         assertTrue(redCards.isNotEmpty())

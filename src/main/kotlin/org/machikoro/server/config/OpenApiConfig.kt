@@ -45,6 +45,7 @@ class OpenApiConfig {
     | `/app/game.start` | `StartGameRequest` | `GAME_STARTED`, `GAME_ACTION` to `/topic/game/{gameId}` |
     | `/app/game.rollDice` | `RollDiceRequest` | `ROLL_DICE`, `GAME_ACTION` to `/topic/game/{gameId}` |
     | `/app/game.resolveEffects` | `ResolveEffectsRequest` | `GAME_ACTION` to `/topic/game/{gameId}` |
+    | `/app/game.businessCenter.swap` | `BusinessCenterSwapRequest` | `GAME_ACTION`, or `ERROR` with `payload.context.event = BUSINESS_CENTER_SWAP_FAILED`, to `/topic/game/{gameId}` |
     | `/app/game.advancePhase` | `AdvancePhaseRequest` | `DIRECT_PHASE_ADVANCE_FORBIDDEN` to `/user/queue/errors`; no state changes |
     | `/app/game.purchase` | `PurchaseRequest` | `GAME_ACTION`, or `ERROR` with `payload.context.event = PURCHASE_FAILED`, to `/topic/game/{gameId}` |
     | `/app/game.endTurn` | `EndTurnRequest` | `GAME_ACTION` or `GAME_END` to `/topic/game/{gameId}` |
