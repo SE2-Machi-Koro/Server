@@ -15,6 +15,7 @@ import org.machikoro.server.dao.GameMarketplaceDao
 import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
+import org.machikoro.server.dao.advanceToResolveEffects
 import org.machikoro.server.database.AbstractDBSetup
 import org.machikoro.server.database.CardActivationNumbers
 import org.machikoro.server.database.Cards
@@ -201,9 +202,7 @@ class PurchaseServiceIntegrationTest : AbstractDBSetup() {
         // cycle back to active player's turn
         gameDao.advanceTurn(gameId, nextTurnIndex = 1, roundNumber = 1)
         gameDao.advanceTurn(gameId, nextTurnIndex = 0, roundNumber = 2)
-        check(gameDao.tryRecordDiceRoll(gameId, diceRoll = 2, diceCount = 1)) {
-            "fixture: game not in ROLL_DICE"
-        }
+        gameDao.advanceToResolveEffects(gameId, diceRoll = 2, diceCount = 1)
 
         val coinsBefore = playerDao.findById(activePlayerId)!!.coins
         earningsService.resolveEffects(gameId)
@@ -218,9 +217,7 @@ class PurchaseServiceIntegrationTest : AbstractDBSetup() {
 
         gameDao.advanceTurn(gameId, nextTurnIndex = 1, roundNumber = 1)
         gameDao.advanceTurn(gameId, nextTurnIndex = 0, roundNumber = 2)
-        check(gameDao.tryRecordDiceRoll(gameId, diceRoll = 2, diceCount = 1)) {
-            "fixture: game not in ROLL_DICE"
-        }
+        gameDao.advanceToResolveEffects(gameId, diceRoll = 2, diceCount = 1)
 
         val inactiveBefore = playerDao.findById(inactivePlayerId)!!.coins
         earningsService.resolveEffects(gameId)
