@@ -59,11 +59,9 @@ class GameSyncService(
         val playerCards = players.associate { player ->
             player.id to (playerCardsByPlayerId[player.id] ?: emptyList())
         }
-        // PlayerLandmarkDao has no batch lookup today; with maxPlayers = 4 the
-        // per-player iteration here is bounded at 4 queries per snapshot. If
-        // that ever matters, add findByPlayerIds() mirroring PlayerCardDao.
+        val playerLandmarksByPlayerId = playerLandmarkDao.findByPlayerIds(players.map { it.id })
         val playerLandmarks = players.associate { player ->
-            player.id to playerLandmarkDao.findByPlayerId(player.id)
+            player.id to (playerLandmarksByPlayerId[player.id] ?: emptyList())
         }
         val marketplace = gameMarketplaceDao.findByGameIdAsMap(gameId)
         val cardDefinitions = cardDao.findAll().map { it.toDefinitionDto() }

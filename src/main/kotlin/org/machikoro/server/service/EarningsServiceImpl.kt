@@ -53,16 +53,21 @@ class EarningsServiceImpl(
 
         val finalCoins = players.associate { it.id to it.coins }.toMutableMap()
 
+        // Single query for all player cards instead of N per-player queries
+        val rawInventory = playerCardDao.findByPlayerIds(players.map { it.id })
         val inventoryByPlayer = players.associate { player ->
-            player.id to playerCardDao.findByPlayerId(player.id)
+            player.id to (rawInventory[player.id] ?: emptyList())
         }
 
         val matchedCardsByPlayer = inventoryByPlayer.mapValues { (_, cards) ->
             cards.mapNotNull { playerCard -> activatingCards[playerCard.cardType]?.let { playerCard to it } }
         }
 
+        // Single query for all player landmarks instead of N per-player queries
+        val allLandmarks = playerLandmarkDao.findByPlayerIds(players.map { it.id })
         val hasShoppingMallByPlayerId = players.associate { player ->
-            player.id to (playerLandmarkDao.findByPlayerIdAndType(player.id, LandmarkType.SHOPPING_MALL)?.isBuilt == true)
+            player.id to (allLandmarks[player.id]
+                ?.any { it.landmarkType == LandmarkType.SHOPPING_MALL && it.isBuilt } == true)
         }
 
         // Cheese/Furniture Factory and Fruit & Vegetable Market pay per matching

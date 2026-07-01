@@ -4,6 +4,7 @@ import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -42,6 +43,19 @@ class PlayerLandmarkDao {
             .where { PlayerLandmarks.playerId eq playerId }
             .orderBy(Landmarks.landmarkType to SortOrder.ASC)
             .map { it.toPlayerLandmarkModel() }
+    }
+
+    // Bulk-fetches landmarks for multiple players in one query, grouped by player ID
+    fun findByPlayerIds(playerIds: List<Int>): Map<Int, List<PlayerLandmarkModel>> {
+        if (playerIds.isEmpty()) return emptyMap()
+        return transaction {
+            (PlayerLandmarks innerJoin Landmarks)
+                .selectAll()
+                .where { PlayerLandmarks.playerId inList playerIds }
+                .orderBy(Landmarks.landmarkType to SortOrder.ASC)
+                .map { it.toPlayerLandmarkModel() }
+                .groupBy { it.playerId }
+        }
     }
 
     /**

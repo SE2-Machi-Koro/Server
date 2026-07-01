@@ -242,8 +242,10 @@ class GameDao {
      * "only one purchase per turn" rule without a separate read-then-write race.
      */
     fun tryMarkPurchasedThisTurn(id: Int): Boolean = transaction {
+        // Phase guard prevents accepting a purchase that arrives after endTurn committed
         Games.update({
             (Games.id eq id) and
+                (Games.turnPhase eq TurnPhase.BUY_OR_BUILD) and
                 (Games.hasPurchasedThisTurn eq false)
         }) {
             it[hasPurchasedThisTurn] = true

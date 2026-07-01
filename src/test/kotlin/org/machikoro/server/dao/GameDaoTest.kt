@@ -146,10 +146,20 @@ class GameDaoTest : AbstractDBSetup() {
     @Test
     fun `tryMarkPurchasedThisTurn succeeds once and then rejects repeats`() {
         val id = gameDao.create(hostId)
+        // Phase guard requires BUY_OR_BUILD
+        gameDao.updateTurnPhase(id, TurnPhase.BUY_OR_BUILD)
 
         assertTrue(gameDao.tryMarkPurchasedThisTurn(id))
         assertFalse(gameDao.tryMarkPurchasedThisTurn(id))
         assertTrue(gameDao.findById(id)!!.hasPurchasedThisTurn)
+    }
+
+    @Test
+    fun `tryMarkPurchasedThisTurn rejects when phase is not BUY_OR_BUILD`() {
+        val id = gameDao.create(hostId)
+        // Default phase is ROLL_DICE — purchase must not succeed
+        assertFalse(gameDao.tryMarkPurchasedThisTurn(id))
+        assertFalse(gameDao.findById(id)!!.hasPurchasedThisTurn)
     }
 
     @Test

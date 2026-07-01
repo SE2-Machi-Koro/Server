@@ -143,13 +143,11 @@ class GameSyncServiceTest {
                 // player 2 has no cards — absent from the map
             )
         )
-        // Per-player landmark lookup — see GameSyncService.buildSnapshot for
-        // the N=4 cap rationale on why this isn't a single batch query.
-        whenever(playerLandmarkDao.findByPlayerId(1)).thenReturn(
-            listOf(PlayerLandmarkModel(1, LandmarkType.TRAIN_STATION, isBuilt = true)),
-        )
-        whenever(playerLandmarkDao.findByPlayerId(2)).thenReturn(
-            listOf(PlayerLandmarkModel(2, LandmarkType.TRAIN_STATION, isBuilt = false)),
+        whenever(playerLandmarkDao.findByPlayerIds(listOf(1, 2))).thenReturn(
+            mapOf(
+                1 to listOf(PlayerLandmarkModel(1, LandmarkType.TRAIN_STATION, isBuilt = true)),
+                2 to listOf(PlayerLandmarkModel(2, LandmarkType.TRAIN_STATION, isBuilt = false)),
+            )
         )
         whenever(gameMarketplaceDao.findByGameIdAsMap(gameId)).thenReturn(
             mapOf(CardType.BAKERY to 5, CardType.WHEAT_FIELD to 6),
@@ -252,7 +250,7 @@ class GameSyncServiceTest {
         whenever(gameDao.findById(gameId)).thenReturn(game(gameId, GameStatus.IN_PROGRESS))
         whenever(playerDao.getPlayers(gameId)).thenReturn(listOf(p1, p2))
         whenever(playerCardDao.findByPlayerIds(any())).thenReturn(emptyMap())
-        whenever(playerLandmarkDao.findByPlayerId(any())).thenReturn(emptyList())
+        whenever(playerLandmarkDao.findByPlayerIds(any())).thenReturn(emptyMap())
         whenever(gameMarketplaceDao.findByGameIdAsMap(gameId)).thenReturn(emptyMap())
         whenever(cardDao.findAll()).thenReturn(emptyList())
         whenever(landmarkDao.findAll()).thenReturn(emptyList())
