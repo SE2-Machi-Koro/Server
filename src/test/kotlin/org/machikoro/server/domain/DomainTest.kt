@@ -14,7 +14,7 @@ class DomainTest {
 
     @Test
     fun `CardType has correct number of entries`() {
-        assertEquals(15, CardType.entries.size)
+        assertEquals(14, CardType.entries.size)
     }
 
     @Test
@@ -45,11 +45,8 @@ class DomainTest {
         val phases = TurnPhase.entries
         assertEquals(TurnPhase.ROLL_DICE, phases[0])
         assertEquals(TurnPhase.RESOLVE_EFFECTS, phases[1])
-        // AWAIT_TV_TARGET parks the turn mid-resolution while the active player
-        // picks a TV Station victim, before the turn advances to BUY_OR_BUILD (#433).
-        assertEquals(TurnPhase.AWAIT_TV_TARGET, phases[2])
-        assertEquals(TurnPhase.BUY_OR_BUILD, phases[3])
-        assertEquals(TurnPhase.END_TURN, phases[4])
+        assertEquals(TurnPhase.BUY_OR_BUILD, phases[2])
+        assertEquals(TurnPhase.END_TURN, phases[3])
     }
 
     @Test

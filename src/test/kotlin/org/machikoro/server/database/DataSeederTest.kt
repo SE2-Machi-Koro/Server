@@ -40,7 +40,7 @@ class DataSeederTest : AbstractDBSetup() {
 
     @Test
     fun `all 15 establishment cards are seeded`() {
-        assertEquals(15, cardDao.findAll().size)
+        assertEquals(14, cardDao.findAll().size)
     }
 
     @Test
@@ -104,20 +104,12 @@ class DataSeederTest : AbstractDBSetup() {
     }
 
     @Test
-    fun `purple cards are stadium tv station and business center`() {
+    fun `purple cards are stadium and tv station`() {
         val purpleCards = cardDao.findByColor(CardColor.PURPLE).map { it.cardType }.toSet()
         assertEquals(
-            setOf(CardType.STADIUM, CardType.TV_STATION, CardType.BUSINESS_CENTER),
+            setOf(CardType.STADIUM, CardType.TV_STATION),
             purpleCards
         )
-    }
-
-    @Test
-    fun `business center has no payment source for swap action`() {
-        val card = cardDao.findByCardType(CardType.BUSINESS_CENTER)
-        assertNotNull(card)
-        assertEquals(0, card!!.income)
-        assertEquals(PaymentSource.NONE, card.paymentSource)
     }
 
     @Test

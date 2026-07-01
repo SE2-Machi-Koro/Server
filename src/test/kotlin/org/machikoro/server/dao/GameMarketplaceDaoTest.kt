@@ -207,15 +207,6 @@ class GameMarketplaceDaoTest : AbstractDBSetup() {
                 paymentSource = PaymentSource.CHOSEN_PLAYER
             )
 
-            insertCard(
-                CardType.BUSINESS_CENTER,
-                cost = 8,
-                income = 0,
-                activationNumbers = listOf(6),
-                establishmentType = EstablishmentType.MAJOR,
-                color = CardColor.PURPLE,
-                paymentSource = PaymentSource.NONE
-            )
         }
 
         val hostId = userDao.create("market_host")

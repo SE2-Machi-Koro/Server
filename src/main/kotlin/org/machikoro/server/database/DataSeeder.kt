@@ -123,15 +123,6 @@ class DataSeeder : CommandLineRunner {
                 PaymentSource.CHOSEN_PLAYER,
                 listOf(6)
             ),
-            CardSeed(
-                CardType.BUSINESS_CENTER,
-                8,
-                0,
-                CardColor.PURPLE,
-                EstablishmentType.MAJOR,
-                PaymentSource.NONE,
-                listOf(6)
-            ),
         )
 
         all.forEach { seed ->

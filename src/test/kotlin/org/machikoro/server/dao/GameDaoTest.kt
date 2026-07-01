@@ -48,7 +48,6 @@ class GameDaoTest : AbstractDBSetup() {
         assertEquals(0, game.currentTurnIndex)
         assertNull(game.lastDiceRoll)
         assertFalse(game.hasPurchasedThisTurn)
-        assertFalse(game.businessCenterUsedThisTurn)
     }
 
     @Test
@@ -163,15 +162,6 @@ class GameDaoTest : AbstractDBSetup() {
     }
 
     @Test
-    fun `tryMarkBusinessCenterUsedThisTurn succeeds once and then rejects repeats`() {
-        val id = gameDao.create(hostId)
-
-        assertTrue(gameDao.tryMarkBusinessCenterUsedThisTurn(id))
-        assertFalse(gameDao.tryMarkBusinessCenterUsedThisTurn(id))
-        assertTrue(gameDao.findById(id)!!.businessCenterUsedThisTurn)
-    }
-
-    @Test
     fun `updateHasPurchasedThisTurn throws when game does not exist`() {
         assertThrows<GameNotFoundException> {
             gameDao.updateHasPurchasedThisTurn(999999, true)
@@ -183,7 +173,6 @@ class GameDaoTest : AbstractDBSetup() {
         val id = gameDao.create(hostId)
         gameDao.advanceToResolveEffects(id, diceRoll = 4, diceCount = 1)
         gameDao.updateHasPurchasedThisTurn(id, true)
-        assertTrue(gameDao.tryMarkBusinessCenterUsedThisTurn(id))
         gameDao.advanceTurn(id, nextTurnIndex = 1, roundNumber = 2)
         val game = gameDao.findById(id)!!
         assertEquals(1, game.currentTurnIndex)
@@ -191,7 +180,6 @@ class GameDaoTest : AbstractDBSetup() {
         assertEquals(TurnPhase.ROLL_DICE, game.turnPhase)
         assertNull(game.lastDiceRoll)
         assertFalse(game.hasPurchasedThisTurn)
-        assertFalse(game.businessCenterUsedThisTurn)
     }
 
     @Test

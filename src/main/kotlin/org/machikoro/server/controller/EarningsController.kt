@@ -3,10 +3,8 @@ package org.machikoro.server.controller
 import io.github.springwolf.core.asyncapi.annotations.AsyncListener
 import io.github.springwolf.core.asyncapi.annotations.AsyncOperation
 import org.machikoro.server.auth.requireUserPrincipal
-import org.machikoro.server.dto.BusinessCenterSwapRequest
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.ResolveEffectsRequest
-import org.machikoro.server.dto.TvStationTargetRequest
 import org.machikoro.server.dto.WebSocketErrorDto
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.CustomWebSocketException
@@ -47,26 +45,6 @@ class EarningsController(
         gameStateGuard.ensureSenderIsActivePlayer(request.gameId, user)
         resolveAndBroadcast(request.gameId, "EFFECTS_RESOLVED", "EFFECTS_FAILED") {
             earningsService.resolveEffects(request.gameId)
-        }
-    }
-
-    /**
-     * Completes a TV Station steal: the active player picks an opponent to take
-     * 5 coins from while the game is in AWAIT_TV_TARGET, then the turn advances to
-     * BUY_OR_BUILD. See issue #433.
-     */
-    @MessageMapping("/game.chooseTvStationTarget")
-    @AsyncListener(
-        operation = AsyncOperation(
-            channelName = "/game.chooseTvStationTarget",
-            description = "Resolves a pending TV Station steal against the chosen opponent."
-        )
-    )
-    fun chooseTvStationTarget(@Payload request: TvStationTargetRequest, headerAccessor: SimpMessageHeaderAccessor) {
-        val user = headerAccessor.requireUserPrincipal()
-        gameStateGuard.ensureSenderIsActivePlayer(request.gameId, user)
-        resolveAndBroadcast(request.gameId, "TV_STATION_RESOLVED", "TV_STATION_FAILED") {
-            earningsService.resolveTvStationTarget(request.gameId, request.targetPlayerId)
         }
     }
 
@@ -118,56 +96,4 @@ class EarningsController(
         }
     }
 
-    /**
-     * Applies Business Center's one-card exchange action and broadcasts the updated state.
-     */
-    @MessageMapping("/game.businessCenter.swap")
-    @AsyncListener(
-        operation = AsyncOperation(
-            channelName = "/game.businessCenter.swap",
-            description = "Exchanges one non-major establishment with another player after Business Center activates."
-        )
-    )
-    fun swapBusinessCenterCard(@Payload request: BusinessCenterSwapRequest, headerAccessor: SimpMessageHeaderAccessor) {
-        val user = headerAccessor.requireUserPrincipal()
-        val activePlayer = gameStateGuard.ensureSenderIsActivePlayer(request.gameId, user)
-        val gameTopic = "/topic/game/${request.gameId}"
-        try {
-            earningsService.swapBusinessCenterCard(
-                gameId = request.gameId,
-                activePlayerId = activePlayer.id,
-                targetPlayerId = request.targetPlayerId,
-                offeredCardType = request.offeredCardType,
-                requestedCardType = request.requestedCardType,
-            )
-            val state = gameSyncService.buildSnapshot(request.gameId)
-            logger.info("Applied Business Center swap for game ${request.gameId}")
-            messagingTemplate.convertAndSend(
-                gameTopic,
-                WebSocketMessage(
-                    type = MessageType.GAME_ACTION,
-                    sender = "server",
-                    payload = mapOf(
-                        "event" to "BUSINESS_CENTER_SWAP_APPLIED",
-                        "gameId" to request.gameId,
-                        "turnPhase" to state.game.turnPhase.name,
-                        "activePlayerId" to state.activePlayerId,
-                        "state" to state,
-                    ),
-                    gameId = request.gameId,
-                )
-            )
-        } catch (e: CustomWebSocketException) {
-            logger.warn("Business Center swap rejected for game {} [{}]: {}", request.gameId, e.errorCode, e.message)
-            messagingTemplate.convertAndSend(
-                gameTopic,
-                WebSocketMessage(
-                    type = MessageType.ERROR,
-                    sender = "server",
-                    payload = WebSocketErrorDto.from(e, mapOf("event" to "BUSINESS_CENTER_SWAP_FAILED")),
-                    gameId = request.gameId,
-                )
-            )
-        }
-    }
 }

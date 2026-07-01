@@ -145,14 +145,6 @@ class PlayerCardDaoTest : AbstractDBSetup() {
                 it[establishmentType] = EstablishmentType.MAJOR
                 it[paymentSource] = PaymentSource.CHOSEN_PLAYER
             }
-            Cards.insertIgnore {
-                it[cardType] = CardType.BUSINESS_CENTER
-                it[cost] = 8
-                it[income] = 0
-                it[color] = CardColor.PURPLE
-                it[establishmentType] = EstablishmentType.MAJOR
-                it[paymentSource] = PaymentSource.NONE
-            }
         }
         val userId = userDao.create("card_user")
         val gameId = gameDao.create(userId)

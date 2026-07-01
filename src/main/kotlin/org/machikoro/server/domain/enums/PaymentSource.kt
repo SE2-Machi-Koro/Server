@@ -5,5 +5,4 @@ enum class PaymentSource {
     ACTIVE_PLAYER,
     ALL_PLAYERS,
     CHOSEN_PLAYER, // TV Station - client specifies which player
-    NONE, // Business Center
 }

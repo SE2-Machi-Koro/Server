@@ -48,7 +48,6 @@ class PlayerDao {
         lastDiceRoll = this[Games.lastDiceRoll],
         roundNumber = this[Games.roundNumber],
         hasPurchasedThisTurn = this[Games.hasPurchasedThisTurn],
-        businessCenterUsedThisTurn = this[Games.businessCenterUsedThisTurn],
         rerolledThisTurn = this[Games.rerolledThisTurn]
     )
 

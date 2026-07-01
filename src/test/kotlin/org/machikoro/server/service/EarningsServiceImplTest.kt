@@ -248,334 +248,6 @@ class EarningsServiceImplTest {
         verify(playerDao).updateCoins(3, 0)
     }
 
-    @Test
-    fun `purple none payment source does not award coins`() {
-        val players = listOf(
-            player(1, 3),
-            player(2, 3)
-        )
-
-        val businessCenter = card(
-            cardType = CardType.BUSINESS_CENTER,
-            color = CardColor.PURPLE,
-            income = 0,
-            paymentSource = PaymentSource.NONE
-        )
-
-        whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(businessCenter))
-        whenever(playerDao.getPlayers(1)).thenReturn(players)
-        whenever(playerCardDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(
-            1 to listOf(playerCard(CardType.BUSINESS_CENTER, 1)),
-        ))
-
-        val deltas = resolveEarnings(6, 1)
-
-        assertEquals(emptyMap<Int, Int>(), deltas)
-        verify(playerDao, never()).updateCoins(anyInt(), anyInt())
-    }
-
-    // Note: TV Station (CHOSEN_PLAYER) no longer credits the bank during
-    // automatic effect resolution; the steal is deferred to the interaction round-trip.
-    // See `TV station does not pay the active player from the bank` and the
-    // resolveTvStationTarget tests below (issue #433).
-
-    @Test
-    fun `business center swaps one non-major card with target player`() {
-        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(businessCenterGame())
-        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 3)))
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(
-            listOf(
-                playerCard(CardType.BUSINESS_CENTER, 1),
-                playerCard(CardType.BAKERY, 1),
-            )
-        )
-        whenever(playerCardDao.findByPlayerId(2)).thenReturn(listOf(playerCard(CardType.RANCH, 2)))
-        whenever(cardDao.findByCardType(CardType.BAKERY)).thenReturn(
-            card(CardType.BAKERY, CardColor.GREEN, 1).copy(establishmentType = EstablishmentType.BREAD)
-        )
-        whenever(cardDao.findByCardType(CardType.RANCH)).thenReturn(
-            card(CardType.RANCH, CardColor.BLUE, 1).copy(establishmentType = EstablishmentType.COW)
-        )
-        whenever(gameDao.tryMarkBusinessCenterUsedThisTurn(1)).thenReturn(true)
-
-        service.swapBusinessCenterCard(1, 1, 2, CardType.BAKERY, CardType.RANCH)
-
-        verify(gameDao).tryMarkBusinessCenterUsedThisTurn(1)
-        verify(playerCardDao).upsert(1, CardType.BAKERY, 0)
-        verify(playerCardDao).upsert(2, CardType.RANCH, 1)
-        verify(playerCardDao).upsert(1, CardType.RANCH, 1)
-        verify(playerCardDao).upsert(2, CardType.BAKERY, 1)
-    }
-
-    @Test
-    fun `business center rejects major establishment swaps`() {
-        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(businessCenterGame())
-        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 3)))
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(
-            listOf(
-                playerCard(CardType.BUSINESS_CENTER, 1),
-                playerCard(CardType.BAKERY, 1),
-            )
-        )
-        whenever(playerCardDao.findByPlayerId(2)).thenReturn(listOf(playerCard(CardType.STADIUM, 1)))
-        whenever(cardDao.findByCardType(CardType.BAKERY)).thenReturn(
-            card(CardType.BAKERY, CardColor.GREEN, 1).copy(establishmentType = EstablishmentType.BREAD)
-        )
-        whenever(cardDao.findByCardType(CardType.STADIUM)).thenReturn(
-            card(CardType.STADIUM, CardColor.PURPLE, 2).copy(establishmentType = EstablishmentType.MAJOR)
-        )
-
-        val ex = assertThrows(CustomWebSocketException::class.java) {
-            service.swapBusinessCenterCard(1, 1, 2, CardType.BAKERY, CardType.STADIUM)
-        }
-
-        assertEquals("INVALID_BUSINESS_CENTER_CARD", ex.errorCode)
-        verify(playerCardDao, never()).upsert(anyInt(), any(), anyInt())
-    }
-
-    @Test
-    fun `business center rejects already used turn flag`() {
-        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(
-            businessCenterGame(businessCenterUsedThisTurn = true)
-        )
-
-        val ex = assertThrows(CustomWebSocketException::class.java) {
-            service.swapBusinessCenterCard(1, 1, 2, CardType.BAKERY, CardType.RANCH)
-        }
-
-        assertEquals("BUSINESS_CENTER_ALREADY_USED", ex.errorCode)
-        verify(playerDao, never()).getPlayers(anyInt())
-        verify(gameDao, never()).tryMarkBusinessCenterUsedThisTurn(anyInt())
-    }
-
-    @Test
-    fun `business center rejects swap before it is active`() {
-        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(
-            businessCenterGame(turnPhase = TurnPhase.RESOLVE_EFFECTS, lastDiceRoll = 6)
-        )
-
-        val ex = assertThrows(CustomWebSocketException::class.java) {
-            service.swapBusinessCenterCard(1, 1, 2, CardType.BAKERY, CardType.RANCH)
-        }
-
-        assertEquals("BUSINESS_CENTER_NOT_ACTIVE", ex.errorCode)
-        verify(playerDao, never()).getPlayers(anyInt())
-    }
-
-    @Test
-    fun `business center rejects swap when roll was not six`() {
-        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(businessCenterGame(lastDiceRoll = 5))
-
-        val ex = assertThrows(CustomWebSocketException::class.java) {
-            service.swapBusinessCenterCard(1, 1, 2, CardType.BAKERY, CardType.RANCH)
-        }
-
-        assertEquals("BUSINESS_CENTER_NOT_ACTIVE", ex.errorCode)
-        verify(playerDao, never()).getPlayers(anyInt())
-    }
-
-    @Test
-    fun `business center rejects missing active player`() {
-        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(businessCenterGame(currentTurnIndex = 2))
-        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 3)))
-
-        val ex = assertThrows(CustomWebSocketException::class.java) {
-            service.swapBusinessCenterCard(1, 1, 2, CardType.BAKERY, CardType.RANCH)
-        }
-
-        assertEquals("NO_ACTIVE_PLAYER", ex.errorCode)
-        verify(playerCardDao, never()).findByPlayerId(anyInt())
-    }
-
-    @Test
-    fun `business center rejects non active player caller`() {
-        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(businessCenterGame())
-        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 3)))
-
-        val ex = assertThrows(CustomWebSocketException::class.java) {
-            service.swapBusinessCenterCard(1, 2, 1, CardType.BAKERY, CardType.RANCH)
-        }
-
-        assertEquals("NOT_YOUR_TURN", ex.errorCode)
-        verify(playerCardDao, never()).findByPlayerId(anyInt())
-    }
-
-    @Test
-    fun `business center rejects target outside game`() {
-        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(businessCenterGame())
-        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 3)))
-
-        val ex = assertThrows(CustomWebSocketException::class.java) {
-            service.swapBusinessCenterCard(1, 1, 99, CardType.BAKERY, CardType.RANCH)
-        }
-
-        assertEquals("INVALID_SWAP_TARGET", ex.errorCode)
-        verify(playerCardDao, never()).findByPlayerId(anyInt())
-    }
-
-    @Test
-    fun `business center rejects active player as target`() {
-        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(businessCenterGame())
-        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 3)))
-
-        val ex = assertThrows(CustomWebSocketException::class.java) {
-            service.swapBusinessCenterCard(1, 1, 1, CardType.BAKERY, CardType.RANCH)
-        }
-
-        assertEquals("INVALID_SWAP_TARGET", ex.errorCode)
-        verify(playerCardDao, never()).findByPlayerId(anyInt())
-    }
-
-    @Test
-    fun `business center rejects same card type exchange`() {
-        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(businessCenterGame())
-        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 3)))
-
-        val ex = assertThrows(CustomWebSocketException::class.java) {
-            service.swapBusinessCenterCard(1, 1, 2, CardType.BAKERY, CardType.BAKERY)
-        }
-
-        assertEquals("INVALID_BUSINESS_CENTER_CARD", ex.errorCode)
-        verify(playerCardDao, never()).findByPlayerId(anyInt())
-    }
-
-    @Test
-    fun `business center rejects player without business center`() {
-        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(businessCenterGame())
-        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 3)))
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.BAKERY, 1)))
-        whenever(playerCardDao.findByPlayerId(2)).thenReturn(listOf(playerCard(CardType.RANCH, 1)))
-
-        val ex = assertThrows(CustomWebSocketException::class.java) {
-            service.swapBusinessCenterCard(1, 1, 2, CardType.BAKERY, CardType.RANCH)
-        }
-
-        assertEquals("BUSINESS_CENTER_NOT_OWNED", ex.errorCode)
-        verify(cardDao, never()).findByCardType(any())
-        verify(playerCardDao, never()).upsert(anyInt(), any(), anyInt())
-    }
-
-    @Test
-    fun `business center rejects unknown offered card definition`() {
-        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(businessCenterGame())
-        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 3)))
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(
-            listOf(playerCard(CardType.BUSINESS_CENTER, 1), playerCard(CardType.BAKERY, 1))
-        )
-        whenever(playerCardDao.findByPlayerId(2)).thenReturn(listOf(playerCard(CardType.RANCH, 1)))
-        whenever(cardDao.findByCardType(CardType.BAKERY)).thenReturn(null)
-
-        val ex = assertThrows(CustomWebSocketException::class.java) {
-            service.swapBusinessCenterCard(1, 1, 2, CardType.BAKERY, CardType.RANCH)
-        }
-
-        assertEquals("CARD_NOT_FOUND", ex.errorCode)
-        verify(playerCardDao, never()).upsert(anyInt(), any(), anyInt())
-    }
-
-    @Test
-    fun `business center rejects unknown requested card definition`() {
-        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(businessCenterGame())
-        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 3)))
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(
-            listOf(playerCard(CardType.BUSINESS_CENTER, 1), playerCard(CardType.BAKERY, 1))
-        )
-        whenever(playerCardDao.findByPlayerId(2)).thenReturn(listOf(playerCard(CardType.RANCH, 1)))
-        whenever(cardDao.findByCardType(CardType.BAKERY)).thenReturn(
-            card(CardType.BAKERY, CardColor.GREEN, 1).copy(establishmentType = EstablishmentType.BREAD)
-        )
-        whenever(cardDao.findByCardType(CardType.RANCH)).thenReturn(null)
-
-        val ex = assertThrows(CustomWebSocketException::class.java) {
-            service.swapBusinessCenterCard(1, 1, 2, CardType.BAKERY, CardType.RANCH)
-        }
-
-        assertEquals("CARD_NOT_FOUND", ex.errorCode)
-        verify(playerCardDao, never()).upsert(anyInt(), any(), anyInt())
-    }
-
-    @Test
-    fun `business center rejects cards not owned by both players`() {
-        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(businessCenterGame())
-        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 3)))
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.BUSINESS_CENTER, 1)))
-        whenever(playerCardDao.findByPlayerId(2)).thenReturn(listOf(playerCard(CardType.RANCH, 1)))
-        whenever(cardDao.findByCardType(CardType.BAKERY)).thenReturn(
-            card(CardType.BAKERY, CardColor.GREEN, 1).copy(establishmentType = EstablishmentType.BREAD)
-        )
-        whenever(cardDao.findByCardType(CardType.RANCH)).thenReturn(
-            card(CardType.RANCH, CardColor.BLUE, 1).copy(establishmentType = EstablishmentType.COW)
-        )
-
-        val ex = assertThrows(CustomWebSocketException::class.java) {
-            service.swapBusinessCenterCard(1, 1, 2, CardType.BAKERY, CardType.RANCH)
-        }
-
-        assertEquals("CARD_NOT_OWNED", ex.errorCode)
-        verify(playerCardDao, never()).upsert(anyInt(), any(), anyInt())
-        verify(gameDao, never()).tryMarkBusinessCenterUsedThisTurn(anyInt())
-    }
-
-    @Test
-    fun `business center rejects second swap when mark fails`() {
-        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(businessCenterGame())
-        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 3)))
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(
-            listOf(
-                playerCard(CardType.BUSINESS_CENTER, 1),
-                playerCard(CardType.BAKERY, 1),
-            )
-        )
-        whenever(playerCardDao.findByPlayerId(2)).thenReturn(listOf(playerCard(CardType.RANCH, 1)))
-        whenever(cardDao.findByCardType(CardType.BAKERY)).thenReturn(
-            card(CardType.BAKERY, CardColor.GREEN, 1).copy(establishmentType = EstablishmentType.BREAD)
-        )
-        whenever(cardDao.findByCardType(CardType.RANCH)).thenReturn(
-            card(CardType.RANCH, CardColor.BLUE, 1).copy(establishmentType = EstablishmentType.COW)
-        )
-        whenever(gameDao.tryMarkBusinessCenterUsedThisTurn(1)).thenReturn(false)
-
-        val ex = assertThrows(CustomWebSocketException::class.java) {
-            service.swapBusinessCenterCard(1, 1, 2, CardType.BAKERY, CardType.RANCH)
-        }
-
-        assertEquals("BUSINESS_CENTER_ALREADY_USED", ex.errorCode)
-        verify(playerCardDao, never()).upsert(anyInt(), any(), anyInt())
-    }
-
-    @Test
-    fun `business center increments existing swapped card quantities`() {
-        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(businessCenterGame())
-        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 3)))
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(
-            listOf(
-                playerCard(CardType.BUSINESS_CENTER, 1),
-                playerCard(CardType.BAKERY, 2),
-                playerCard(CardType.RANCH, 3),
-            )
-        )
-        whenever(playerCardDao.findByPlayerId(2)).thenReturn(
-            listOf(
-                playerCard(CardType.RANCH, 4),
-                playerCard(CardType.BAKERY, 5),
-            )
-        )
-        whenever(cardDao.findByCardType(CardType.BAKERY)).thenReturn(
-            card(CardType.BAKERY, CardColor.GREEN, 1).copy(establishmentType = EstablishmentType.BREAD)
-        )
-        whenever(cardDao.findByCardType(CardType.RANCH)).thenReturn(
-            card(CardType.RANCH, CardColor.BLUE, 1).copy(establishmentType = EstablishmentType.COW)
-        )
-        whenever(gameDao.tryMarkBusinessCenterUsedThisTurn(1)).thenReturn(true)
-
-        service.swapBusinessCenterCard(1, 1, 2, CardType.BAKERY, CardType.RANCH)
-
-        verify(playerCardDao).upsert(1, CardType.BAKERY, 1)
-        verify(playerCardDao).upsert(2, CardType.RANCH, 3)
-        verify(playerCardDao).upsert(1, CardType.RANCH, 4)
-        verify(playerCardDao).upsert(2, CardType.BAKERY, 6)
-    }
-
     // After resolving effects the game should enter buy phase
 
     @Test
@@ -1004,8 +676,6 @@ class EarningsServiceImplTest {
         )
         whenever(gameDao.tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD))
             .thenReturn(true)
-        whenever(gameDao.tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.AWAIT_TV_TARGET))
-            .thenReturn(true)
         return service.resolveEffects(1)
     }
 
@@ -1017,53 +687,51 @@ class EarningsServiceImplTest {
     )
 
     @Test
-    fun `TV station does not pay the active player from the bank`() {
+    fun `TV station steals 5 coins from the only available opponent`() {
+        // With a single opponent the random selection is deterministic
         whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(tvStationCard()))
-        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 4)))
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 10)))
         whenever(playerCardDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(
             1 to listOf(playerCard(CardType.TV_STATION, 1)),
         ))
 
         val deltas = resolveEarnings(6, 1)
 
-        // The steal is deferred to the target-choice round-trip, so automatic resolution
-        // moves no coins — previously the active player got 5 free coins from the bank.
+        assertEquals(mapOf(1 to 5, 2 to -5), deltas)
+        verify(playerDao).updateCoins(1, 8)
+        verify(playerDao).updateCoins(2, 5)
+    }
+
+    @Test
+    fun `TV station steal is capped at the opponent balance`() {
+        whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(tvStationCard()))
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 2)))
+        whenever(playerCardDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(
+            1 to listOf(playerCard(CardType.TV_STATION, 1)),
+        ))
+
+        val deltas = resolveEarnings(6, 1)
+
+        assertEquals(mapOf(1 to 2, 2 to -2), deltas)
+        verify(playerDao).updateCoins(1, 5)
+        verify(playerDao).updateCoins(2, 0)
+    }
+
+    @Test
+    fun `TV station steal picks a target even when they have zero coins`() {
+        // The random opponent is selected regardless of balance; no coins move but
+        // the turn still advances to BUY_OR_BUILD without blocking.
+        whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(tvStationCard()))
+        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 0)))
+        whenever(playerCardDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(
+            1 to listOf(playerCard(CardType.TV_STATION, 1)),
+        ))
+
+        val deltas = resolveEarnings(6, 1)
+
         verify(playerDao, never()).updateCoins(anyInt(), anyInt())
         assertEquals(emptyMap<Int, Int>(), deltas)
-    }
-
-    @Test
-    fun `resolveEffects parks turn in AWAIT_TV_TARGET when TV station activates`() {
-        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.RESOLVE_EFFECTS, 6))
-        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 4)))
-        whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(tvStationCard()))
-        whenever(playerCardDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(
-            1 to listOf(playerCard(CardType.TV_STATION, 1)),
-        ))
-        whenever(gameDao.tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.AWAIT_TV_TARGET))
-            .thenReturn(true)
-
-        service.resolveEffects(1)
-
-        verify(gameDao).tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.AWAIT_TV_TARGET)
-        verify(gameDao, never()).tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD)
-    }
-
-    @Test
-    fun `resolveEffects skips the round-trip and advances when no opponent has coins`() {
-        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.RESOLVE_EFFECTS, 6))
-        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 0)))
-        whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(tvStationCard()))
-        whenever(playerCardDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(
-            1 to listOf(playerCard(CardType.TV_STATION, 1)),
-        ))
-        whenever(gameDao.tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD))
-            .thenReturn(true)
-
-        service.resolveEffects(1)
-
         verify(gameDao).tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD)
-        verify(gameDao, never()).tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.AWAIT_TV_TARGET)
     }
 
     @Test
@@ -1086,125 +754,10 @@ class EarningsServiceImplTest {
         val deltas = service.resolveEffects(1)
 
         verify(gameDao).tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD)
-        verify(gameDao, never()).tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.AWAIT_TV_TARGET)
         verify(playerDao).updateCoins(1, 6)
         verify(playerDao).updateCoins(2, 0)
         verify(playerDao).updateCoins(3, 0)
         assertEquals(mapOf(1 to 3, 2 to -2, 3 to -1), deltas)
-    }
-
-    @Test
-    fun `resolveEffects rejects resolution while awaiting TV target`() {
-        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.AWAIT_TV_TARGET, 6))
-
-        val ex = assertThrows(CustomWebSocketException::class.java) {
-            service.resolveEffects(1)
-        }
-
-        assertEquals("EFFECTS_ALREADY_RESOLVED", ex.errorCode)
-        verify(playerDao, never()).getPlayers(anyInt())
-    }
-
-    @Test
-    fun `resolveTvStationTarget steals from the chosen opponent and advances phase`() {
-        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.AWAIT_TV_TARGET, 6))
-        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 10)))
-        whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(tvStationCard()))
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.TV_STATION, 1)))
-        whenever(gameDao.tryTransitionPhase(1, TurnPhase.AWAIT_TV_TARGET, TurnPhase.BUY_OR_BUILD))
-            .thenReturn(true)
-
-        val deltas = service.resolveTvStationTarget(1, 2)
-
-        verify(playerDao).updateCoins(1, 8)
-        verify(playerDao).updateCoins(2, 5)
-        assertEquals(mapOf(1 to 5, 2 to -5), deltas)
-    }
-
-    @Test
-    fun `resolveTvStationTarget caps the steal at the target balance`() {
-        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.AWAIT_TV_TARGET, 6))
-        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 2)))
-        whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(tvStationCard()))
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.TV_STATION, 1)))
-        whenever(gameDao.tryTransitionPhase(1, TurnPhase.AWAIT_TV_TARGET, TurnPhase.BUY_OR_BUILD))
-            .thenReturn(true)
-
-        val deltas = service.resolveTvStationTarget(1, 2)
-
-        verify(playerDao).updateCoins(1, 5)
-        verify(playerDao).updateCoins(2, 0)
-        assertEquals(mapOf(1 to 2, 2 to -2), deltas)
-    }
-
-    @Test
-    fun `resolveTvStationTarget rejects a broke target`() {
-        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.AWAIT_TV_TARGET, 6))
-        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 0), player(3, 4)))
-
-        val ex = assertThrows(CustomWebSocketException::class.java) {
-            service.resolveTvStationTarget(1, 2)
-        }
-
-        assertEquals("INVALID_TV_STATION_TARGET", ex.errorCode)
-        verify(gameDao, never()).tryTransitionPhase(anyInt(), any(), any())
-        verify(playerDao, never()).updateCoins(anyInt(), anyInt())
-    }
-
-    @Test
-    fun `resolveTvStationTarget rejects a target that is not an opponent`() {
-        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.AWAIT_TV_TARGET, 6))
-        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 4)))
-
-        val ex = assertThrows(CustomWebSocketException::class.java) {
-            service.resolveTvStationTarget(1, 99)
-        }
-
-        assertEquals("INVALID_TV_STATION_TARGET", ex.errorCode)
-        verify(gameDao, never()).tryTransitionPhase(anyInt(), any(), any())
-        verify(playerDao, never()).updateCoins(anyInt(), anyInt())
-    }
-
-    @Test
-    fun `resolveTvStationTarget rejects choosing the active player as the target`() {
-        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.AWAIT_TV_TARGET, 6))
-        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 4)))
-
-        val ex = assertThrows(CustomWebSocketException::class.java) {
-            service.resolveTvStationTarget(1, 1)
-        }
-
-        assertEquals("INVALID_TV_STATION_TARGET", ex.errorCode)
-        verify(playerDao, never()).updateCoins(anyInt(), anyInt())
-    }
-
-    @Test
-    fun `resolveTvStationTarget rejects when the game is not awaiting a TV target`() {
-        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.BUY_OR_BUILD, 6))
-
-        val ex = assertThrows(CustomWebSocketException::class.java) {
-            service.resolveTvStationTarget(1, 2)
-        }
-
-        assertEquals("NO_PENDING_TV_STATION", ex.errorCode)
-        verify(playerDao, never()).getPlayers(anyInt())
-    }
-
-    @Test
-    fun `resolveTvStationTarget rejects a stale phase transition without moving coins`() {
-        whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.AWAIT_TV_TARGET, 6))
-        whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 4)))
-        whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(tvStationCard()))
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.TV_STATION, 1)))
-        whenever(gameDao.tryTransitionPhase(1, TurnPhase.AWAIT_TV_TARGET, TurnPhase.BUY_OR_BUILD))
-            .thenReturn(false)
-
-        val ex = assertThrows(CustomWebSocketException::class.java) {
-            service.resolveTvStationTarget(1, 2)
-        }
-
-        assertEquals("EFFECTS_ALREADY_RESOLVED", ex.errorCode)
-        verify(playerDao, never()).updateCoins(anyInt(), anyInt())
     }
 
     // Factory / market green cards multiply income by owned establishments (issue #432)
@@ -1349,27 +902,6 @@ class EarningsServiceImplTest {
 
     private fun playerCard(cardType: CardType, quantity: Int): PlayerCardModel =
         PlayerCardModel(playerId = 1, cardType = cardType, quantity = quantity)
-
-    private fun businessCenterGame(
-        currentTurnIndex: Int = 0,
-        turnPhase: TurnPhase = TurnPhase.BUY_OR_BUILD,
-        lastDiceRoll: Int? = 6,
-        businessCenterUsedThisTurn: Boolean = false,
-    ): GameModel =
-        GameModel(
-            id = 1,
-            status = GameStatus.IN_PROGRESS,
-            hostUserId = 1,
-            lobbyCode = "TEST",
-            maxPlayers = 4,
-            currentTurnIndex = currentTurnIndex,
-            turnPhase = turnPhase,
-            lastDiceRoll = lastDiceRoll,
-            roundNumber = 1,
-            hasPurchasedThisTurn = false,
-            businessCenterUsedThisTurn = businessCenterUsedThisTurn,
-            rerolledThisTurn = false,
-        )
 
     private fun card(
         cardType: CardType,
