@@ -5,7 +5,6 @@ import io.github.springwolf.core.asyncapi.annotations.AsyncOperation
 import org.machikoro.server.auth.requireUserPrincipal
 import org.machikoro.server.dto.MessageType
 import org.machikoro.server.dto.ResolveEffectsRequest
-import org.machikoro.server.dto.TvStationTargetRequest
 import org.machikoro.server.dto.WebSocketErrorDto
 import org.machikoro.server.dto.WebSocketMessage
 import org.machikoro.server.exception.CustomWebSocketException
@@ -46,26 +45,6 @@ class EarningsController(
         gameStateGuard.ensureSenderIsActivePlayer(request.gameId, user)
         resolveAndBroadcast(request.gameId, "EFFECTS_RESOLVED", "EFFECTS_FAILED") {
             earningsService.resolveEffects(request.gameId)
-        }
-    }
-
-    /**
-     * Completes a TV Station steal: the active player picks an opponent to take
-     * 5 coins from while the game is in AWAIT_TV_TARGET, then the turn advances to
-     * BUY_OR_BUILD. See issue #433.
-     */
-    @MessageMapping("/game.chooseTvStationTarget")
-    @AsyncListener(
-        operation = AsyncOperation(
-            channelName = "/game.chooseTvStationTarget",
-            description = "Resolves a pending TV Station steal against the chosen opponent."
-        )
-    )
-    fun chooseTvStationTarget(@Payload request: TvStationTargetRequest, headerAccessor: SimpMessageHeaderAccessor) {
-        val user = headerAccessor.requireUserPrincipal()
-        gameStateGuard.ensureSenderIsActivePlayer(request.gameId, user)
-        resolveAndBroadcast(request.gameId, "TV_STATION_RESOLVED", "TV_STATION_FAILED") {
-            earningsService.resolveTvStationTarget(request.gameId, request.targetPlayerId)
         }
     }
 

@@ -200,7 +200,7 @@ class EarningsIntegrationTest : AbstractDBSetup() {
     }
 
     @Test
-    fun `TV station defers the steal then resolves against the chosen opponent`() {
+    fun `TV station immediately steals from the only opponent`() {
         transaction {
             val tvStationId = Cards.insert {
                 it[cardType] = CardType.TV_STATION
@@ -217,20 +217,13 @@ class EarningsIntegrationTest : AbstractDBSetup() {
             Games.update({ Games.id eq gameId }) {
                 it[lastDiceRoll] = 6
             }
-            // P1 (active) owns the TV Station.
+            // P1 (active) owns the TV Station; P2 is the only opponent.
             playerCardDao.upsert(player1Id, CardType.TV_STATION, 1)
         }
 
-        earningsService.resolveEffects(gameId)
+        val deltas = earningsService.resolveEffects(gameId)
 
-        // Round-trip part 1: the turn parks awaiting the victim choice and no coins move.
-        assertEquals(TurnPhase.AWAIT_TV_TARGET, gameDao.findById(gameId)!!.turnPhase)
-        assertEquals(3, playerDao.findById(player1Id)!!.coins)
-        assertEquals(3, playerDao.findById(player2Id)!!.coins)
-
-        val deltas = earningsService.resolveTvStationTarget(gameId, player2Id)
-
-        // Round-trip part 2: P1 steals from P2, capped at P2's balance (3, not the nominal 5).
+        // P1 steals from the only opponent (P2), capped at P2's balance (3, not the nominal 5).
         assertEquals(mapOf(player1Id to 3, player2Id to -3), deltas)
         assertEquals(6, playerDao.findById(player1Id)!!.coins)
         assertEquals(0, playerDao.findById(player2Id)!!.coins)

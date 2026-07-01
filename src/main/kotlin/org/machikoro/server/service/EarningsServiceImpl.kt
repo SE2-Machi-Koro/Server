@@ -38,10 +38,7 @@ class EarningsServiceImpl(
     fun computeEarnings(pairs: List<Pair<Int, Int>>): Int =
         pairs.sumOf { (quantity, income) -> quantity * income }
 
-    private data class EarningsCalculation(
-        val finalCoins: Map<Int, Int>,
-        val tvStationStealAmount: Int,
-    )
+    private data class EarningsCalculation(val finalCoins: Map<Int, Int>)
 
     private fun calculateEarnings(
         players: List<PlayerModel>,
@@ -87,9 +84,7 @@ class EarningsServiceImpl(
         )
         processPurpleCards(players, activePlayerId, matchedCardsByPlayer, finalCoins)
 
-        val tvStationStealAmount = chosenPlayerIncome(matchedCardsByPlayer[activePlayerId].orEmpty())
-
-        return EarningsCalculation(finalCoins, tvStationStealAmount)
+        return EarningsCalculation(finalCoins)
     }
 
     private fun applyCoinChanges(
@@ -227,14 +222,9 @@ class EarningsServiceImpl(
     /**
      * PURPLE cards (OWN_TURN): only the active player benefits.
      * - BANK-sourced: active player receives income from the bank.
-     * - ALL_PLAYERS-sourced (e.g. Stadium): active player steals from each opponent,
-     *   capped at each opponent's actual balance to avoid creating coins.
-     * - CHOSEN_PLAYER-sourced (TV Station): intentionally NOT resolved here. The active
-     *   player picks the victim through a separate interaction round-trip
-     *   ([resolveTvStationTarget]), so the steal cannot be applied during this pass.
-     *   See issue #433 — previously CHOSEN_PLAYER fell into [bankEarned], handing the
-     *   active player free coins from the bank instead of stealing from an opponent.
-     * - CHOSEN_PLAYER-sourced: deferred to the interaction round-trip, excluded here.
+     * - ALL_PLAYERS-sourced (Stadium): steals from each opponent, capped at balance.
+     * - CHOSEN_PLAYER-sourced (TV Station): steals from a randomly selected opponent,
+     *   capped at that opponent's current balance.
      */
     private fun processPurpleCards(
         players: List<PlayerModel>,
@@ -267,6 +257,23 @@ class EarningsServiceImpl(
                 }
             }
         }
+
+        // TV Station: steal from a random opponent regardless of their balance
+        val tvSteal = purpleCards
+            .filter { (_, card) -> card.paymentSource == PaymentSource.CHOSEN_PLAYER }
+            .sumOf { (playerCard, card) -> playerCard.quantity * card.income }
+
+        if (tvSteal > 0) {
+            val opponents = players.filter { it.id != activePlayerId }
+            if (opponents.isNotEmpty()) {
+                val target = opponents.random()
+                val transfer = minOf(tvSteal, finalCoins.getValue(target.id))
+                if (transfer > 0) {
+                    finalCoins[target.id] = finalCoins.getValue(target.id) - transfer
+                    finalCoins[activePlayerId] = finalCoins.getValue(activePlayerId) + transfer
+                }
+            }
+        }
     }
 
     /**
@@ -283,105 +290,28 @@ class EarningsServiceImpl(
                 "DICE_ROLL_REQUIRED",
                 "Effects cannot be resolved before dice are rolled",
             )
-            TurnPhase.AWAIT_TV_TARGET, TurnPhase.BUY_OR_BUILD, TurnPhase.END_TURN -> throw effectsAlreadyResolved()
+            TurnPhase.BUY_OR_BUILD, TurnPhase.END_TURN -> throw effectsAlreadyResolved()
             TurnPhase.RESOLVE_EFFECTS -> Unit
         }
         val (diceRoll, players, activePlayer) = requireActiveTurn(gameId, game.lastDiceRoll, game.currentTurnIndex)
 
         val earnings = calculateEarnings(players, diceRoll, activePlayer.id)
 
-        // A TV Station steal needs the active player to pick a victim, so when one
-        // is pending after the automatic earnings pass we park the turn in
-        // AWAIT_TV_TARGET instead of advancing to BUY_OR_BUILD. The destination is
-        // chosen *before* transitioning so the optimistic phase lock still guards
-        // against concurrent double-resolution.
-        val nextPhase = if (isTvStationStealPending(
-                players,
-                earnings.finalCoins,
-                earnings.tvStationStealAmount,
-                activePlayer.id,
-            )
-        ) {
-            TurnPhase.AWAIT_TV_TARGET
-        } else {
-            TurnPhase.BUY_OR_BUILD
-        }
-
-        if (!gameDao.tryTransitionPhase(gameId, TurnPhase.RESOLVE_EFFECTS, nextPhase)) {
+        if (!gameDao.tryTransitionPhase(gameId, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD)) {
             throw effectsAlreadyResolved()
         }
 
         applyCoinChanges(players, earnings.finalCoins)
     }
 
-    /**
-     * Applies a TV Station steal once the active player has chosen a victim.
-     *
-     * Resolves the second half of the round-trip started by [resolveEffects]: the
-     * active player takes `5 × (TV Station count)` coins from [targetPlayerId],
-     * capped at that opponent's balance so no coins are created, then the turn
-     * advances to BUY_OR_BUILD. See issue #433.
-     */
-    override fun resolveTvStationTarget(gameId: Int, targetPlayerId: Int): Map<Int, Int> =
-        gameTransactionRunner.inTransaction {
-            val game = gameStateGuard.ensureGameIsRunning(gameId)
-            if (game.turnPhase != TurnPhase.AWAIT_TV_TARGET) {
-                throw CustomWebSocketException(
-                    "NO_PENDING_TV_STATION",
-                    "There is no TV Station target to choose for this turn",
-                )
-            }
-            val (diceRoll, players, activePlayer) = requireActiveTurn(gameId, game.lastDiceRoll, game.currentTurnIndex)
-
-            val target = players.firstOrNull { it.id == targetPlayerId && it.id != activePlayer.id }
-                ?: throw CustomWebSocketException(
-                    "INVALID_TV_STATION_TARGET",
-                    "Player $targetPlayerId is not a valid TV Station target in game $gameId",
-                )
-            if (target.coins <= 0) {
-                throw CustomWebSocketException(
-                    "INVALID_TV_STATION_TARGET",
-                    "Player $targetPlayerId has no coins to steal in game $gameId",
-                )
-            }
-
-            val transfer = minOf(tvStationStealAmount(diceRoll, activePlayer.id), target.coins)
-
-            // Transition first so the optimistic phase lock rejects a concurrent
-            // duplicate choice before any coins move.
-            if (!gameDao.tryTransitionPhase(gameId, TurnPhase.AWAIT_TV_TARGET, TurnPhase.BUY_OR_BUILD)) {
-                throw effectsAlreadyResolved()
-            }
-
-            if (transfer <= 0) {
-                return@inTransaction emptyMap()
-            }
-
-            playerDao.updateCoins(activePlayer.id, activePlayer.coins + transfer)
-            playerDao.updateCoins(target.id, target.coins - transfer)
-
-            // Signed per-player coin deltas drive the client coin sounds (#389).
-            mapOf(activePlayer.id to transfer, target.id to -transfer)
-        }
-
     private data class ActiveTurn(val diceRoll: Int, val players: List<PlayerModel>, val activePlayer: PlayerModel)
 
-    /**
-     * Rejection used wherever a turn's effects are already resolved: the eager phase
-     * guard in [resolveEffects] and the optimistic phase-transition CAS in both
-     * [resolveEffects] and [resolveTvStationTarget] (a lost race against a concurrent
-     * duplicate). Centralised so the code and message live in one place.
-     */
+    // Centralised rejection for double-resolution races
     private fun effectsAlreadyResolved() = CustomWebSocketException(
         "EFFECTS_ALREADY_RESOLVED",
         "Effects have already been resolved for this turn",
     )
 
-    /**
-     * Loads the stored dice roll, the game's players, and the active player, rejecting
-     * a turn with no recorded roll or no resolvable active player. Shared by the two
-     * effect-resolution entry points.
-     */
     private fun requireActiveTurn(gameId: Int, lastDiceRoll: Int?, currentTurnIndex: Int): ActiveTurn {
         val diceRoll = lastDiceRoll ?: throw CustomWebSocketException(
             "DICE_ROLL_REQUIRED",
@@ -392,37 +322,4 @@ class EarningsServiceImpl(
             ?: throw CustomWebSocketException("NO_ACTIVE_PLAYER", "Game $gameId has no active player")
         return ActiveTurn(diceRoll, players, activePlayer)
     }
-
-    /**
-     * Coins a TV Station steal would move: `income × quantity` summed over the
-     * active player's activated CHOSEN_PLAYER cards.
-     */
-    private fun tvStationStealAmount(diceRoll: Int, activePlayerId: Int): Int {
-        val activatingCards = cardDao.findByActivationNumber(diceRoll).associateBy { it.cardType }
-        val matchedCards = playerCardDao.findByPlayerId(activePlayerId)
-            .mapNotNull { playerCard -> activatingCards[playerCard.cardType]?.let { playerCard to it } }
-
-        return chosenPlayerIncome(matchedCards)
-    }
-
-    private fun chosenPlayerIncome(matchedCards: List<Pair<PlayerCardModel, CardModel>>): Int =
-        matchedCards
-            .filter { (_, card) -> card.paymentSource == PaymentSource.CHOSEN_PLAYER }
-            .sumOf { (playerCard, card) -> playerCard.quantity * card.income }
-
-    /**
-     * True when the active player activated a TV Station with coins to steal and
-     * at least one opponent has a non-zero balance. When no opponent has coins the
-     * steal would be a no-op, so the interaction round-trip is skipped entirely.
-     */
-    private fun isTvStationStealPending(
-        players: List<PlayerModel>,
-        finalCoins: Map<Int, Int>,
-        tvStationStealAmount: Int,
-        activePlayerId: Int,
-    ): Boolean {
-        if (tvStationStealAmount <= 0) return false
-        return players.any { it.id != activePlayerId && finalCoins.getValue(it.id) > 0 }
-    }
-
 }
