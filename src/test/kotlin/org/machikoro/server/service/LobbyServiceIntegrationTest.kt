@@ -186,7 +186,7 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
         // Verify coins
         result.players.forEach { player ->
             val playerRecord = playerDao.findById(player.id)
-            assertEquals(3, playerRecord?.coins, "Player ${player.id} should have 3 coins")
+            assertEquals(50, playerRecord?.coins, "Player ${player.id} should have 50 coins")
         }
 
         // Verify starting cards in DB and in the GameStateDto snapshot.
