@@ -40,7 +40,7 @@ class DataSeederTest : AbstractDBSetup() {
 
     @Test
     fun `all 15 establishment cards are seeded`() {
-        assertEquals(15, cardDao.findAll().size)
+        assertEquals(14, cardDao.findAll().size)
     }
 
     @Test

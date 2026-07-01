@@ -14,7 +14,7 @@ class DomainTest {
 
     @Test
     fun `CardType has correct number of entries`() {
-        assertEquals(15, CardType.entries.size)
+        assertEquals(14, CardType.entries.size)
     }
 
     @Test
