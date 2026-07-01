@@ -160,11 +160,11 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
             result.playerCards[firstPlayerId]?.map { it.cardType }?.toSet(),
         )
 
-        // Coins - should be 50
+        // Coins - should start at 3
         val firstPlayerCoins = playerDao.findById(firstPlayerId)?.coins
         val secondPlayerCoins = playerDao.findById(secondPlayerId)?.coins
-        assertEquals(50, firstPlayerCoins)
-        assertEquals(50, secondPlayerCoins)
+        assertEquals(3, firstPlayerCoins)
+        assertEquals(3, secondPlayerCoins)
     }
 
     @Test
@@ -186,7 +186,7 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
         // Verify coins
         result.players.forEach { player ->
             val playerRecord = playerDao.findById(player.id)
-            assertEquals(50, playerRecord?.coins, "Player ${player.id} should have 50 coins")
+            assertEquals(3, playerRecord?.coins, "Player ${player.id} should start with 3 coins")
         }
 
         // Verify starting cards in DB and in the GameStateDto snapshot.

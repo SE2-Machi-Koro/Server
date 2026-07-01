@@ -119,8 +119,8 @@ class InitializationServiceTest {
         val coinCaptor = argumentCaptor<Int>()
         verify(playerDao, times(4)).updateCoins(org.mockito.kotlin.any(), coinCaptor.capture())
 
-        // All captured coin values should be 50
-        assertTrue(coinCaptor.allValues.all { it == 50 })
+        // All players start with 3 coins
+        assertTrue(coinCaptor.allValues.all { it == 3 })
     }
 
     @Test

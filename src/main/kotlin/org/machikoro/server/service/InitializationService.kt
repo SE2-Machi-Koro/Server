@@ -27,8 +27,7 @@ class InitializationService(
         // Temporary offset used in two-pass shuffle to avoid unique (gameId, turnOrder) collisions
         private const val TEMP_TURN_ORDER_OFFSET = 10_000
 
-        // Bumped to 50 for testing on this branch
-        private const val STARTING_COINS = 50
+        private const val STARTING_COINS = 3
         private val STARTING_CARDS = listOf(CardType.WHEAT_FIELD, CardType.BAKERY)
         private const val MARKETPLACE_SUPPLY_PER_CARD = 6
     }
