@@ -34,20 +34,13 @@ class PaymentSourceTest {
     }
 
     @Test
-    fun `NONE represents no automatic payment`() {
-        assertEquals(PaymentSource.NONE, PaymentSource.NONE)
-        assertNotNull(PaymentSource.NONE)
-    }
-
-    @Test
     fun `all PaymentSource values are accessible`() {
         val values = PaymentSource.entries
-        assertEquals(5, values.size)
+        assertEquals(4, values.size)
         assertTrue(values.contains(PaymentSource.BANK))
         assertTrue(values.contains(PaymentSource.ACTIVE_PLAYER))
         assertTrue(values.contains(PaymentSource.ALL_PLAYERS))
         assertTrue(values.contains(PaymentSource.CHOSEN_PLAYER))
-        assertTrue(values.contains(PaymentSource.NONE))
     }
 
     @Test
@@ -69,7 +62,6 @@ class PaymentSourceTest {
             PaymentSource.ACTIVE_PLAYER -> "payment_from_active"
             PaymentSource.ALL_PLAYERS -> "payment_from_all"
             PaymentSource.CHOSEN_PLAYER -> "payment_from_chosen"
-            PaymentSource.NONE -> "no_payment"
         }
 
         assertEquals("payment_from_active", result)
@@ -81,7 +73,5 @@ class PaymentSourceTest {
         assertEquals("ACTIVE_PLAYER", PaymentSource.ACTIVE_PLAYER.toString())
         assertEquals("ALL_PLAYERS", PaymentSource.ALL_PLAYERS.toString())
         assertEquals("CHOSEN_PLAYER", PaymentSource.CHOSEN_PLAYER.toString())
-        assertEquals("NONE", PaymentSource.NONE.toString())
     }
 }
-
