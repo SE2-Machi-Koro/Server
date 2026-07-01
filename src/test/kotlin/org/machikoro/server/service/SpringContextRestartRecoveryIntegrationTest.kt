@@ -16,6 +16,7 @@ import org.machikoro.server.dao.GameMarketplaceDao
 import org.machikoro.server.dao.PlayerCardDao
 import org.machikoro.server.dao.PlayerDao
 import org.machikoro.server.dao.PlayerLandmarkDao
+import org.machikoro.server.dao.advanceToBuyOrBuild
 import org.machikoro.server.database.Cards
 import org.machikoro.server.database.GameMarketplace
 import org.machikoro.server.database.Games
@@ -136,13 +137,8 @@ class SpringContextRestartRecoveryIntegrationTest {
         
         playerDao.updateCoins(firstPlayerId, 42)
         gameDao.advanceTurn(sharedGameId, nextTurnIndex = 1, roundNumber = 5)
-        check(gameDao.tryRecordDiceRoll(sharedGameId, diceRoll = 9, diceCount = 2)) {
-            "fixture: game not in ROLL_DICE"
-        }
-        check(gameDao.tryTransitionPhase(sharedGameId, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD)) {
-            "fixture: game not in RESOLVE_EFFECTS"
-        }
-        
+        gameDao.advanceToBuyOrBuild(sharedGameId, diceRoll = 9, diceCount = 2)
+
         gameMarketplaceDao.decrementQuantity(sharedGameId, CardType.CAFE)
         playerCardDao.upsert(firstPlayerId, CardType.CAFE, quantity = 3)
         playerLandmarkDao.markBuilt(firstPlayerId, LandmarkType.AMUSEMENT_PARK)
