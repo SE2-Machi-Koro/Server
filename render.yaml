@@ -1,0 +1,47 @@
+services:
+  - type: web
+    name: machi-koro-server
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    branch: main
+    healthCheckPath: /actuator/health/readiness
+    envVars:
+      # Render injects PORT=10000; map it so Spring Boot binds on the right port
+      - key: SERVER_PORT
+        value: "10000"
+      - key: DB_HOST
+        fromDatabase:
+          name: machi-koro-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: machi-koro-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: machi-koro-db
+          property: database
+      - key: DB_USERNAME
+        fromDatabase:
+          name: machi-koro-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: machi-koro-db
+          property: password
+      - key: SPRING_DOCKER_COMPOSE_ENABLED
+        value: "false"
+      # Set to your Render service URL once deployed, e.g. https://machi-koro-server.onrender.com
+      - key: WEBSOCKET_ALLOWED_ORIGINS
+        sync: false
+      - key: DEBUG_ENABLED
+        value: "false"
+      # Set manually in Render dashboard if admin seeding is needed
+      - key: ADMIN_PASSWORD
+        sync: false
+
+databases:
+  - name: machi-koro-db
+    databaseName: machikoro
+    plan: free

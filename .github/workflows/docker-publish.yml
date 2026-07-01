@@ -104,8 +104,24 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # Production deployment is handled by Railway (https://railway.app), which
-  # watches the GHCR image (pull_policy: always) and auto-redeploys the backend
-  # on every new push to ghcr.io/se2-machi-koro/server:latest. No CI deploy step
-  # is required. The previous appleboy/ssh-action job that deployed to the AAU
-  # shared server (port 53200) was removed when production moved to Railway.
+  # Railway auto-redeploys from GHCR on every push to main — no CI step needed.
+
+  deploy-uni:
+    name: Deploy to uni server
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: SSH deploy
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: 53200
+          # Pull new image and restart only the backend; .env lives next to compose.yaml
+          script: |
+            cd ~/machi-koro-server-deploy
+            docker compose pull backend
+            docker compose up -d --no-deps backend
