@@ -234,8 +234,7 @@ class EarningsServiceImpl(
      *   ([resolveTvStationTarget]), so the steal cannot be applied during this pass.
      *   See issue #433 — previously CHOSEN_PLAYER fell into [bankEarned], handing the
      *   active player free coins from the bank instead of stealing from an opponent.
-     * - NONE-sourced (Business Center): no coin movement; its effect is the card swap
-     *   handled by [swapBusinessCenterCard], so it is excluded from bank income.
+     * - CHOSEN_PLAYER-sourced: deferred to the interaction round-trip, excluded here.
      */
     private fun processPurpleCards(
         players: List<PlayerModel>,
@@ -396,8 +395,7 @@ class EarningsServiceImpl(
 
     /**
      * Coins a TV Station steal would move: `income × quantity` summed over the
-     * active player's activated CHOSEN_PLAYER cards. Business Center is also
-     * CHOSEN_PLAYER but seeds income 0, so it contributes nothing here.
+     * active player's activated CHOSEN_PLAYER cards.
      */
     private fun tvStationStealAmount(diceRoll: Int, activePlayerId: Int): Int {
         val activatingCards = cardDao.findByActivationNumber(diceRoll).associateBy { it.cardType }
@@ -427,93 +425,4 @@ class EarningsServiceImpl(
         return players.any { it.id != activePlayerId && finalCoins.getValue(it.id) > 0 }
     }
 
-    override fun swapBusinessCenterCard(
-        gameId: Int,
-        activePlayerId: Int,
-        targetPlayerId: Int,
-        offeredCardType: CardType,
-        requestedCardType: CardType,
-    ): Unit = gameTransactionRunner.inTransaction {
-        val game = gameStateGuard.ensureGameIsRunning(gameId)
-        if (game.turnPhase != TurnPhase.BUY_OR_BUILD || game.lastDiceRoll != 6) {
-            throw CustomWebSocketException(
-                "BUSINESS_CENTER_NOT_ACTIVE",
-                "Business Center can only be used after resolving a roll of 6",
-            )
-        }
-        if (game.businessCenterUsedThisTurn) {
-            throw CustomWebSocketException(
-                "BUSINESS_CENTER_ALREADY_USED",
-                "Business Center has already been used this turn",
-            )
-        }
-
-        val players = playerDao.getPlayers(gameId)
-        val activePlayer = players.getOrNull(game.currentTurnIndex)
-            ?: throw CustomWebSocketException("NO_ACTIVE_PLAYER", "Game $gameId has no active player")
-        if (activePlayer.id != activePlayerId) {
-            throw CustomWebSocketException("NOT_YOUR_TURN", "It is not your turn")
-        }
-        if (players.none { it.id == targetPlayerId } || targetPlayerId == activePlayerId) {
-            throw CustomWebSocketException(
-                "INVALID_SWAP_TARGET",
-                "Business Center requires a different target player in the same game",
-            )
-        }
-        if (offeredCardType == requestedCardType) {
-            throw CustomWebSocketException(
-                "INVALID_BUSINESS_CENTER_CARD",
-                "Business Center must exchange two different card types",
-            )
-        }
-
-        val activeCards = playerCardDao.findByPlayerId(activePlayerId)
-        val targetCards = playerCardDao.findByPlayerId(targetPlayerId)
-        val businessCenterQuantity = activeCards.firstOrNull { it.cardType == CardType.BUSINESS_CENTER }?.quantity ?: 0
-        if (businessCenterQuantity <= 0) {
-            throw CustomWebSocketException(
-                "BUSINESS_CENTER_NOT_OWNED",
-                "Active player does not own Business Center",
-            )
-        }
-
-        val offeredCard = cardDao.findByCardType(offeredCardType)
-            ?: throw CustomWebSocketException("CARD_NOT_FOUND", "Offered card $offeredCardType not found")
-        val requestedCard = cardDao.findByCardType(requestedCardType)
-            ?: throw CustomWebSocketException("CARD_NOT_FOUND", "Requested card $requestedCardType not found")
-        if (offeredCard.establishmentType == EstablishmentType.MAJOR || requestedCard.establishmentType == EstablishmentType.MAJOR) {
-            throw CustomWebSocketException(
-                "INVALID_BUSINESS_CENTER_CARD",
-                "Business Center cannot exchange major establishments",
-            )
-        }
-
-        val offeredQuantity = activeCards.firstOrNull { it.cardType == offeredCardType }?.quantity ?: 0
-        val requestedQuantity = targetCards.firstOrNull { it.cardType == requestedCardType }?.quantity ?: 0
-        if (offeredQuantity <= 0 || requestedQuantity <= 0) {
-            throw CustomWebSocketException(
-                "CARD_NOT_OWNED",
-                "Both players must own the cards being exchanged",
-            )
-        }
-        if (!gameDao.tryMarkBusinessCenterUsedThisTurn(gameId)) {
-            throw CustomWebSocketException(
-                "BUSINESS_CENTER_ALREADY_USED",
-                "Business Center has already been used this turn",
-            )
-        }
-
-        playerCardDao.upsert(activePlayerId, offeredCardType, offeredQuantity - 1)
-        playerCardDao.upsert(targetPlayerId, requestedCardType, requestedQuantity - 1)
-        playerCardDao.upsert(
-            activePlayerId,
-            requestedCardType,
-            activeCards.firstOrNull { it.cardType == requestedCardType }?.quantity?.plus(1) ?: 1,
-        )
-        playerCardDao.upsert(
-            targetPlayerId,
-            offeredCardType,
-            targetCards.firstOrNull { it.cardType == offeredCardType }?.quantity?.plus(1) ?: 1,
-        )
-    }
 }

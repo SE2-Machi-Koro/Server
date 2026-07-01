@@ -35,7 +35,6 @@ class GameDao {
         lastDiceCount = this[Games.lastDiceCount],
         roundNumber = this[Games.roundNumber],
         hasPurchasedThisTurn = this[Games.hasPurchasedThisTurn],
-        businessCenterUsedThisTurn = this[Games.businessCenterUsedThisTurn],
         extraTurnPlayerId = this[Games.extraTurnPlayerId],
         extraTurnRoundNumber = this[Games.extraTurnRoundNumber],
         extraTurnConsumed = this[Games.extraTurnConsumed],
@@ -77,7 +76,6 @@ class GameDao {
             it[Games.roundNumber] = 1
             it[Games.lastDiceRoll] = null
             it[Games.hasPurchasedThisTurn] = false
-            it[Games.businessCenterUsedThisTurn] = false
             it[Games.lobbyCode] = lobbyCode
             it[Games.maxPlayers] = maxPlayers
             it[Games.rerolledThisTurn] = false
@@ -253,18 +251,6 @@ class GameDao {
     }
 
     /**
-     * Atomically marks the current turn as having used Business Center.
-     */
-    fun tryMarkBusinessCenterUsedThisTurn(id: Int): Boolean = transaction {
-        Games.update({
-            (Games.id eq id) and
-                (Games.businessCenterUsedThisTurn eq false)
-        }) {
-            it[businessCenterUsedThisTurn] = true
-        } > 0
-    }
-
-    /**
      * Advances the game to the next player's turn
      * - Resets phase to ROLL_DICE
      * - Clears last dice roll
@@ -277,7 +263,6 @@ class GameDao {
             it[Games.lastDiceRoll] = null
             it[Games.lastDiceCount] = null
             it[Games.hasPurchasedThisTurn] = false
-            it[Games.businessCenterUsedThisTurn] = false
             it[Games.rerolledThisTurn] = false
         }
         if (updatedRows == 0) throw GameNotFoundException("Game $id not found")

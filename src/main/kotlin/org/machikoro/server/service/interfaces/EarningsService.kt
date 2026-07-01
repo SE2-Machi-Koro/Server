@@ -1,7 +1,5 @@
 package org.machikoro.server.service.interfaces
 
-import org.machikoro.server.domain.enums.CardType
-
 interface EarningsService {
     /**
      * Resolves card effects for the current turn. Advances to BUY_OR_BUILD, or to
@@ -21,14 +19,4 @@ interface EarningsService {
      */
     fun resolveTvStationTarget(gameId: Int, targetPlayerId: Int): Map<Int, Int>
 
-    /**
-     * Applies the Business Center card-swap action for the active player.
-     */
-    fun swapBusinessCenterCard(
-        gameId: Int,
-        activePlayerId: Int,
-        targetPlayerId: Int,
-        offeredCardType: CardType,
-        requestedCardType: CardType,
-    )
 }

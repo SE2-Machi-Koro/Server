@@ -8,5 +8,5 @@ enum class EstablishmentType {
     FACTORY, // Cheese Factory, Furniture Factory
     FRUIT, // Fruit and Vegetable Market
     CUP, // Cafe, Family Restaurant
-    MAJOR // Stadium, TV Station, Business Center
+    MAJOR // Stadium, TV Station
 }

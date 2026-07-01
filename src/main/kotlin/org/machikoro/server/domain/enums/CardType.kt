@@ -15,5 +15,4 @@ enum class CardType {
     FAMILY_RESTAURANT,
     STADIUM,
     TV_STATION,
-    BUSINESS_CENTER,
 }
