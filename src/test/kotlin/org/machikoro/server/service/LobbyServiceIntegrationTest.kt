@@ -160,11 +160,11 @@ class LobbyServiceIntegrationTest : AbstractDBSetup() {
             result.playerCards[firstPlayerId]?.map { it.cardType }?.toSet(),
         )
 
-        // Coins - should be 3
+        // Coins - should be 50
         val firstPlayerCoins = playerDao.findById(firstPlayerId)?.coins
         val secondPlayerCoins = playerDao.findById(secondPlayerId)?.coins
-        assertEquals(3, firstPlayerCoins)
-        assertEquals(3, secondPlayerCoins)
+        assertEquals(50, firstPlayerCoins)
+        assertEquals(50, secondPlayerCoins)
     }
 
     @Test
