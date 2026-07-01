@@ -166,6 +166,30 @@ class PlayerLandmarkDaoTest : AbstractDBSetup() {
     }
 
     @Test
+    fun `findByPlayerIds returns landmarks grouped by player`() {
+        val userId2 = userDao.create("second_user")
+        val gameId2 = gameDao.create(userId2)
+        val playerId2 = playerDao.addPlayer(gameId2, userId2).id
+
+        playerLandmarkDao.initForPlayer(playerId)
+        playerLandmarkDao.initForPlayer(playerId2)
+        playerLandmarkDao.markBuilt(playerId, LandmarkType.TRAIN_STATION)
+
+        val result = playerLandmarkDao.findByPlayerIds(listOf(playerId, playerId2))
+
+        assertEquals(2, result.size)
+        val p1Landmarks = result[playerId]!!
+        assertEquals(LandmarkType.entries.size, p1Landmarks.size)
+        assertTrue(p1Landmarks.first { it.landmarkType == LandmarkType.TRAIN_STATION }.isBuilt)
+        assertEquals(LandmarkType.entries.size, result[playerId2]!!.size)
+    }
+
+    @Test
+    fun `findByPlayerIds returns empty map for empty input`() {
+        assertTrue(playerLandmarkDao.findByPlayerIds(emptyList()).isEmpty())
+    }
+
+    @Test
     fun `deleteAllByPlayerId does nothing if player has no landmarks`() {
         assertDoesNotThrow {
             playerLandmarkDao.deleteAllByPlayerId(playerId)

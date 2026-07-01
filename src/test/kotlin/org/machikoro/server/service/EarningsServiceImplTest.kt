@@ -59,6 +59,9 @@ class EarningsServiceImplTest {
             transactionRunner,
             playerLandmarkDao,
         )
+        // Default: no cards/landmarks — individual tests override what they need
+        whenever(playerCardDao.findByPlayerIds(any())).thenReturn(emptyMap())
+        whenever(playerLandmarkDao.findByPlayerIds(any())).thenReturn(emptyMap())
     }
 
     // Basic calculation helper tests
@@ -104,11 +107,10 @@ class EarningsServiceImplTest {
         whenever(playerDao.getPlayers(1))
             .thenReturn(players)
 
-        whenever(playerCardDao.findByPlayerId(1))
-            .thenReturn(listOf(playerCard(CardType.WHEAT_FIELD, 2)))
-
-        whenever(playerCardDao.findByPlayerId(2))
-            .thenReturn(listOf(playerCard(CardType.WHEAT_FIELD, 1)))
+        whenever(playerCardDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(
+            1 to listOf(playerCard(CardType.WHEAT_FIELD, 2)),
+            2 to listOf(playerCard(CardType.WHEAT_FIELD, 1)),
+        ))
 
         val deltas = resolveEarnings(1, 1)
 
@@ -139,11 +141,10 @@ class EarningsServiceImplTest {
         whenever(playerDao.getPlayers(1))
             .thenReturn(players)
 
-        whenever(playerCardDao.findByPlayerId(1))
-            .thenReturn(listOf(playerCard(CardType.BAKERY, 1)))
-
-        whenever(playerCardDao.findByPlayerId(2))
-            .thenReturn(listOf(playerCard(CardType.BAKERY, 1)))
+        whenever(playerCardDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(
+            1 to listOf(playerCard(CardType.BAKERY, 1)),
+            2 to listOf(playerCard(CardType.BAKERY, 1)),
+        ))
 
         resolveEarnings(2, 1)
 
@@ -172,11 +173,9 @@ class EarningsServiceImplTest {
         whenever(playerDao.getPlayers(1))
             .thenReturn(players)
 
-        whenever(playerCardDao.findByPlayerId(1))
-            .thenReturn(emptyList())
-
-        whenever(playerCardDao.findByPlayerId(2))
-            .thenReturn(listOf(playerCard(CardType.CAFE, 1)))
+        whenever(playerCardDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(
+            2 to listOf(playerCard(CardType.CAFE, 1)),
+        ))
 
         resolveEarnings(3, 1)
 
@@ -205,11 +204,9 @@ class EarningsServiceImplTest {
         whenever(playerDao.getPlayers(1))
             .thenReturn(players)
 
-        whenever(playerCardDao.findByPlayerId(1))
-            .thenReturn(emptyList())
-
-        whenever(playerCardDao.findByPlayerId(2))
-            .thenReturn(listOf(playerCard(CardType.CAFE, 1)))
+        whenever(playerCardDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(
+            2 to listOf(playerCard(CardType.CAFE, 1)),
+        ))
 
         resolveEarnings(3, 1)
 
@@ -240,14 +237,9 @@ class EarningsServiceImplTest {
         whenever(playerDao.getPlayers(1))
             .thenReturn(players)
 
-        whenever(playerCardDao.findByPlayerId(1))
-            .thenReturn(listOf(playerCard(CardType.STADIUM, 1)))
-
-        whenever(playerCardDao.findByPlayerId(2))
-            .thenReturn(emptyList())
-
-        whenever(playerCardDao.findByPlayerId(3))
-            .thenReturn(emptyList())
+        whenever(playerCardDao.findByPlayerIds(listOf(1, 2, 3))).thenReturn(mapOf(
+            1 to listOf(playerCard(CardType.STADIUM, 1)),
+        ))
 
         resolveEarnings(6, 1)
 
@@ -272,8 +264,9 @@ class EarningsServiceImplTest {
 
         whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(businessCenter))
         whenever(playerDao.getPlayers(1)).thenReturn(players)
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.BUSINESS_CENTER, 1)))
-        whenever(playerCardDao.findByPlayerId(2)).thenReturn(emptyList())
+        whenever(playerCardDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(
+            1 to listOf(playerCard(CardType.BUSINESS_CENTER, 1)),
+        ))
 
         val deltas = resolveEarnings(6, 1)
 
@@ -604,9 +597,6 @@ class EarningsServiceImplTest {
         whenever(cardDao.findByActivationNumber(anyInt()))
             .thenReturn(emptyList())
 
-        whenever(playerCardDao.findByPlayerId(anyInt()))
-            .thenReturn(emptyList())
-
         service.resolveEffects(1)
 
         verify(gameDao).tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD)
@@ -695,7 +685,6 @@ class EarningsServiceImplTest {
         whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(game)
         whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3)))
         whenever(cardDao.findByActivationNumber(anyInt())).thenReturn(emptyList())
-        whenever(playerCardDao.findByPlayerId(anyInt())).thenReturn(emptyList())
         whenever(gameDao.tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD))
             .thenReturn(false)
 
@@ -747,12 +736,12 @@ class EarningsServiceImplTest {
 
         whenever(cardDao.findByActivationNumber(3)).thenReturn(listOf(RedCupWithCupType))
         whenever(playerDao.getPlayers(1)).thenReturn(players)
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(emptyList())
-        whenever(playerCardDao.findByPlayerId(2)).thenReturn(listOf(playerCard(CardType.CAFE, 1)))
-
-        // P2 has built SHOPPING_MALL -> cafe income increases by +1 (2 -> 3)
-        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.SHOPPING_MALL))
-            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = true))
+        whenever(playerCardDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(
+            2 to listOf(playerCard(CardType.CAFE, 1)),
+        ))
+        whenever(playerLandmarkDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(
+            2 to listOf(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = true)),
+        ))
 
         resolveEarnings(3, 1)
 
@@ -780,12 +769,12 @@ class EarningsServiceImplTest {
 
         whenever(cardDao.findByActivationNumber(3)).thenReturn(listOf(RedCupWithCupType))
         whenever(playerDao.getPlayers(1)).thenReturn(players)
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.CAFE, 1)))
-        whenever(playerCardDao.findByPlayerId(2)).thenReturn(emptyList())
-
-        // P2 has built SHOPPING_MALL -> cafe income increases by +1 (2 -> 3)
-        whenever(playerLandmarkDao.findByPlayerIdAndType(1, LandmarkType.SHOPPING_MALL))
-            .thenReturn(PlayerLandmarkModel(playerId = 1, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = true))
+        whenever(playerCardDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(
+            1 to listOf(playerCard(CardType.CAFE, 1)),
+        ))
+        whenever(playerLandmarkDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(
+            1 to listOf(PlayerLandmarkModel(playerId = 1, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = true)),
+        ))
 
         resolveEarnings(3, 1)
 
@@ -814,12 +803,12 @@ class EarningsServiceImplTest {
 
         whenever(cardDao.findByActivationNumber(3)).thenReturn(listOf(RedCupWithCupType))
         whenever(playerDao.getPlayers(1)).thenReturn(players)
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(emptyList())
-        whenever(playerCardDao.findByPlayerId(2)).thenReturn(listOf(playerCard(CardType.CAFE, 3)))
-
-        // P2 has built SHOPPING_MALL -> cafe income increases by +1 (2 -> 3)
-        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.SHOPPING_MALL))
-            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = true))
+        whenever(playerCardDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(
+            2 to listOf(playerCard(CardType.CAFE, 3)),
+        ))
+        whenever(playerLandmarkDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(
+            2 to listOf(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = true)),
+        ))
 
         resolveEarnings(3, 1)
 
@@ -847,12 +836,13 @@ class EarningsServiceImplTest {
 
         whenever(cardDao.findByActivationNumber(2)).thenReturn(listOf(greenBreadWithBreadType))
         whenever(playerDao.getPlayers(1)).thenReturn(players)
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.BAKERY, 1)))
-        whenever(playerCardDao.findByPlayerId(2)).thenReturn(listOf(playerCard(CardType.BAKERY, 1)))
-
-        // Active player (P1) has built SHOPPING_MALL
-        whenever(playerLandmarkDao.findByPlayerIdAndType(1, LandmarkType.SHOPPING_MALL))
-            .thenReturn(PlayerLandmarkModel(playerId = 1, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = true))
+        whenever(playerCardDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(
+            1 to listOf(playerCard(CardType.BAKERY, 1)),
+            2 to listOf(playerCard(CardType.BAKERY, 1)),
+        ))
+        whenever(playerLandmarkDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(
+            1 to listOf(PlayerLandmarkModel(playerId = 1, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = true)),
+        ))
 
         resolveEarnings(2, 1)
 
@@ -880,12 +870,13 @@ class EarningsServiceImplTest {
 
         whenever(cardDao.findByActivationNumber(2)).thenReturn(listOf(greenBreadWithBreadType))
         whenever(playerDao.getPlayers(1)).thenReturn(players)
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.BAKERY, 3)))
-        whenever(playerCardDao.findByPlayerId(2)).thenReturn(listOf(playerCard(CardType.BAKERY, 1)))
-
-        // Active player (P1) has built SHOPPING_MALL
-        whenever(playerLandmarkDao.findByPlayerIdAndType(1, LandmarkType.SHOPPING_MALL))
-            .thenReturn(PlayerLandmarkModel(playerId = 1, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = true))
+        whenever(playerCardDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(
+            1 to listOf(playerCard(CardType.BAKERY, 3)),
+            2 to listOf(playerCard(CardType.BAKERY, 1)),
+        ))
+        whenever(playerLandmarkDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(
+            1 to listOf(PlayerLandmarkModel(playerId = 1, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = true)),
+        ))
 
         resolveEarnings(2, 1)
 
@@ -912,12 +903,13 @@ class EarningsServiceImplTest {
 
         whenever(cardDao.findByActivationNumber(2)).thenReturn(listOf(greenBreadWithBreadType))
         whenever(playerDao.getPlayers(1)).thenReturn(players)
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.BAKERY, 1)))
-        whenever(playerCardDao.findByPlayerId(2)).thenReturn(listOf(playerCard(CardType.BAKERY, 1)))
-
-        // Active player (P1) has built SHOPPING_MALL
-        whenever(playerLandmarkDao.findByPlayerIdAndType(1, LandmarkType.SHOPPING_MALL))
-            .thenReturn(PlayerLandmarkModel(playerId = 1, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = true))
+        whenever(playerCardDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(
+            1 to listOf(playerCard(CardType.BAKERY, 1)),
+            2 to listOf(playerCard(CardType.BAKERY, 1)),
+        ))
+        whenever(playerLandmarkDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(
+            1 to listOf(PlayerLandmarkModel(playerId = 1, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = true)),
+        ))
 
         resolveEarnings(2, 2)
 
@@ -945,12 +937,13 @@ class EarningsServiceImplTest {
 
         whenever(cardDao.findByActivationNumber(2)).thenReturn(listOf(greenBreadWithBreadType))
         whenever(playerDao.getPlayers(1)).thenReturn(players)
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.BAKERY, 1)))
-        whenever(playerCardDao.findByPlayerId(2)).thenReturn(listOf(playerCard(CardType.BAKERY, 1)))
-
-        // Active player (P1) has built SHOPPING_MALL
-        whenever(playerLandmarkDao.findByPlayerIdAndType(1, LandmarkType.SHOPPING_MALL))
-            .thenReturn(PlayerLandmarkModel(playerId = 1, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = false))
+        whenever(playerCardDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(
+            1 to listOf(playerCard(CardType.BAKERY, 1)),
+            2 to listOf(playerCard(CardType.BAKERY, 1)),
+        ))
+        whenever(playerLandmarkDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(
+            1 to listOf(PlayerLandmarkModel(playerId = 1, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = false)),
+        ))
 
         resolveEarnings(2, 1)
 
@@ -978,12 +971,13 @@ class EarningsServiceImplTest {
 
         whenever(cardDao.findByActivationNumber(2)).thenReturn(listOf(redCafeWithCafeType))
         whenever(playerDao.getPlayers(1)).thenReturn(players)
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.BAKERY, 1)))
-        whenever(playerCardDao.findByPlayerId(2)).thenReturn(listOf(playerCard(CardType.CAFE, 1)))
-
-        // Active player (P2) has built SHOPPING_MALL
-        whenever(playerLandmarkDao.findByPlayerIdAndType(2, LandmarkType.SHOPPING_MALL))
-            .thenReturn(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = false))
+        whenever(playerCardDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(
+            1 to listOf(playerCard(CardType.BAKERY, 1)),
+            2 to listOf(playerCard(CardType.CAFE, 1)),
+        ))
+        whenever(playerLandmarkDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(
+            2 to listOf(PlayerLandmarkModel(playerId = 2, landmarkType = LandmarkType.SHOPPING_MALL, isBuilt = false)),
+        ))
 
         resolveEarnings(2, 1)
 
@@ -1026,8 +1020,9 @@ class EarningsServiceImplTest {
     fun `TV station does not pay the active player from the bank`() {
         whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(tvStationCard()))
         whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 4)))
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.TV_STATION, 1)))
-        whenever(playerCardDao.findByPlayerId(2)).thenReturn(emptyList())
+        whenever(playerCardDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(
+            1 to listOf(playerCard(CardType.TV_STATION, 1)),
+        ))
 
         val deltas = resolveEarnings(6, 1)
 
@@ -1042,8 +1037,9 @@ class EarningsServiceImplTest {
         whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.RESOLVE_EFFECTS, 6))
         whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 4)))
         whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(tvStationCard()))
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.TV_STATION, 1)))
-        whenever(playerCardDao.findByPlayerId(2)).thenReturn(emptyList())
+        whenever(playerCardDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(
+            1 to listOf(playerCard(CardType.TV_STATION, 1)),
+        ))
         whenever(gameDao.tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.AWAIT_TV_TARGET))
             .thenReturn(true)
 
@@ -1058,8 +1054,9 @@ class EarningsServiceImplTest {
         whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.RESOLVE_EFFECTS, 6))
         whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 0)))
         whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(tvStationCard()))
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.TV_STATION, 1)))
-        whenever(playerCardDao.findByPlayerId(2)).thenReturn(emptyList())
+        whenever(playerCardDao.findByPlayerIds(listOf(1, 2))).thenReturn(mapOf(
+            1 to listOf(playerCard(CardType.TV_STATION, 1)),
+        ))
         whenever(gameDao.tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD))
             .thenReturn(true)
 
@@ -1080,11 +1077,9 @@ class EarningsServiceImplTest {
         whenever(gameStateGuard.ensureGameIsRunning(1)).thenReturn(runningGame(TurnPhase.RESOLVE_EFFECTS, 6))
         whenever(playerDao.getPlayers(1)).thenReturn(listOf(player(1, 3), player(2, 2), player(3, 1)))
         whenever(cardDao.findByActivationNumber(6)).thenReturn(listOf(stadium, tvStationCard()))
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(
-            listOf(playerCard(CardType.STADIUM, 1), playerCard(CardType.TV_STATION, 1))
-        )
-        whenever(playerCardDao.findByPlayerId(2)).thenReturn(emptyList())
-        whenever(playerCardDao.findByPlayerId(3)).thenReturn(emptyList())
+        whenever(playerCardDao.findByPlayerIds(listOf(1, 2, 3))).thenReturn(mapOf(
+            1 to listOf(playerCard(CardType.STADIUM, 1), playerCard(CardType.TV_STATION, 1)),
+        ))
         whenever(gameDao.tryTransitionPhase(1, TurnPhase.RESOLVE_EFFECTS, TurnPhase.BUY_OR_BUILD))
             .thenReturn(true)
 
@@ -1228,12 +1223,9 @@ class EarningsServiceImplTest {
         whenever(cardDao.findAll()).thenReturn(seededCards)
         whenever(playerDao.getPlayers(1)).thenReturn(players)
         // 1 Cheese Factory + 2 Ranch (COW): income = 3 * 2 cows = 6.
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(
-            listOf(
-                playerCard(CardType.CHEESE_FACTORY, 1),
-                playerCard(CardType.RANCH, 2),
-            )
-        )
+        whenever(playerCardDao.findByPlayerIds(listOf(1))).thenReturn(mapOf(
+            1 to listOf(playerCard(CardType.CHEESE_FACTORY, 1), playerCard(CardType.RANCH, 2)),
+        ))
 
         resolveEarnings(7, 1)
 
@@ -1254,12 +1246,9 @@ class EarningsServiceImplTest {
         whenever(cardDao.findAll()).thenReturn(seededCards)
         whenever(playerDao.getPlayers(1)).thenReturn(players)
         // 2 Cheese Factories + 3 Ranch (COW): income = 2 * 3 * 3 = 18.
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(
-            listOf(
-                playerCard(CardType.CHEESE_FACTORY, 2),
-                playerCard(CardType.RANCH, 3),
-            )
-        )
+        whenever(playerCardDao.findByPlayerIds(listOf(1))).thenReturn(mapOf(
+            1 to listOf(playerCard(CardType.CHEESE_FACTORY, 2), playerCard(CardType.RANCH, 3)),
+        ))
 
         resolveEarnings(7, 1)
 
@@ -1279,7 +1268,9 @@ class EarningsServiceImplTest {
         whenever(cardDao.findByActivationNumber(7)).thenReturn(listOf(cheeseFactory))
         whenever(cardDao.findAll()).thenReturn(seededCards)
         whenever(playerDao.getPlayers(1)).thenReturn(players)
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(listOf(playerCard(CardType.CHEESE_FACTORY, 1)))
+        whenever(playerCardDao.findByPlayerIds(listOf(1))).thenReturn(mapOf(
+            1 to listOf(playerCard(CardType.CHEESE_FACTORY, 1)),
+        ))
 
         val deltas = resolveEarnings(7, 1)
 
@@ -1301,13 +1292,13 @@ class EarningsServiceImplTest {
         whenever(cardDao.findAll()).thenReturn(seededCards)
         whenever(playerDao.getPlayers(1)).thenReturn(players)
         // 1 Furniture Factory + 1 Forest + 1 Mine (both GEAR): income = 3 * 2 gears = 6.
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(
-            listOf(
+        whenever(playerCardDao.findByPlayerIds(listOf(1))).thenReturn(mapOf(
+            1 to listOf(
                 playerCard(CardType.FURNITURE_FACTORY, 1),
                 playerCard(CardType.FOREST, 1),
                 playerCard(CardType.MINE, 1),
-            )
-        )
+            ),
+        ))
 
         resolveEarnings(8, 1)
 
@@ -1328,13 +1319,13 @@ class EarningsServiceImplTest {
         whenever(cardDao.findAll()).thenReturn(seededCards)
         whenever(playerDao.getPlayers(1)).thenReturn(players)
         // 1 Market + 1 Wheat Field + 1 Apple Orchard (both WHEAT): income = 2 * 2 wheat = 4.
-        whenever(playerCardDao.findByPlayerId(1)).thenReturn(
-            listOf(
+        whenever(playerCardDao.findByPlayerIds(listOf(1))).thenReturn(mapOf(
+            1 to listOf(
                 playerCard(CardType.FRUIT_AND_VEGETABLE_MARKET, 1),
                 playerCard(CardType.WHEAT_FIELD, 1),
                 playerCard(CardType.APPLE_ORCHARD, 1),
-            )
-        )
+            ),
+        ))
 
         resolveEarnings(11, 1)
 
