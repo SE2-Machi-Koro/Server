@@ -13,11 +13,21 @@ import org.springframework.messaging.simp.config.SimpleBrokerRegistration
 import org.springframework.web.socket.config.annotation.SockJsServiceRegistration
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry
 import org.springframework.web.socket.config.annotation.StompWebSocketEndpointRegistration
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.machikoro.server.domain.enums.LandmarkType
+import org.machikoro.server.domain.models.PlayerLandmarkModel
+import org.springframework.messaging.MessageHeaders
+import org.springframework.messaging.converter.JacksonJsonMessageConverter
+import org.springframework.util.MimeTypeUtils
+import tools.jackson.databind.json.JsonMapper
+import tools.jackson.module.kotlin.KotlinModule
 
 class WebSocketConfigTests {
 
     private val authInterceptor = mock(StompAuthChannelInterceptor::class.java)
-    private val config = WebSocketConfig(authInterceptor).apply {
+    // KotlinModule preserves is-prefixed boolean names (isBuilt, isReady) — mirrors production setup.
+    private val jsonMapper = JsonMapper.builder().addModule(KotlinModule.Builder().build()).build()
+    private val config = WebSocketConfig(authInterceptor, jsonMapper).apply {
         allowedOrigins = "http://localhost:8080,http://localhost:3000"
     }
 
@@ -91,5 +101,22 @@ class WebSocketConfigTests {
         config.configureClientInboundChannel(registration)
 
         verify(registration).interceptors(authInterceptor)
+    }
+
+    @Test
+    fun configureMessageConvertersShouldPreserveIsPrefixedBooleanNames() {
+        val converters = mutableListOf<org.springframework.messaging.converter.MessageConverter>()
+        config.configureMessageConverters(converters)
+        val converter = converters.filterIsInstance<JacksonJsonMessageConverter>().single()
+
+        // Serialize through the actual converter to catch any regression in the global fix.
+        val headers = MessageHeaders(mapOf(MessageHeaders.CONTENT_TYPE to MimeTypeUtils.parseMimeType("application/json")))
+        val message = converter.toMessage(
+            PlayerLandmarkModel(playerId = 1, landmarkType = LandmarkType.TRAIN_STATION, isBuilt = true),
+            headers,
+        )
+        val json = String(message!!.payload as ByteArray)
+
+        assertTrue("\"isBuilt\"" in json, "Expected isBuilt key in JSON but got: $json")
     }
 }

@@ -4,6 +4,10 @@ import org.machikoro.server.auth.StompAuthChannelInterceptor
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.messaging.converter.ByteArrayMessageConverter
+import org.springframework.messaging.converter.JacksonJsonMessageConverter
+import org.springframework.messaging.converter.MessageConverter
+import org.springframework.messaging.converter.StringMessageConverter
 import org.springframework.messaging.simp.config.ChannelRegistration
 import org.springframework.messaging.simp.config.MessageBrokerRegistry
 import org.springframework.scheduling.TaskScheduler
@@ -11,11 +15,15 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer
+import tools.jackson.databind.json.JsonMapper
 
 @Configuration
 @EnableWebSocketMessageBroker
 class WebSocketConfig(
     private val authInterceptor: StompAuthChannelInterceptor,
+    // Spring Boot's JsonMapper has KotlinModule registered, which preserves
+    // is-prefixed boolean property names (e.g. isBuilt, isReady) on the wire.
+    private val jsonMapper: JsonMapper,
 ) : WebSocketMessageBrokerConfigurer {
 
     companion object {
@@ -78,6 +86,18 @@ class WebSocketConfig(
             .withSockJS()
             .setDisconnectDelay(5_000)
             .setHeartbeatTime(25_000)
+    }
+
+    /**
+     * Wire the STOMP JSON converter to Spring Boot's JsonMapper so KotlinModule
+     * is active for all WebSocket messages — without this the default converter uses
+     * a plain mapper that strips "is" prefixes from boolean getter names.
+     */
+    override fun configureMessageConverters(messageConverters: MutableList<MessageConverter>): Boolean {
+        messageConverters.add(StringMessageConverter())
+        messageConverters.add(ByteArrayMessageConverter())
+        messageConverters.add(JacksonJsonMessageConverter(jsonMapper))
+        return false
     }
 
     /**
