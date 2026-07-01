@@ -4,8 +4,6 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    # Builds the jar from source — no pre-built artifact needed
-    dockerfileTarget: final
     branch: main
     healthCheckPath: /actuator/health/readiness
     envVars:
