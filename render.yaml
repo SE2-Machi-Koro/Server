@@ -36,8 +36,8 @@ services:
       - key: WEBSOCKET_ALLOWED_ORIGINS
         sync: false
       - key: DEBUG_ENABLED
-        value: "false"
-      # Set manually in Render dashboard if admin seeding is needed
+        value: "true"
+      # Set ADMIN_PASSWORD in the Render dashboard — required for admin seeding to run
       - key: ADMIN_PASSWORD
         sync: false
 
